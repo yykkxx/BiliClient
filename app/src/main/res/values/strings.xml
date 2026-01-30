@@ -236,7 +236,7 @@
     <string name="gt"><![CDATA[>]]></string>
     <string name="percent">%</string>
 
-    <string name="update_tip">如果你是跨版本更新到这个版本的，可以前往官网biliterminal.cn查看过往的更新日志。\n\n此版本的更新内容完全由爅峫开发。\n此外，哔哩终端已正式停更，此版本极大可能将会成为最后一个哔哩终端官方版本，后会有期。</string>
+    <string name="update_tip">如果你是跨版本更新到这个版本的，可以前往官网biliterminal.cn查看过往的更新日志。\n\n此版本的更新内容完全由爅峫开发。\n为了防止被函，哔哩终端已经宣布停更，此版本应该可能大概也许将会成为最后一个哔哩终端的官方正式版，我已经把几乎所有能加的接口功能都加进这个版本了，祝各位使用愉快，后会有期。\n       ——爅峫（moye）</string>
 
     #新增功能放到上面，修复问题放下面，方便用户看见
     <string-array name="update_log_items">
