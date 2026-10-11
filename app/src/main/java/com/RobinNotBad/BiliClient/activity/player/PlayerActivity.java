@@ -120,7 +120,7 @@ import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPreparedListener {
-    private boolean destroyed = false;
+    private volatile boolean destroyed = false;
 
     private IjkMediaPlayer ijkPlayer;
     private IDanmakuView mDanmakuView;
@@ -150,7 +150,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     private TextView text_progress, text_online, text_volume, loading_text0, loading_text1, text_speed, text_newspeed;
     public TextView text_title, text_subtitle, text_audio_title, text_audio_subtitle;
 
-    private Timer progressTimer, speedTimer, loadingTimer, onlineTimer, surfaceTimer;
+    private Timer progressTimer, speedTimer, loadingTimer, onlineTimer;
+    private volatile boolean pendingPrepare = false; // surface就绪后需要触发MPPrepare（回调驱动，替代轮询定时器）
     private Handler mainHandler;
     private Runnable danmakuSyncRunnable;
     private String video_url, danmaku_url;
@@ -766,66 +767,63 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         Logu.v("准备设置显示");
         if (SharedPreferencesUtil.getBoolean("player_display", Build.VERSION.SDK_INT < 26)) { // Texture
             Logu.v("使用texture模式");
-            surfaceTimer = new Timer();
-            surfaceTimer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    Logu.v("循环检测");
-                    if (mSurfaceTexture != null) {
-                        this.cancel();
-                        Surface surface = new Surface(mSurfaceTexture);
-                        ijkPlayer.setSurface(surface);
-                        MPPrepare(video_url);
-                        Logu.v("设置surfaceTexture成功！");
-                    }
-                }
-            }, 0, 200);
+            // 回调驱动：不再轮询mSurfaceTexture，避免退出后定时器仍在轮询并操作已销毁的Surface
+            pendingPrepare = true;
+            if (mSurfaceTexture != null) {
+                ijkPlayer.setSurface(new Surface(mSurfaceTexture));
+                startPrepareIfNeeded();
+            }
         } else {
             Logu.v("使用surface模式");
             SurfaceHolder surfaceHolder = surfaceView.getHolder(); // Surface
             Logu.v("获取surfaceHolder成功！");
-            surfaceTimer = new Timer();
-            surfaceTimer.schedule(new TimerTask() {
+            // 回调驱动：SurfaceView首次创建必然回调surfaceCreated，无需轮询isCreating
+            pendingPrepare = true;
+            surfaceHolder.addCallback(new SurfaceHolder.Callback() {
                 @Override
-                public void run() {
-                    Logu.v("循环检测");
-                    if (!surfaceHolder.isCreating()) {
-                        this.cancel();
-                        Logu.v("定时器结束！");
+                public void surfaceCreated(@NonNull SurfaceHolder surfaceHolder) {
+                    if (!destroyed) {
+                        Logu.v("surface", "重新设置Holder");
                         ijkPlayer.setDisplay(surfaceHolder);
-                        Logu.v("设置surfaceHolder成功！");
-                        surfaceHolder.addCallback(new SurfaceHolder.Callback() {
-                            @Override
-                            public void surfaceCreated(@NonNull SurfaceHolder surfaceHolder) {
-                                if (!destroyed) {
-                                    Logu.v("surface", "重新设置Holder");
-                                    ijkPlayer.setDisplay(surfaceHolder);
-                                    if (isPrepared) {
-                                        ijkPlayer.seekTo(seekbar_progress.getProgress());
-                                    }
-                                }
-                            }
-
-                            @Override
-                            public void surfaceChanged(@NonNull SurfaceHolder surfaceHolder, int i, int i1, int i2) {
-                            }
-
-                            @Override
-                            public void surfaceDestroyed(@NonNull SurfaceHolder surfaceHolder) {
-                                Logu.v("surface", "Holder没了");
-                                if (isPrepared && !destroyed)
-                                    ijkPlayer.setDisplay(null);
-                            }
-                        });
-                        Logu.v("添加callback成功！");
-                        MPPrepare(video_url);
+                        startPrepareIfNeeded();
                     }
                 }
-            }, 0, 200);
+
+                @Override
+                public void surfaceChanged(@NonNull SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+                }
+
+                @Override
+                public void surfaceDestroyed(@NonNull SurfaceHolder surfaceHolder) {
+                    Logu.v("surface", "Holder没了");
+                    if (isPrepared && !destroyed)
+                        ijkPlayer.setDisplay(null);
+                }
+            });
+            Logu.v("添加callback成功！");
+            // 已创建过的holder直接触发（surfaceCreated不会再回调）
+            if (surfaceHolder.getSurface() != null && surfaceHolder.getSurface().isValid()) {
+                ijkPlayer.setDisplay(surfaceHolder);
+                startPrepareIfNeeded();
+            }
         }
     }
 
+    /**
+     * 仅触发一次MPPrepare，退出后不再prepare，防止退出瞬间卡死在prepare流程
+     */
+    private void startPrepareIfNeeded() {
+        if (!pendingPrepare)
+            return;
+        pendingPrepare = false;
+        if (destroyed || ijkPlayer == null)
+            return;
+        MPPrepare(video_url);
+    }
+
     private void MPPrepare(String nowurl) {
+        if (destroyed || ijkPlayer == null)
+            return;
         ijkPlayer.setOnPreparedListener(this);
 
         if (isLiveMode) {
@@ -845,9 +843,13 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             e.printStackTrace();
         }
 
+        if (destroyed) // 设置数据源期间可能已经退出
+            return;
+
         ijkPlayer.setOnCompletionListener(iMediaPlayer -> {
             finishWatching = true;
-            
+
+            if (destroyed) return;
             if (interactionData != null && interactionData.edges != null && 
                 interactionData.edges.questions != null && !questionShown) {
                 checkEndInteractionQuestions();
@@ -919,6 +921,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             });
 
         ijkPlayer.setScreenOnWhilePlaying(true);
+        if (destroyed) { // prepareAsync前最后一次检查，避免退出后才开始异步prepare
+            try {
+                ijkPlayer.stop();
+            } catch (IllegalStateException ignored) {
+            }
+            ijkPlayer.release();
+            ijkPlayer = null;
+            return;
+        }
         ijkPlayer.prepareAsync();
         Logu.v("开始准备");
     }
@@ -927,7 +938,12 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     @Override
     public void onPrepared(IMediaPlayer mediaPlayer) {
         if (destroyed) {
-            ijkPlayer.release();
+            // Activity已退出但prepare刚完成：此时onDestroy可能已release过，这里安全释放并直接返回，
+            // 避免对已释放的播放器继续操作导致native层卡死
+            try {
+                mediaPlayer.release();
+            } catch (IllegalStateException ignored) {
+            }
             return;
         }
 
@@ -1713,6 +1729,11 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             mDanmakuView = null;
         }
         if (ijkPlayer != null) {
+            // 必须先stop再release：release在native层等待播放线程退出，直接release可能长时间阻塞
+            try {
+                ijkPlayer.stop();
+            } catch (IllegalStateException ignored) {
+            }
             ijkPlayer.release();
             ijkPlayer = null;
         }
@@ -1738,10 +1759,6 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     private void cancelAllTimers() {
-        if (surfaceTimer != null) {
-            surfaceTimer.cancel();
-            surfaceTimer = null;
-        }
         if (progressTimer != null) {
             progressTimer.cancel();
             progressTimer = null;
@@ -1753,6 +1770,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
         if (loadingTimer != null) {
             loadingTimer.cancel();
             loadingTimer = null;
+        }
+        if (speedTimer != null) {
+            speedTimer.cancel();
+            speedTimer = null;
         }
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
@@ -1980,8 +2001,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                 public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surfaceTexture, int i, int i1) {
                     Logu.v("surfacetexture", "available");
                     mSurfaceTexture = surfaceTexture;
-                    if (isPrepared && ijkPlayer != null)
+                    if (ijkPlayer != null) {
                         ijkPlayer.setSurface(new Surface(surfaceTexture));
+                        startPrepareIfNeeded();
+                    }
                 }
 
                 @Override
@@ -2186,6 +2209,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
             CenterThreadPool.run(() -> {
                 try {
                     runOnUiThread(() -> {
+                        if (destroyed)
+                            return;
                         if (hasDanmaku && mDanmakuView != null) {
                             mDanmakuView.pause();
                         }
@@ -2207,6 +2232,8 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     Thread.sleep(100);
 
                     runOnUiThread(() -> {
+                        if (destroyed)
+                            return;
                         ijkPlayer = new IjkMediaPlayer();
                         progress_history = currentPosition;
 
@@ -2403,7 +2430,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         return;
 
                     if (ijkPlayer != null) {
-                        ijkPlayer.stop();
+                        try {
+                            ijkPlayer.stop();
+                        } catch (IllegalStateException ignored) {
+                        }
                         ijkPlayer.release();
                     }
                     if (mDanmakuView != null) {
@@ -2563,7 +2593,10 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                     final boolean wasPlaying = isPlaying;
 
                     if (ijkPlayer != null) {
-                        ijkPlayer.stop();
+                        try {
+                            ijkPlayer.stop();
+                        } catch (IllegalStateException ignored) {
+                        }
                         ijkPlayer.release();
                     }
 
