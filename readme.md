@@ -114,7 +114,7 @@
 ## ✅ 目前正在做的
 
 - **播放器稳定性**：已修复"视频播放中点击退出后应用卡死"的问题（Surface 轮询定时器竞态、release 顺序、退出守卫、Timer 泄漏），后续继续排查播放器相关的暗病。
-- **Kotlin 化改造**：正在将核心基础层（网络工具 `NetWorkUtil`、线程池 `CenterThreadPool`、存储工具 `SharedPreferencesUtil`）重构为 Kotlin，保持与现有 Java 调用端完全兼容（使用 `@JvmStatic` / `@JvmField` 维持原签名）。
+- **Kotlin 化改造（第一阶段完成）**：核心基础层 `NetWorkUtil` / `SharedPreferencesUtil` / `CenterThreadPool` 已重构为 Kotlin，与现有 Java 调用端完全兼容（`@JvmStatic` / `@JvmField` 维持原签名），见 v2.9.9。
 
 ## 📋 还没做的（TODO）
 
