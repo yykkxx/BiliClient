@@ -3,11 +3,20 @@
 # 哔哩终端（BiliTerminal）
 
 轻量的第三方B站Android客户端
-[安装包下载点这里](https://gitee.com/RobinNotBad/BiliClient/releases)
+**[安装包下载点这里（Releases）](https://gitee.com/yykkxxykx/BiliClient/releases)**
 
-[官方 Gitee 仓库](https://gitee.com/RobinNotBad/BiliClient) | [Github 仓库 (由huanli233 fork)](https://github.com/huanli233/BiliClient) | [Action Build (Github)](https://github.com/huanli233/action_build_biliclient/actions) | [开发镜像仓库](https://gitee.com/yykkxxykx/BiliClient)
+[Fork 源头 · 原作者仓库 RobinNotBad/BiliClient](https://gitee.com/RobinNotBad/BiliClient) | [原作者Github镜像 (由huanli233 fork)](https://github.com/huanli233/BiliClient) | [本仓库开发分支](https://gitee.com/yykkxxykx/BiliClient/tree/develop)
 
 </div>
+
+---
+
+# 🙏 致谢
+
+- **[RobinNotBad](https://gitee.com/RobinNotBad)** 与哔哩终端开发组（silent碎月 等）：本项目 Fork 自 [RobinNotBad/BiliClient](https://gitee.com/RobinNotBad/BiliClient)，全部核心功能与架构出自原作者的辛勤工作，本仓库仅在其基础上进行修复与改进，向原作者致敬！
+- [huanli233](https://github.com/huanli233)：维护 Github 镜像与 Action 构建。
+- [WearBili](https://github.com/SpaceXC/WearBili) 与 [腕上哔哩](https://github.com/luern0313/WristBilibili)：提供了部分开源代码与收集的 API。
+- 所有通过 issue、群聊反馈问题的用户。
 
 ---
 
