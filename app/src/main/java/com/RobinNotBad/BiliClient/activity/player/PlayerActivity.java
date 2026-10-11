@@ -786,6 +786,9 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
                         Logu.v("surface", "重新设置Holder");
                         ijkPlayer.setDisplay(surfaceHolder);
                         startPrepareIfNeeded();
+                        if (isPrepared) {
+                            ijkPlayer.seekTo(seekbar_progress.getProgress());
+                        }
                     }
                 }
 
@@ -810,12 +813,15 @@ public class PlayerActivity extends Activity implements IjkMediaPlayer.OnPrepare
     }
 
     /**
-     * 仅触发一次MPPrepare，退出后不再prepare，防止退出瞬间卡死在prepare流程
+     * 仅触发一次MPPrepare，退出后不再prepare，防止退出瞬间卡死在prepare流程。
+     * surfaceCreated（主线程）与 setDisplay（异步任务）可能并发到达，需同步防双触发。
      */
     private void startPrepareIfNeeded() {
-        if (!pendingPrepare)
-            return;
-        pendingPrepare = false;
+        synchronized (this) {
+            if (!pendingPrepare)
+                return;
+            pendingPrepare = false;
+        }
         if (destroyed || ijkPlayer == null)
             return;
         MPPrepare(video_url);
