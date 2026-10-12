@@ -482,6 +482,12 @@ public class DrawHandler extends Handler {
         mCordonTime = Math.max(33, (long) (averageFrameConsumingTime * 2.5f));
         mCordonTime2 = (long) (mCordonTime * 2.5f);
         mFrameUpdateRate = Math.max(16, averageFrameConsumingTime / 15 * 15);
+        // 允许通过 DanmakuContext.refreshRateMS 限制弹幕层的重绘频率：
+        // 60fps 重绘两条滚动弹幕对低端机是纯浪费（GPU/CPU 常驻高频 → 发热掉电），
+        // 降到 30fps 肉眼几乎无差别，但重绘次数减半。
+        if (mContext != null && mContext.refreshRateMS > mFrameUpdateRate) {
+            mFrameUpdateRate = mContext.refreshRateMS;
+        }
         mThresholdTime = mFrameUpdateRate + 3;
         // Log.i("DrawHandler", "initRenderingConfigs test-fps:" +
         // averageFrameConsumingTime + "ms,mCordonTime:"

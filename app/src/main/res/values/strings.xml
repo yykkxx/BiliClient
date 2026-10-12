@@ -226,6 +226,8 @@
     <string name="pagename_setup_intro">初次见面……</string>
     <string name="pagename_setup_ui">调整界面……</string>
     <string name="pagename_splash">正在连接……</string>
+    <string name="desc_danmaku_refreshrate">弹幕层重绘间隔，越大越省电降温。默认33（约30帧），可填16~66；数值越大弹幕越卡顿</string>
+    <string name="desc_low_latency">开启后减小播放缓冲、优先低延迟，但网络波动时更容易卡顿。关闭则更抗网络抖动（默认关闭）</string>
     <string name="pagename_test">测试页面</string>
     <string name="pagename_tutorial">教程</string>
     <string name="pagename_update">更新</string>

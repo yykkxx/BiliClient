@@ -52,6 +52,8 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("choose", "音频输出", "player_audio",
                         getString(R.string.desc_audiocodec), "false",
                         new String[]{"OpenSles", "AudioTrack"}));
+                add(new SettingSection("switch", "低延迟优先", "player_low_latency",
+                        getString(R.string.desc_low_latency), "false"));
 
                 add(new SettingSection("divider", "", "", "", ""));
 
@@ -69,6 +71,8 @@ public class SettingTerminalPlayerActivity extends RefreshListActivity {
                 add(new SettingSection("input_float", "弹幕不透明度", "player_danmaku_transparency", "",
                         "0.5"));
                 add(new SettingSection("input_float", "弹幕速度", "player_danmaku_speed", "", "1.0"));
+                add(new SettingSection("input_int", "弹幕刷新间隔(ms)", "player_danmaku_refreshrate",
+                        getString(R.string.desc_danmaku_refreshrate), "33"));
 
                 add(new SettingSection("divider", "", "", "", ""));
 

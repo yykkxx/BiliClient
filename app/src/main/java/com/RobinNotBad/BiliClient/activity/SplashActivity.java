@@ -30,8 +30,6 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Timer;
-import java.util.TimerTask;
 
 //启动页面
 //一切的一切的开始
@@ -40,9 +38,10 @@ import java.util.TimerTask;
 public class SplashActivity extends Activity {
 
     private TextView splashTextView;
-    private int splashFrame;
-    private Timer splashTimer;
     private String splashText = "欢迎使用\n哔哩终端";
+    /** 防止重复收尾（IO 回调与 UI 回调可能同时到达） */
+    private final java.util.concurrent.atomic.AtomicBoolean splashFinished =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -59,15 +58,9 @@ public class SplashActivity extends Activity {
         splashTextView = findViewById(R.id.splashText);
         splashText = SharedPreferencesUtil.getString("ui_splashtext", "欢迎使用\n哔哩终端");
 
-        splashTimer = new Timer();
-        splashTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(() -> showSplashText(splashFrame));
-                splashFrame++;
-                if (splashFrame > splashText.length()) this.cancel();
-            }
-        }, 100, 100);
+        // 开屏动画已关闭：不再逐字打出文字（原实现每 100ms 触发一次 UI 更新，
+        // 在启动这段最吃 IO/CPU 的时间里纯属额外负担），直接整段显示。
+        splashTextView.setText(splashText);
 
         CenterThreadPool.run(() -> {
 
@@ -113,11 +106,10 @@ public class SplashActivity extends Activity {
 
                     interruptSplash();
 
-                    splashTextView.postDelayed(() -> {
-                        startActivity(intent);
-                        CenterThreadPool.run(() -> AppInfoApi.check(SplashActivity.this));
-                        finish();
-                    }, 100);
+                    // 动画已关闭：不再等待文字动画，立即进入目标页面（缩短启动耗时）
+                    startActivity(intent);
+                    CenterThreadPool.run(() -> AppInfoApi.check(SplashActivity.this));
+                    finish();
 
                 } catch (IOException e) {
                     runOnUiThread(() -> {
@@ -130,7 +122,7 @@ public class SplashActivity extends Activity {
                                 intent.setClass(SplashActivity.this, LocalListActivity.class);
                                 startActivity(intent);
                                 finish();
-                            }, 300);
+                            }, 150);
                         }
                     });
                 } catch (JSONException e) {
@@ -184,15 +176,13 @@ public class SplashActivity extends Activity {
         NetWorkUtil.refreshHeaders();
     }
 
-    @SuppressLint("SetTextI18n")
-    private void showSplashText(int i) {
-        if (i > splashText.length()) splashTextView.setText(splashText);
-        else splashTextView.setText(splashText.substring(0, i) + "_");
-    }
-
+    /**
+     * 结束开屏（动画已关闭，这里只保证文字完整显示，可重复调用）。
+     * 原先这里要 cancel 打字机定时器，现在没有定时器了，只做幂等保护。
+     */
     private void interruptSplash() {
-        if (splashTimer != null) splashTimer.cancel();
-        splashTimer = null;
+        if (!splashFinished.compareAndSet(false, true))
+            return;
         runOnUiThread(() -> splashTextView.setText(splashText));
     }
 }

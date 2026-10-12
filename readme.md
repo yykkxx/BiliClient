@@ -114,19 +114,39 @@
 ## ✅ 目前正在做的
 
 - **播放器稳定性**：已修复"视频播放中点击退出后应用卡死"的问题（Surface 轮询定时器竞态、release 顺序、退出守卫、Timer 泄漏），后续继续排查播放器相关的暗病。
-- **Kotlin 化改造（第一阶段完成）**：核心基础层 `NetWorkUtil` / `SharedPreferencesUtil` / `CenterThreadPool` 已重构为 Kotlin，与现有 Java 调用端完全兼容（`@JvmStatic` / `@JvmField` 维持原签名），见 v2.9.9。
+- **Kotlin 化改造（第一、二阶段完成）**：核心基础层 `NetWorkUtil` / `SharedPreferencesUtil` / `CenterThreadPool`，以及**弹幕与播放器关键链路**已重构为 Kotlin，与现有 Java 调用端完全兼容（`@JvmStatic` / `@JvmField` 维持原签名）。
+
+## 🆕 本轮更新（弹幕与播放体验专项）
+
+- **关闭开屏动画**：移除开屏页逐字打字机的 100ms 轮询定时器与进入延时，启动阶段不再做无谓的 UI 刷新，直接显示完整文案并立即跳转。
+- **抗网络波动 · 弹幕不再丢失**：
+  - 新版弹幕接口改为**逐段重试 + 指数退避**，任一段失败只登记为"缺失"，不再中断后续分段，也不会因为一个空分段就丢掉后面全部弹幕；
+  - 已到达的分段**边下边渲染**（不再等全部拉完），失败分段交给后台补拉器按退避持续补齐，补到即增量追加；
+  - 弹幕层 `prepare()` 是异步的，先于它就绪的分段会**暂存**而不是被静默丢弃，`prepared()` 回调时统一补渲染；
+  - 直播弹幕 WebSocket 断线后**指数退避自动重连**，不再"断一次就永久没有弹幕"；心跳定时器改为单实例，重连不再累积泄漏。
+- **抗网络波动 · 视频不再卡死**：
+  - 新增播放**卡死看门狗**（`PlaybackWatchdog`）：同时监测"缓冲超时"和"进度长时间不推进"两种 ijkplayer 假死（这两种情况都不会触发 `onError`），命中后自动重建数据源并**跳回原进度**继续播放，最多自动恢复 3 次；
+  - 开启 FFmpeg 层 `reconnect` / `reconnect_streamed` 断线重连，并加大默认播放缓冲（5MB→20MB），提升抖动容忍度；
+  - 修复卡死恢复路径上的 Surface 回调与 Timer 重复累积问题。
+- **性能与发热优化**：
+  - 弹幕层重绘频率由固定 60fps 降为**默认约 30fps**（新增设置项"弹幕刷新间隔(ms)"，可 16~66 自行调节），重绘次数减半；
+  - protobuf 弹幕解析的反射查找改为**按 Class 缓存 Field**，一个视频上万条弹幕不再重复反射，解析开销大幅下降；
+  - 进度轮询里的字幕计算移出主线程、`MediaSession` 状态更新由 250ms 降为 1s、字幕可见性避免重复 `setVisibility`；
+  - 修复 `showLoadingSpeed` / `progressChange` / `onlineChange` 三个定时器在缓冲、自动恢复、切P时**重复创建不取消**的泄漏。
+- **新增开关**：「低延迟优先」（用抗抖动换低延迟，默认关闭）、「弹幕刷新间隔」。
 
 ## 📋 还没做的（TODO）
 
 - [ ] Kotlin 重构覆盖 API 层（`api/` 下各接口类）与列表基础设施（`RefreshListActivity/Fragment`）
 - [ ] `Adapter` / `Holder` 公共代码整理（评论区、动态、消息目前仍有大量复制粘贴）
-- [ ] 弹幕解压工具类三处重复实现（`NetWorkUtil` / `DownloadActivity` / `PlayerActivity` / `DownloadService`）合并为单一实现
+- [x] 弹幕解压工具类重复实现：播放器侧已合并为 `OnlineDanmakuDownloader`（含 `inflate` 空转防护），`DownloadActivity` / `DownloadService` 待跟进
+- [ ] Kotlin 重构继续覆盖 `api/` 剩余接口类与列表基础设施
 - [ ] 评论页 `page`/`bottom` 状态在分页失败时的回退更可靠
 - [ ] 更完善的错误上报与用户提示
 
 ## 🗺️ 开发规划
 
-- **短期**：基础层 Kotlin 化收尾；播放器退出/切P/切清晰度路径的线程与生命周期加固；README 与文档持续更新。
+- **短期**：播放器退出/切P/切清晰度路径的线程与生命周期加固；弹幕与播放链路的实测调优；README 与文档持续更新。
 - **中期**：API 层渐进式迁移到 Kotlin（优先 `ReplyApi`、`DynamicApi`、`VideoInfoApi`）；将"大哥上楼梯"式的 JSON 解析逐步替换为更平直的写法；列表基类抽取统一分页状态机。
 - **长期**：在保证**安卓4.x 兼容**与**轻量**的前提下，让 Kotlin 逐步成为主要开发语言；继续保证可用性与流畅性优先，不盲目堆功能。
 - **永远不做**：塞入40M的字体（
