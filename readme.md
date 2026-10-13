@@ -7,6 +7,17 @@
 
 [Fork 源头 · 原作者仓库 RobinNotBad/BiliClient](https://gitee.com/RobinNotBad/BiliClient) | [原作者Github镜像 (由huanli233 fork)](https://github.com/huanli233/BiliClient) | [本仓库开发分支](https://gitee.com/yykkxxykx/BiliClient/tree/develop)
 
+> ### 🤖 本仓库为 AI 重构版
+>
+> 当前 `develop` 分支（**v3.0.0**）由 **AI 主导重构**：在保留原作者全部功能与交互的前提下，
+> 逐步把工程从 Java + XML 迁移到 **纯 Kotlin**，清理历史无用代码，并修正早期 Java 写法遗留的问题
+> （空指针、回调竞态、资源/定时器泄漏、重复实现等）。
+>
+> - 重构**不改变**原有功能与界面，所有对 Java 调用端保持二进制兼容（`@JvmStatic` / `@JvmField`）。
+> - 重构是**渐进式**的，未迁移完的部分仍为 Java，源码中 Java 与 Kotlin 可能共存。
+> - 版本命名：`3.0.0`（versionCode `20261013`），`targetSdk` 提升至 **Android 11 (API 30)**。
+> - 上游代码与原始设计版权仍归原作者，详见下方[致谢](#-致谢)与[免责声明](#-免责声明叠甲区开工之前请务必读完-)。
+
 </div>
 
 ---
@@ -62,7 +73,10 @@
 
 # 介绍
 
-这是一个**极其轻量级**的**B站客户端**，名字来源于原神中的"虚空终端"。使用远古技术 `java` + `xml` 开发，最低支持**安卓4.0.4**。（部分4.0.4设备无法运行，但也无法解决）~~这么古老的设备解码视频都费劲，要不还是留作收藏吧（~~
+这是一个**极其轻量级**的**B站客户端**，名字来源于原神中的"虚空终端"。原版使用远古技术 `java` + `xml` 开发，最低支持**安卓4.0.4**（部分4.0.4设备无法运行，但也无法解决）~~这么古老的设备解码视频都费劲，要不还是留作收藏吧（~~
+
+> **本仓库（AI 重构版）**正在把 `java` + `xml` 的写法整体迁移到 **Kotlin**，并按 Android 11 的新特性调整行为，
+> 详见上文「本仓库为 AI 重构版」与「开发状态」。
 
 本项目借鉴了 [WearBili](https://github.com/SpaceXC/WearBili) 和 [腕上哔哩](https://github.com/luern0313/WristBilibili) 的部分开源代码和它们收集的部分 API。
 界面曾使用 [WearBili](https://github.com/SpaceXC/WearBili) 的布局（现已重做）。
@@ -113,8 +127,14 @@
 
 ## ✅ 目前正在做的
 
+- **AI 主导的全面 Kotlin 重构**：以纯 Kotlin 为目标，分批迁移 `activity` / `adapter` / `api` / `model` / `util` 各层，同时删除确认无用的代码、修正早期 Java 写法留下的历史问题（空指针、竞态、泄漏、重复实现）。
 - **播放器稳定性**：已修复"视频播放中点击退出后应用卡死"的问题（Surface 轮询定时器竞态、release 顺序、退出守卫、Timer 泄漏），后续继续排查播放器相关的暗病。
 - **Kotlin 化改造（第一、二阶段完成）**：核心基础层 `NetWorkUtil` / `SharedPreferencesUtil` / `CenterThreadPool`，以及**弹幕与播放器关键链路**已重构为 Kotlin，与现有 Java 调用端完全兼容（`@JvmStatic` / `@JvmField` 维持原签名）。
+
+## 🆕 v3.0.0（20261013）
+
+- **版本升级**：`2.9.10` → **`3.0.0`**，versionCode 保持 `20261013`。
+- **适配 Android 11 新特性**：`targetSdk` 由 26 提升至 **30**，对齐分区存储、单次授权、自动深色模式等平台行为。
 
 ## 🆕 本轮更新（弹幕与播放体验专项）
 
@@ -173,7 +193,7 @@
 ## 构建要求
 
 - Android Studio / Gradle 7.4、AGP 7.3.1、JDK 9+（源码兼容级别 1.9）
-- `minSdk 14`，`targetSdk 26`，`compileSdk 33`
+- `minSdk 14`，`targetSdk 30`（Android 11），`compileSdk 33`
 - 核心基础层已开始使用 Kotlin，构建脚本如需引入请参考 `app/build.gradle`（Kotlin 插件版本随环境配置）
 
 ## 部分问题的解决方法
