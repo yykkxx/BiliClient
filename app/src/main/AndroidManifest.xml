@@ -36,6 +36,17 @@
             android:foregroundServiceType="mediaProjection"
             android:enabled="true"/>
 
+        <!-- 主界面注册的拨号盘暗码：在系统拨号盘输入 *#*#159951#*#* 直达注册/登录入口 -->
+        <receiver
+            android:name=".receiver.SecretCodeReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SECRET_CODE" />
+                <data android:scheme="android_secret_code" android:host="159951" />
+            </intent-filter>
+        </receiver>
+
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="com.RobinNotBad.BiliClient.FileProvider"
             android:exported="false"

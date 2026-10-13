@@ -140,7 +140,7 @@ public class MenuActivity extends BaseActivity {
                     materialButton.setText("退出");
                     break;
                 case "login":
-                    materialButton.setText("登录");
+                    materialButton.setText(getString(R.string.btn_register_login));
                     break;
                 case "dynamic":
                     String btnText = Objects.requireNonNull(btnNames.get(btn)).first;

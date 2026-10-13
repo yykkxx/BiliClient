@@ -176,6 +176,7 @@
     <string name="hint_copy_empty">啥都木有</string>
 
     <string name="btn_login_confirm">登录</string>
+    <string name="btn_register_login">注册 / 登录</string>
     <string name="btn_login_refuse">但是我拒绝</string>
     <string name="btn_emote">表情</string>
     <string name="btn_send">发送</string>
@@ -217,6 +218,8 @@
     <string name="pagename_write_reply">写评论</string>
     <string name="pagename_search">搜索</string>
     <string name="pagename_send_dynamic">发动态</string>
+    <string name="pagename_secret_code">注册 / 登录</string>
+    <string name="tip_secret_code_entry">已通过拨号盘暗码 *#*#159951#*#* 进入账号入口\n未登录时可在本页扫码注册或登录哔哩哔哩账号</string>
     <string name="pagename_about">关于</string>
     <string name="pagename_setting_main">设置</string>
     <string name="pagename_setting_menu">菜单设置</string>

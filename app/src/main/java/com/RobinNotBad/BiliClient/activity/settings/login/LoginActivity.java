@@ -10,6 +10,7 @@ import androidx.viewpager.widget.ViewPager;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerFragmentAdapter;
+import com.RobinNotBad.BiliClient.receiver.SecretCodeReceiver;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil;
 
@@ -45,6 +46,13 @@ public class LoginActivity extends BaseActivity {
         viewPager.setAdapter(vpfAdapter);
 
         findViewById(R.id.loading).setVisibility(View.GONE);
+
+        // 由拨号盘暗码 *#*#159951#*#* 进入时给出提示，说明这是账号/注册入口
+        if (getIntent().getBooleanExtra(SecretCodeReceiver.EXTRA_FROM_SECRET_CODE, false)) {
+            setPageName(getString(R.string.pagename_secret_code));
+            MsgUtil.showMsgLong(getString(R.string.tip_secret_code_entry));
+        }
+
         if (fragmentList.size() > 1 && SharedPreferencesUtil.getBoolean("first_" + LoginActivity.class.getSimpleName(), true)) {
             MsgUtil.showMsgLong("提示：本页面可以左右滑动");
             SharedPreferencesUtil.putBoolean("first_" + LoginActivity.class.getSimpleName(), false);
