@@ -28,16 +28,18 @@ import java.util.Map;
 
 public class WriteReplyActivity extends BaseActivity {
 
-    private static final Map<Integer, String> msgMap = new HashMap<>() {{
-        put(-101, "没有登录or登录信息有误？");
-        put(-102, "账号被封禁！");
-        put(-509, "请求过于频繁！");
-        put(12015, "需要评论验证码...？");
-        put(12016, "包含敏感内容！");
-        put(12025, "字数过多啦QAQ");
-        put(12035, "被拉黑了...");
-        put(12051, "重复评论，请勿刷屏！");
-    }};
+    private static final Map<Integer, String> msgMap = new HashMap<>();
+
+    static {
+        msgMap.put(-101, "没有登录or登录信息有误？");
+        msgMap.put(-102, "账号被封禁！");
+        msgMap.put(-509, "请求过于频繁！");
+        msgMap.put(12015, "需要评论验证码...？");
+        msgMap.put(12016, "包含敏感内容！");
+        msgMap.put(12025, "字数过多啦QAQ");
+        msgMap.put(12035, "被拉黑了...");
+        msgMap.put(12051, "重复评论，请勿刷屏！");
+    }
 
     EditText editText;
     private final ActivityResultLauncher<Intent> emoteLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), (result) -> {

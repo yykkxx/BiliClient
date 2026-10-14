@@ -138,14 +138,13 @@ public class TestActivity extends BaseActivity {
                     } else {
                         SharedPreferencesUtil.putString("dev_catgirl_apikey", api_key);
                     }
-                    ArrayList<String> deepseekHeaders = new ArrayList<>() {{
-                        add("Content-Type");
-                        add("application/json");
-                        add("Authorization");
-                        add("Bearer " + api_key);
-                        add("Accept");
-                        add("text/event-stream");
-                    }};
+                    ArrayList<String> deepseekHeaders = new ArrayList<>();
+                    deepseekHeaders.add("Content-Type");
+                    deepseekHeaders.add("application/json");
+                    deepseekHeaders.add("Authorization");
+                    deepseekHeaders.add("Bearer " + api_key);
+                    deepseekHeaders.add("Accept");
+                    deepseekHeaders.add("text/event-stream");
 
                     String input_str = input_data.getText().toString();
                     if (input_str.isEmpty()) {

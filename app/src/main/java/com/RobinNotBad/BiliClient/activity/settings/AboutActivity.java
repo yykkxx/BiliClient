@@ -56,42 +56,41 @@ public class AboutActivity extends BaseActivity {
                 e.printStackTrace();
             }
 
-            List<ImageView> developerAvaterViews = new ArrayList<>() {{
-                add(findViewById(R.id.robinAvatar));
-                add(findViewById(R.id.duduAvatar));
-                add(findViewById(R.id.dadaAvatar));
-                add(findViewById(R.id.moyeAvatar));
-                add(findViewById(R.id.silentAvatar));
-                add(findViewById(R.id.huanliAvatar));
-                add(findViewById(R.id.jankAvatar));
-            }};
-            List<Integer> developerAvaters = new ArrayList<>() {{
-                add(R.mipmap.avatar_robin);
-                add(R.mipmap.avatar_dudu);
-                add(-1);
-                add(R.mipmap.avatar_moye);
-                add(R.mipmap.avatar_silent);
-                add(R.mipmap.avatar_huanli);
-                add(R.mipmap.avatar_jank);
-            }};
-            List<MaterialCardView> developerCardList = new ArrayList<>() {{
-                add(findViewById(R.id.robin_card));
-                add(findViewById(R.id.dudu_card));
-                add(findViewById(R.id.dada_card));
-                add(findViewById(R.id.moye_card));
-                add(findViewById(R.id.silent_card));
-                add(findViewById(R.id.huanli_card));
-                add(findViewById(R.id.jank_card));
-            }};
-            List<Long> developerUidList = new ArrayList<>() {{
-                add((long) 646521226);
-                add((long) 517053179);
-                add((long) 432128342);
-                add((long) 394675616);
-                add((long) 40140732);
-                add((long) 673815151);
-                add((long) 661403494);
-            }};
+            List<ImageView> developerAvaterViews = new ArrayList<>();
+            developerAvaterViews.add(findViewById(R.id.robinAvatar));
+            developerAvaterViews.add(findViewById(R.id.duduAvatar));
+            developerAvaterViews.add(findViewById(R.id.dadaAvatar));
+            developerAvaterViews.add(findViewById(R.id.moyeAvatar));
+            developerAvaterViews.add(findViewById(R.id.silentAvatar));
+            developerAvaterViews.add(findViewById(R.id.huanliAvatar));
+            developerAvaterViews.add(findViewById(R.id.jankAvatar));
+
+            List<Integer> developerAvaters = new ArrayList<>();
+            developerAvaters.add(R.mipmap.avatar_robin);
+            developerAvaters.add(R.mipmap.avatar_dudu);
+            developerAvaters.add(-1);
+            developerAvaters.add(R.mipmap.avatar_moye);
+            developerAvaters.add(R.mipmap.avatar_silent);
+            developerAvaters.add(R.mipmap.avatar_huanli);
+            developerAvaters.add(R.mipmap.avatar_jank);
+
+            List<MaterialCardView> developerCardList = new ArrayList<>();
+            developerCardList.add(findViewById(R.id.robin_card));
+            developerCardList.add(findViewById(R.id.dudu_card));
+            developerCardList.add(findViewById(R.id.dada_card));
+            developerCardList.add(findViewById(R.id.moye_card));
+            developerCardList.add(findViewById(R.id.silent_card));
+            developerCardList.add(findViewById(R.id.huanli_card));
+            developerCardList.add(findViewById(R.id.jank_card));
+
+            List<Long> developerUidList = new ArrayList<>();
+            developerUidList.add((long) 646521226);
+            developerUidList.add((long) 517053179);
+            developerUidList.add((long) 432128342);
+            developerUidList.add((long) 394675616);
+            developerUidList.add((long) 40140732);
+            developerUidList.add((long) 673815151);
+            developerUidList.add((long) 661403494);
 
             for (int i = 0; i < developerAvaterViews.size(); i++) {
                 int finalI = i;

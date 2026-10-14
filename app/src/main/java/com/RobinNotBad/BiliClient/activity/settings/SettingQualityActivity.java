@@ -18,11 +18,13 @@ import java.util.Objects;
 public class SettingQualityActivity extends BaseActivity {
     QualityChooseAdapter adapter;
 
-    static final LinkedHashMap<String, Integer> qnMap = new LinkedHashMap<>() {{
-        put("360P", 16);
-        put("720P", 64);
-        put("1080P", 80);
-    }};
+    static final LinkedHashMap<String, Integer> qnMap = new LinkedHashMap<>();
+
+    static {
+        qnMap.put("360P", 16);
+        qnMap.put("720P", 64);
+        qnMap.put("1080P", 80);
+    }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
