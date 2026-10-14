@@ -128,7 +128,7 @@
 
 ## ✅ 目前正在做的
 
-- **AI 主导的全面 Kotlin 重构**：以纯 Kotlin 为目标，分批迁移 `activity` / `adapter` / `api` / `model` / `util` 各层，同时删除确认无用的代码、修正早期 Java 写法留下的历史问题（空指针、竞态、泄漏、重复实现）。
+- **Kotlin 重构已完成**：`app/src/main/java` 下 **292 个 Kotlin 文件、0 个 Java 文件**——`activity` / `adapter` / `api` / `model` / `util` / `service` / 根入口（`BiliTerminal`/`ErrorCatch`）全部迁移完毕；同时删除了确认无用的代码、修正了早期 Java 写法留下的历史问题（空指针、竞态、泄漏、双花括号初始化、重复实现）。
 - **播放器稳定性**：已修复"视频播放中点击退出后应用卡死"的问题（Surface 轮询定时器竞态、release 顺序、退出守卫、Timer 泄漏），后续继续排查播放器相关的暗病。
 - **Kotlin 化改造（第一、二阶段完成）**：核心基础层 `NetWorkUtil` / `SharedPreferencesUtil` / `CenterThreadPool`，以及**弹幕与播放器关键链路**已重构为 Kotlin，与现有 Java 调用端完全兼容（`@JvmStatic` / `@JvmField` 维持原签名）。
 
@@ -168,7 +168,7 @@
 
 ## 📋 还没做的（TODO）
 
-- [ ] Kotlin 重构覆盖 API 层（`api/` 下各接口类）与列表基础设施（`RefreshListActivity/Fragment`）
+- [x] Kotlin 重构覆盖 API 层与列表基础设施（`RefreshListActivity/Fragment` 已是 Kotlin）
 - [ ] `Adapter` / `Holder` 公共代码整理（评论区、动态、消息目前仍有大量复制粘贴）
 - [x] 弹幕解压工具类重复实现：播放器侧已合并为 `OnlineDanmakuDownloader`（含 `inflate` 空转防护），`DownloadActivity` / `DownloadService` 待跟进
 - [ ] Kotlin 重构继续覆盖 `api/` 剩余接口类与列表基础设施
@@ -178,8 +178,8 @@
 ## 🗺️ 开发规划
 
 - **短期**：播放器退出/切P/切清晰度路径的线程与生命周期加固；弹幕与播放链路的实测调优；README 与文档持续更新。
-- **中期**：API 层渐进式迁移到 Kotlin（优先 `ReplyApi`、`DynamicApi`、`VideoInfoApi`）；将"大哥上楼梯"式的 JSON 解析逐步替换为更平直的写法；列表基类抽取统一分页状态机。
-- **长期**：在保证**轻量**与 **Android 10+** 稳定的前提下，让 Kotlin 逐步成为主要开发语言；继续保证可用性与流畅性优先，不盲目堆功能。
+- **中期**：将"大哥上楼梯"式的 JSON 解析逐步替换为更平直的写法；列表基类抽取统一分页状态机。
+- **长期**：在保证**轻量**与 **Android 10+** 稳定的前提下巩固纯 Kotlin 代码基；继续保证可用性与流畅性优先，不盲目堆功能。
 - **永远不做**：塞入40M的字体（
 
 ---

@@ -68,12 +68,12 @@ object PlayerApi {
         }
 
         if (videoInfo.cids!!.size == 1)
-            DownloadService.startDownload(videoInfo.title,
+            DownloadService.startDownload(videoInfo.title!!,
                     videoInfo.aid, videoInfo.cids!!.get(0),
                     videoInfo.cover,
                     qn, "video", "")
         else
-            DownloadService.startDownload(videoInfo.title, videoInfo.pagenames!!.get(page),
+            DownloadService.startDownload(videoInfo.title!!, videoInfo.pagenames!!.get(page),
                     videoInfo.aid, videoInfo.cids!!.get(page),
                     videoInfo.cover,
                     qn, "video", "")
@@ -90,12 +90,12 @@ object PlayerApi {
     @JvmStatic
     fun startDownloadingAudioOnly(videoInfo: VideoInfo, page: Int, qn: Int, audioUrl: String?) {
         if (videoInfo.cids!!.size == 1)
-            DownloadService.startDownload(videoInfo.title,
+            DownloadService.startDownload(videoInfo.title!!,
                     videoInfo.aid, videoInfo.cids!!.get(0),
                     videoInfo.cover,
                     qn, "audio_only", audioUrl)
         else
-            DownloadService.startDownload(videoInfo.title, videoInfo.pagenames!!.get(page),
+            DownloadService.startDownload(videoInfo.title!!, videoInfo.pagenames!!.get(page),
                     videoInfo.aid, videoInfo.cids!!.get(page),
                     videoInfo.cover,
                     qn, "audio_only", audioUrl)
