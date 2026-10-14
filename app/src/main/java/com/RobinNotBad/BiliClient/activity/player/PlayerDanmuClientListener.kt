@@ -309,7 +309,7 @@ class PlayerDanmuClientListener : WebSocketListener() {
                 val data = result.getJSONObject("data")
                 activity.runOnUiThread {
                     try {
-                        activity.text_title.text = data.getString("title")
+                        activity.text_title!!.text = data.getString("title")
                     } catch (ignored: Exception) {
                     }
                 }
