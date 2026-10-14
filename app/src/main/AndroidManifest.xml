@@ -285,11 +285,6 @@
             android:label="添加收藏"
             android:screenOrientation="locked" />
         <activity
-            android:name=".activity.settings.SettingPlayerChooseActivity"
-            android:exported="false"
-            android:label="选择播放器"
-            android:screenOrientation="locked" />
-        <activity
             android:name=".activity.video.JumpToPlayerActivity"
             android:exported="false"
             android:label="跳转播放"
@@ -466,7 +461,13 @@
             android:name=".activity.video.RecommendActivity"
             android:exported="true"
             android:label="推荐"
-            android:screenOrientation="locked" />
+            android:screenOrientation="locked">
+            <intent-filter android:label="哔哩终端">
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".activity.video.TimelineActivity"
             android:exported="false"
@@ -487,18 +488,6 @@
             android:exported="false"
             android:label="图文收藏夹"
             android:screenOrientation="locked" />
-        <activity
-            android:name=".activity.SplashActivity"
-            android:exported="true"
-            android:label="哔哩终端"
-            android:screenOrientation="locked"
-            android:theme="@style/Theme.BiliClient.Splash">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
         <meta-data
             android:name="com.xtc.unbind.clearUserData.white_list"
             android:value="true" />

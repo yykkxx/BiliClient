@@ -22,7 +22,8 @@ android {
 
     defaultConfig {
         applicationId "com.RobinNotBad.BiliClient"
-        minSdk 14
+        // Android 10 (API 29)：不再支持更旧系统
+        minSdk 29
         // Android 11 (API 30)：利用新特性（分区存储、单次授权、包可见性、
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion

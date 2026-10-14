@@ -11,7 +11,6 @@ import androidx.core.content.FileProvider;
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.player.PlayerActivity;
-import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity;
 import com.RobinNotBad.BiliClient.model.DashAudioStream;
 import com.RobinNotBad.BiliClient.model.DashData;
@@ -344,7 +343,30 @@ public class PlayerApi {
                 break;
 
             default:
-                intent.setClass(context, SettingPlayerChooseActivity.class);
+                //播放器选择界面已删除，未设置时默认使用内置播放器
+                intent.setClass(context, PlayerActivity.class);
+                intent.putExtra("url", playerData.videoUrl);
+                intent.putExtra("danmaku", playerData.danmakuUrl);
+                intent.putExtra("title", playerData.title);
+                intent.putExtra("aid", playerData.aid);
+                intent.putExtra("cid", playerData.cid);
+                intent.putExtra("mid", playerData.mid);
+                intent.putExtra("progress", playerData.progress);
+                intent.putExtra("live_mode", playerData.isLive());
+                if (playerData.qnStrList != null && playerData.qnValueList != null) {
+                    intent.putExtra("qnStrList", playerData.qnStrList);
+                    intent.putExtra("qnValueList", playerData.qnValueList);
+                    intent.putExtra("currentQuality", playerData.qn);
+                }
+                if (playerData.pagenames != null && playerData.cids != null && playerData.pagenames.size() > 1) {
+                    intent.putStringArrayListExtra("pagenames", playerData.pagenames);
+                    long[] cidArray = new long[playerData.cids.size()];
+                    for (int i = 0; i < playerData.cids.size(); i++) {
+                        cidArray[i] = playerData.cids.get(i);
+                    }
+                    intent.putExtra("cids", cidArray);
+                    intent.putExtra("currentPageIndex", playerData.currentPageIndex);
+                }
                 break;
         }
         return intent;

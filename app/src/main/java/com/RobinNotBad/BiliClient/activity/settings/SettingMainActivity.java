@@ -57,11 +57,11 @@ public class SettingMainActivity extends InstanceActivity {
                 });
             }
 
-            //播放器选择
+            //播放器（原"选择播放器"界面已删除，入口改为清晰度设置）
             MaterialCardView playerSetting = findViewById(R.id.playerSetting);
             playerSetting.setOnClickListener(view -> {
                 Intent intent = new Intent();
-                intent.setClass(this, SettingPlayerChooseActivity.class);
+                intent.setClass(this, SettingQualityActivity.class);
                 startActivity(intent);
             });
 

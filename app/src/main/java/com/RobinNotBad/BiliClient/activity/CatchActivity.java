@@ -84,7 +84,7 @@ public class CatchActivity extends BaseActivity {
         findViewById(R.id.restart_btn).setOnClickListener(view -> {
             finish();
             stopService(new Intent(this, DownloadService.class));
-            startActivity(new Intent(this, SplashActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            startActivity(new Intent(this, com.RobinNotBad.BiliClient.activity.video.RecommendActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             Process.killProcess(Process.myPid());
         });
 

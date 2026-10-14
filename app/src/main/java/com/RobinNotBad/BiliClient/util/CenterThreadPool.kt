@@ -92,7 +92,9 @@ object CenterThreadPool {
     @JvmStatic
     fun <T> supplyAsyncWithLiveData(supplier: Callable<T>): LiveData<Result<T>> {
         val retval = MutableLiveData<Result<T>>()
-        run {
+        //注意：必须显式写 Runnable。裸写 run { ... } 会被解析成标准库 kotlin.run 作用域函数，
+        //导致任务在当前线程同步执行（视频详情页因此报"网络错误/获取信息失败"）。
+        run(Runnable {
             try {
                 val res = supplier.call()
                 retval.postValue(Result.success(res))
@@ -100,7 +102,7 @@ object CenterThreadPool {
                 retval.postValue(Result.failure(e))
                 MsgUtil.err(e)
             }
-        }
+        })
         return retval
     }
 
@@ -128,25 +130,25 @@ object CenterThreadPool {
      */
     @JvmStatic
     fun <T> observe(deferred: Future<T>, consumer: Consumer<T>) {
-        run {
+        run(Runnable {
             try {
                 val value = deferred.get()
                 runOnUiThread { consumer.accept(value) }
             } catch (ignored: Throwable) {
             }
-        }
+        })
     }
 
     @JvmStatic
     fun <T> observe(future: Future<T>, consumer: Consumer<T>, onFailure: Consumer<Throwable>) {
-        run {
+        run(Runnable {
             try {
                 val value = future.get()
                 runOnUiThread { consumer.accept(value) }
             } catch (e: Exception) {
                 onFailure.accept(e)
             }
-        }
+        })
     }
 
     /**

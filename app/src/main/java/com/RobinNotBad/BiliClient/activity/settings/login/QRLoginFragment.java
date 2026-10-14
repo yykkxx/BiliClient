@@ -18,7 +18,7 @@ import androidx.fragment.app.Fragment;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
-import com.RobinNotBad.BiliClient.activity.SplashActivity;
+import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity;
 import com.RobinNotBad.BiliClient.api.CookiesApi;
 import com.RobinNotBad.BiliClient.api.LoginApi;
@@ -80,7 +80,7 @@ public class QRLoginFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         MaterialCardView jump = view.findViewById(R.id.jump);
         jump.setOnClickListener(v -> {
-            if (from_setup) startActivity(new Intent(requireContext(), SplashActivity.class));
+            if (from_setup) startActivity(new Intent(requireContext(), RecommendActivity.class));
             if (timer != null) timer.cancel();
             if (isAdded()) requireActivity().finish();
         });
@@ -231,7 +231,7 @@ public class QRLoginFragment extends Fragment {
                                 }
                             }
 
-                            startActivity(new Intent(requireContext(), SplashActivity.class));
+                            startActivity(new Intent(requireContext(), RecommendActivity.class));
 
                             if (isAdded()) requireActivity().finish();
                             break;

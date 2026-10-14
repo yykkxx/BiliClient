@@ -40,7 +40,6 @@ import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseFragment;
 import com.RobinNotBad.BiliClient.activity.dynamic.send.SendDynamicActivity;
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity;
-import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.user.WatchLaterActivity;
 import com.RobinNotBad.BiliClient.activity.video.MultiPageActivity;
 import com.RobinNotBad.BiliClient.activity.video.QualityChooserActivity;
@@ -359,12 +358,6 @@ public class VideoInfoFragment extends BaseFragment {
 
         //播放
         play.setOnClickListener(view1 -> playClick());
-        play.setOnLongClickListener(view1 -> {
-            Context context = getContext();
-            if (context != null)
-                startActivity(new Intent(context, SettingPlayerChooseActivity.class));
-            return true;
-        });
 
         //点赞
         rootview.findViewById(R.id.layout_like).setOnClickListener(view1 -> CenterThreadPool.run(() -> {

@@ -21,7 +21,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
-import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity;
 import com.RobinNotBad.BiliClient.adapter.video.MediaEpisodeAdapter;
 import com.RobinNotBad.BiliClient.api.BangumiApi;
@@ -254,11 +253,6 @@ public class BangumiInfoFragment extends Fragment {
             Intent intent = new Intent(v.getContext(), JumpToPlayerActivity.class);
             intent.putExtra("data", episode.toPlayerData());
             startActivity(intent);
-        });
-        playButton.setOnLongClickListener(v -> {
-            Intent intent = new Intent(v.getContext(), SettingPlayerChooseActivity.class);
-            startActivity(intent);
-            return true;
         });
         onFinishLoad();
 

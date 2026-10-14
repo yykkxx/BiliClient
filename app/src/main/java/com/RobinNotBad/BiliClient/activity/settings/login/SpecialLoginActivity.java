@@ -12,7 +12,7 @@ import android.widget.TextView;
 
 import com.RobinNotBad.BiliClient.BiliTerminal;
 import com.RobinNotBad.BiliClient.R;
-import com.RobinNotBad.BiliClient.activity.SplashActivity;
+import com.RobinNotBad.BiliClient.activity.video.RecommendActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
 import com.RobinNotBad.BiliClient.util.Logu;
 import com.RobinNotBad.BiliClient.util.MsgUtil;
@@ -45,7 +45,7 @@ public class SpecialLoginActivity extends BaseActivity {
         if (intent.getBooleanExtra("login", true)) {
             refuse.setOnClickListener(v -> {
                 if (getIntent().getBooleanExtra("from_setup", false))
-                    startActivity(new Intent(this, SplashActivity.class));
+                    startActivity(new Intent(this, RecommendActivity.class));
                 else finish();
             });
 
@@ -64,7 +64,7 @@ public class SpecialLoginActivity extends BaseActivity {
                     NetWorkUtil.refreshHeaders();
 
                     Intent intent1 = new Intent();
-                    intent1.setClass(SpecialLoginActivity.this, SplashActivity.class);
+                    intent1.setClass(SpecialLoginActivity.this, RecommendActivity.class);
                     startActivity(intent1);
                     finish();
                 } catch (JSONException e) {

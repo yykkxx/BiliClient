@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.RobinNotBad.BiliClient.R;
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity;
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity;
-import com.RobinNotBad.BiliClient.activity.settings.SettingPlayerChooseActivity;
 import com.RobinNotBad.BiliClient.adapter.user.UpListAdapter;
 import com.RobinNotBad.BiliClient.adapter.video.MediaEpisodeAdapter;
 import com.RobinNotBad.BiliClient.api.LiveApi;
@@ -175,14 +174,6 @@ public class LiveInfoActivity extends BaseActivity {
                         runOnUiThread(() -> MsgUtil.err(e));
                     }
                 }));
-                play.setOnLongClickListener(view -> {
-                    if (!SharedPreferencesUtil.getString("player", "null").equals("terminalPlayer"))
-                        MsgUtil.showMsgLong("若无法播放请更换为内置播放器");
-                    Intent intent = new Intent();
-                    intent.setClass(this, SettingPlayerChooseActivity.class);
-                    startActivity(intent);
-                    return true;
-                });
                 if (playInfo.playUrl == null) {
                     MsgUtil.showMsg("直播已结束");
                     play.setVisibility(View.GONE);
