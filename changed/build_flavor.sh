@@ -125,7 +125,7 @@ pattern = re.compile(
 def strip_launcher(match):
     block = match.group(1)
     cleaned = re.sub(
-        r'\s*<intent-filter>\s*<action android:name="android\.intent\.action\.MAIN"\s*/>\s*'
+        r'\s*<intent-filter[^>]*>\s*<action android:name="android\.intent\.action\.MAIN"\s*/>\s*'
         r'<category android:name="android\.intent\.category\.LAUNCHER"\s*/>\s*</intent-filter>',
         '', block, flags=re.S)
     if cleaned == block:
