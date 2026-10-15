@@ -29,6 +29,7 @@
     <string name="setting_lab_ui_rotatory">默认情况下此选项无需开启，系统会自动为可滚动列表应用表冠操作，如果表冠未生效或需要自定义灵敏度，可尝试开启此选项。\n开启后可能会丢失表冠震动。\n下面的三项若非0则滚动距离会乘以该值。\n请从1.0开始上下调节，直至你自己满意为止。打开新页面才能生效。</string>
     <string name="setting_lab_path_video">缓存的视频将会保存到这个位置，若文件夹不存在会自动创建。之前缓存的视频请用文件管理器手动移动到新文件夹内。\n不保证会不会出现奇怪的问题。</string>
     <string name="setting_lab_path_pictures">下载的图片将会保存到这个位置，若文件夹不存在会自动创建。之前下载的图片请用文件管理器手动移动到新文件夹内。\n不保证会不会出现奇怪的问题。</string>
+    <string name="setting_lab_dual_column">打开后视频列表变为两列显示，一屏能看到更多视频，更适合方屏或大屏手表。\n部分页面（如设置、消息）不受影响。\n重新进入页面生效。</string>
     <string name="setting_lab_marquee">关闭此开关后，将会全局禁用文字跑马灯，可能会提升性能但会导致部分文字显示不全。</string>
     <string name="setting_lab_download_old">若后台下载在你的设备上有问题，请打开此选项以换回旧版的前台下载器！</string>
     <string name="setting_lab_jsonerr_detailed">如果你遇到了某些接口问题，开发者可能会需要你打开这个以提供更详细的报错信息。\n——当然开发者调试的时候也可能会用到这个。</string>

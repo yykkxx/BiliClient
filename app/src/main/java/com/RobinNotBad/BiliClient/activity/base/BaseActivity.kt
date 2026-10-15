@@ -22,8 +22,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.dynamic.DynamicActivity
 import com.RobinNotBad.BiliClient.event.SnackEvent
-import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager
-import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
@@ -241,10 +240,7 @@ open class BaseActivity : AppCompatActivity {
     }
 
     open fun getLayoutManager(): RecyclerView.LayoutManager {
-        return if (SharedPreferencesUtil.getBoolean("ui_landscape", false) && !force_single_column)
-            CustomGridManager(this, 3)
-        else
-            CustomLinearManager(this)
+        return ListLayoutUtil.create(this, force_single_column)
     }
 
     open fun setForceSingleColumn() {

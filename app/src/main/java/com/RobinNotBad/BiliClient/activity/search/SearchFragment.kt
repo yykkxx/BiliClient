@@ -14,8 +14,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
-import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager
-import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.view.ImageAutoLoadScrollListener
@@ -157,10 +156,7 @@ open class SearchFragment : Fragment() {
     }
 
     fun getLayoutManager(): RecyclerView.LayoutManager {
-        return if (SharedPreferencesUtil.getBoolean("ui_landscape", false))
-            CustomGridManager(requireContext(), 3)
-        else
-            CustomLinearManager(requireContext())
+        return ListLayoutUtil.create(requireContext(), false)
     }
 
     fun update(keyword: String) {

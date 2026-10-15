@@ -13,8 +13,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
-import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomGridManager
-import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.view.ImageAutoLoadScrollListener
@@ -145,10 +144,7 @@ open class RefreshListFragment : BaseFragment() {
     }
 
     open fun getLayoutManager(): RecyclerView.LayoutManager {
-        return if (SharedPreferencesUtil.getBoolean("ui_landscape", false) && !force_single_column)
-            CustomGridManager(requireContext(), 3)
-        else
-            CustomLinearManager(requireContext())
+        return ListLayoutUtil.create(requireContext(), force_single_column)
     }
 
     open fun setForceSingleColumn() {

@@ -24,6 +24,7 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -238,6 +239,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
     /** 长按倍速的倍率（原实现固定 3.0x，提示框文案“二倍速”按此常量生成） */
     private val LONG_CLICK_SPEED = 2.0f
+
+    /** 表冠控制进度时每一档前进/后退的毫秒数（#23） */
+    private val CROWN_SEEK_STEP_MS = 5000f
     private var video_origX = 0f
     private var video_origY = 0f
     private var timestamp_click: Long = 0
@@ -2497,6 +2501,48 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 speedTimer!!.schedule(timerTask, 200)
             }
         })
+    }
+
+    /**
+     * 表冠控制视频前进/后退（#23）。
+     *
+     * 打开播放页小菜单栏（right_second）后，滚动手表表冠即可前后微调播放进度，
+     * 无需再去拖动进度条。每次一档约 5 秒，符合手表上“微调”的定位。
+     */
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (isPrepared && !isLiveMode && menu_opened &&
+            event.action == MotionEvent.ACTION_SCROLL &&
+            (event.source and InputDevice.SOURCE_CLASS_MASK) == InputDevice.SOURCE_ROTARY_ENCODER
+        ) {
+            val steps = -event.getAxisValue(MotionEvent.AXIS_SCROLL)
+            if (steps != 0f) {
+                val deltaMs = (steps * CROWN_SEEK_STEP_MS).toLong()
+                var target = ijkPlayer!!.getCurrentPosition() + deltaMs
+                val duration = ijkPlayer!!.getDuration()
+                if (target < 0) target = 0
+                if (duration > 0 && target > duration) target = duration
+                seekToPosition(target)
+                showSeekHint(target)
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    /** 表冠微调进度时在屏幕上给出即时反馈 */
+    private fun showSeekHint(positionMs: Long) {
+        val hint = text_speed_hint ?: return
+        runOnUiThread {
+            val curr = StringUtil.toTime((positionMs / 1000).toInt())
+            hint.text = curr + " / " + progress_str
+            hint.visibility = View.VISIBLE
+            hint.removeCallbacks(seekHintHide)
+            hint.postDelayed(seekHintHide, 800L)
+        }
+    }
+
+    private val seekHintHide = Runnable {
+        if (!onLongClick) text_speed_hint?.visibility = View.GONE
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {

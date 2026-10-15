@@ -9,6 +9,7 @@ import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
 import com.RobinNotBad.BiliClient.util.FileUtil
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 import java.util.ArrayList
@@ -43,6 +44,9 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 "false"))
         sectionList.add(SettingSection("switch", "文字跑马灯", "marquee_enable", getString(R.string.setting_lab_marquee),
                 "true"))
+        // 视频列表双列模式（#12）
+        sectionList.add(SettingSection("switch", "视频列表双列模式", ListLayoutUtil.PREF_DUAL_COLUMN,
+                getString(R.string.setting_lab_dual_column), "false"))
 
         sectionList.add(SettingSection("title", "播放器", "", "", ""))
         sectionList.add(SettingSection("switch", "播放器旋屏兼容方案", "dev_player_rotate_software",
