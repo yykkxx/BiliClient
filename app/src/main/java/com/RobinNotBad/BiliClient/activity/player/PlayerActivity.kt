@@ -1425,6 +1425,19 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 if (video_now_last == position)
                     return // 进度没变化，不做任何 UI 更新
 
+                // 性能优化（#20）：界面不可见（控制条已隐藏且无字幕/看点需要更新）时，
+                // 只需要维持看门狗与进度记录，不必每秒 4 次跨线程刷新 UI 与 SeekBar。
+                // SeekBar.setProgress 会触发 onProgressChanged + 文字刷新，
+                // 在后台/息屏继续播放的场景下这是持续的无效开销（耗电发热）。
+                val uiVisible = bottom_buttons!!.getVisibility() == View.VISIBLE ||
+                        (subtitles != null) || isLiveMode ||
+                        (viewPointAdapter != null && viewPoints != null && !viewPoints!!.isEmpty())
+                if (!uiVisible) {
+                    video_now_last = position
+                    video_now = position
+                    return
+                }
+
                 video_now_last = position
                 video_now = position
                 val curr_sec = position / 1000f

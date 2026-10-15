@@ -11,6 +11,7 @@ import com.RobinNotBad.BiliClient.model.SettingSection
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.ThermalPrefetchManager
 
 import java.util.ArrayList
 
@@ -47,6 +48,9 @@ class SettingLaboratoryActivity : RefreshListActivity() {
         // 视频列表双列模式（#12）
         sectionList.add(SettingSection("switch", "视频列表双列模式", ListLayoutUtil.PREF_DUAL_COLUMN,
                 getString(R.string.setting_lab_dual_column), "false"))
+        // 高温预缓存（#22）
+        sectionList.add(SettingSection("switch", "高温预缓存", ThermalPrefetchManager.PREF_THERMAL_PREFETCH,
+                getString(R.string.setting_lab_thermal_prefetch), "false"))
 
         sectionList.add(SettingSection("title", "播放器", "", "", ""))
         sectionList.add(SettingSection("switch", "播放器旋屏兼容方案", "dev_player_rotate_software",

@@ -38,8 +38,10 @@ android {
         multiDexEnabled true
 
         ndk {
+            // Android 11 已移除 mips 支持，且仓库里 mips 的 .so 一直是 0 字节的空占位，
+            // 打包进去只会增加安装体积与校验开销，这里直接去掉（#21）。
             //noinspection ChromeOsAbiSupport
-            abiFilters 'armeabi-v7a','x86',"mips"
+            abiFilters 'armeabi-v7a','x86'
         }
 
         resConfigs 'zh'

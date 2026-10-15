@@ -39,6 +39,12 @@ object NetWorkUtil {
     /** 与原 synchronized(NetWorkUtil.class) 等价的锁对象 */
     private val COOKIE_LOCK = Any()
 
+    /**
+     * 连接池：弱网/4G 场景下复用 TCP 连接可以显著减少握手开销。
+     * 默认 5 个空闲连接、5 分钟保活对本应用足够了。
+     */
+    private val CONNECTION_POOL = okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES)
+
     class Inet4Selector : Dns {
         @Throws(UnknownHostException::class)
         override fun lookup(hostname: String): List<InetAddress> {
@@ -84,10 +90,15 @@ object NetWorkUtil {
                             response
                         }
                         .addInterceptor(CookieSaveInterceptor())
+                        // 弱网优化（#11）：复用连接、跳过无意义的压缩，
+                        // 减少 4G 下的连接建立次数与 CPU 开销（连接握手是最费电的部分）
+                        .addInterceptor(WeakNetworkInterceptor())
                         .dns(Inet4Selector())
                         .pingInterval(8, TimeUnit.SECONDS)
                         .connectTimeout(8, TimeUnit.SECONDS)
                         .readTimeout(16, TimeUnit.SECONDS)
+                        .connectionPool(CONNECTION_POOL)
+                        .retryOnConnectionFailure(true)
                         .build()
                 )
             }
