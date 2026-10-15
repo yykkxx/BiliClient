@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.DisplayMetrics
 import android.view.View
 import android.widget.EditText
+import android.widget.TextView
 
 import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
@@ -13,6 +14,7 @@ import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.google.android.material.switchmaterial.SwitchMaterial
 
 class SettingUIActivity : BaseActivity() {
@@ -55,6 +57,14 @@ class SettingUIActivity : BaseActivity() {
                     uiPaddingV!!.setText("0")
                     SharedPreferencesUtil.putBoolean("player_ui_round", false)
                 }
+            }
+
+            // 主题色调入口（#10）
+            val themeValue = findViewById<TextView>(R.id.theme_setting_value)
+            themeValue.text = getString(R.string.desc_theme_color) + "\n当前：" + ThemeUtil.getColorName()
+            themeValue.setTextColor(ThemeUtil.getColor())
+            findViewById<View>(R.id.theme_setting_btn).setOnClickListener { view ->
+                startActivity(Intent(this@SettingUIActivity, ThemeChooseActivity::class.java))
             }
 
             findViewById<View>(R.id.preview).setOnClickListener { view ->

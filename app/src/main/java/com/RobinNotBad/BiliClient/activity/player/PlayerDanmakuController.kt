@@ -17,6 +17,7 @@ import master.flame.danmaku.danmaku.model.IDisplayer
 import master.flame.danmaku.danmaku.model.android.DanmakuContext
 import master.flame.danmaku.danmaku.model.android.Danmakus
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser
+import master.flame.danmaku.ui.widget.DanmakuView
 import master.flame.danmaku.danmaku.parser.android.BiliDanmukuParser
 import master.flame.danmaku.danmaku.parser.android.BiliProtobufDanmakuParser
 import java.io.File
@@ -98,6 +99,13 @@ class PlayerDanmakuController(
     @JvmField
     var hasDanmaku = false
 
+    /**
+     * 温控（#8）算出的重绘间隔覆盖值；为 null 时使用用户设置的固定间隔。
+     * 由播放页在温度变化时写入；改变后需要调用 buildContext(force = true) 生效。
+     */
+    @JvmField
+    var thermalIntervalOverride: Int? = null
+
     /** 补拉器 */
     private var backfiller: DanmakuBackfiller? = null
 
@@ -134,8 +142,9 @@ class PlayerDanmakuController(
 
         // 重绘频率限制：默认 33ms（30fps）。弹幕是覆盖层，30fps 与 60fps 观感差异很小，
         // 但重绘次数减半能实实在在降低 GPU/CPU 占用与发热。
-        ctx.refreshRateMS = SharedPreferencesUtil.getInt(PREF_REFRESH_RATE, DEFAULT_REFRESH_RATE_MS)
-            .coerceIn(16, 66)
+        // 温控开启时（#8）忽略用户设置的固定帧率，改由温度决定（见 thermalIntervalOverride）。
+        ctx.refreshRateMS = thermalIntervalOverride
+            ?: SharedPreferencesUtil.getInt(PREF_REFRESH_RATE, DEFAULT_REFRESH_RATE_MS).coerceIn(16, 66)
 
         ctx.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 1f)
             .setDuplicateMergingEnabled(SharedPreferencesUtil.getBoolean("player_danmaku_mergeduplicate", false))
@@ -239,6 +248,16 @@ class PlayerDanmakuController(
 
     fun setSpeed(speed: Float) {
         danmakuView?.setSpeed(speed)
+    }
+
+    /**
+     * 运行时调整弹幕重绘帧率（温控用，#8）。
+     *
+     * @param intervalMs 两帧最小间隔毫秒（16≈60fps / 33≈30fps / 66≈15fps）
+     */
+    fun updateFrameRate(intervalMs: Int) {
+        val view = danmakuView as? DanmakuView
+        view?.handler?.updateFrameRate(intervalMs.toLong())
     }
 
     fun hide() {

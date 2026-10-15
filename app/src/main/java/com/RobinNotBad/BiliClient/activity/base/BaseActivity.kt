@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.util.AsyncLayoutInflaterX
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -178,6 +179,20 @@ open class BaseActivity : AppCompatActivity {
         }
     }
 
+    /**
+     * 统一在内容视图设置完成后套用主题色调（#10）。
+     * 子类若直接调用同步 setContentView，同样会走到这里。
+     */
+    override fun setContentView(layoutResID: Int) {
+        super.setContentView(layoutResID)
+        ThemeUtil.applyTo(this)
+    }
+
+    override fun setContentView(view: View?) {
+        super.setContentView(view)
+        ThemeUtil.applyTo(this)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (eventBusInit) {
@@ -211,6 +226,7 @@ open class BaseActivity : AppCompatActivity {
         setContentView(R.layout.activity_loading)
         AsyncLayoutInflaterX(this).inflate(id, null) { view, layoutId, parent ->
             setContentView(view)
+            ThemeUtil.applyTo(this)
 
             if (this is InstanceActivity) (this as InstanceActivity).setMenuClick()
             else setTopbarExit()

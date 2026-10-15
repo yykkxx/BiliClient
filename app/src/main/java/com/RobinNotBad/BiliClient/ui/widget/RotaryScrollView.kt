@@ -1,50 +1,42 @@
 package com.RobinNotBad.BiliClient.ui.widget
 
 import android.content.Context
-import android.os.Build
 import android.util.AttributeSet
-import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.ViewConfiguration
 import android.widget.ScrollView
-import androidx.core.view.ViewConfigurationCompat
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
+/**
+ * 带表冠滚动支持的 ScrollView（详见 [RotaryScrollHelper]）。
+ */
 class RotaryScrollView : ScrollView {
-    private var scrollMultiple = 0f
-    private var rotaryEnabled = false
-
     constructor(context: Context) : super(context)
 
     constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
     constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr)
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        initRotaryScroll()
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (handleRotary(ev)) return true
+        return super.dispatchTouchEvent(ev)
     }
 
-    private fun initRotaryScroll() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            rotaryEnabled = SharedPreferencesUtil.getBoolean("ui_rotatory_enable", false)
-            scrollMultiple = SharedPreferencesUtil.getFloat("ui_rotatory_scroll", 0f)
-            
-            if (rotaryEnabled && scrollMultiple > 0) {
-                setOnGenericMotionListener { v, ev ->
-                    if (ev.getAction() == MotionEvent.ACTION_SCROLL &&
-                        ev.getSource() == InputDevice.SOURCE_ROTARY_ENCODER) {
-                        val delta = -ev.getAxisValue(MotionEvent.AXIS_SCROLL) *
-                            ViewConfigurationCompat.getScaledVerticalScrollFactor(
-                                ViewConfiguration.get(getContext()), getContext()) * 2
-                        smoothScrollBy(0, Math.round(delta * scrollMultiple))
-                        requestFocus()
-                        true
-                    } else {
-                        false
-                    }
-                }
-            }
-        }
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (handleRotary(event)) return true
+        return super.onGenericMotionEvent(event)
+    }
+
+    private fun handleRotary(event: MotionEvent): Boolean {
+        if (!RotaryScrollHelper.isSupported() || !RotaryScrollHelper.isRotaryScroll(event)) return false
+        val delta = RotaryScrollHelper.scrollDelta(
+            context, PREF_ROTARY_SCROLL, event.getAxisValue(MotionEvent.AXIS_SCROLL)
+        )
+        if (delta == 0) return true
+        smoothScrollBy(0, delta)
+        return true
+    }
+
+    companion object {
+        /** 表冠适配灵敏度（Scroll）设置键 */
+        const val PREF_ROTARY_SCROLL = "ui_rotatory_scroll"
     }
 }

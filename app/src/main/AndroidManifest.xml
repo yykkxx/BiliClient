@@ -389,6 +389,11 @@
             android:label="粉丝勋章"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.ThemeChooseActivity"
+            android:exported="false"
+            android:label="主题色调"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.SettingUIActivity"
             android:exported="true"
             android:label="界面设置"

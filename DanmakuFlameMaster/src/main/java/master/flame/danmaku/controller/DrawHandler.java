@@ -118,6 +118,9 @@ public class DrawHandler extends Handler {
 
     private long mFrameUpdateRate = 16;
 
+    /** 温控下发的帧率覆盖值（0 表示未设置，见 updateFrameRate） */
+    private volatile long mFrameUpdateRateOverride = 0;
+
     @SuppressWarnings("unused")
     private long mThresholdTime;
 
@@ -477,6 +480,29 @@ public class DrawHandler extends Handler {
         }
     }
 
+    /**
+     * 运行时调整重绘帧率（温控用，见 PlayerActivity 的弹幕温控开关）。
+     *
+     * 原实现只在 initRenderingConfigs()（即 prepare 时）读取一次
+     * DanmakuContext.refreshRateMS，播放过程中温度变化无法生效。
+     * 这里开放一个线程安全的入口，仅在绘制线程上改，避免与 UPDATE 循环竞态。
+     *
+     * @param intervalMs 两帧之间的最小间隔（毫秒），16≈60fps / 33≈30fps / 66≈15fps
+     */
+    public void updateFrameRate(final long intervalMs) {
+        if (intervalMs < 16 || intervalMs > 200) {
+            return;
+        }
+        post(new Runnable() {
+            @Override
+            public void run() {
+                mFrameUpdateRateOverride = intervalMs;
+                mFrameUpdateRate = intervalMs;
+                mThresholdTime = mFrameUpdateRate + 3;
+            }
+        });
+    }
+
     private void initRenderingConfigs() {
         long averageFrameConsumingTime = 16;
         mCordonTime = Math.max(33, (long) (averageFrameConsumingTime * 2.5f));
@@ -487,6 +513,10 @@ public class DrawHandler extends Handler {
         // 降到 30fps 肉眼几乎无差别，但重绘次数减半。
         if (mContext != null && mContext.refreshRateMS > mFrameUpdateRate) {
             mFrameUpdateRate = mContext.refreshRateMS;
+        }
+        // 温控在播放途中下发的帧率优先于静态配置
+        if (mFrameUpdateRateOverride > 0) {
+            mFrameUpdateRate = mFrameUpdateRateOverride;
         }
         mThresholdTime = mFrameUpdateRate + 3;
         // Log.i("DrawHandler", "initRenderingConfigs test-fps:" +

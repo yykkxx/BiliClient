@@ -1,15 +1,16 @@
 package com.RobinNotBad.BiliClient.ui.widget
 
 import android.content.Context
-import android.os.Build
 import android.util.AttributeSet
-import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.ViewConfiguration
-import androidx.core.view.ViewConfigurationCompat
 import androidx.recyclerview.widget.RecyclerView
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
+/**
+ * 带表冠滚动支持的 RecyclerView。
+ *
+ * 列表本身已能消费表冠滚动，这里在统一入口再做一次兜底处理，
+ * 主要是让灵敏度设置（Recycler）在所有布局管理器下都稳定生效。
+ */
 class RotaryRecyclerView : RecyclerView {
     private var scrollMultiple = 0f
     private var rotaryEnabled = false
@@ -26,25 +27,32 @@ class RotaryRecyclerView : RecyclerView {
     }
 
     private fun initRotaryScroll() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            rotaryEnabled = SharedPreferencesUtil.getBoolean("ui_rotatory_enable", false)
-            scrollMultiple = SharedPreferencesUtil.getFloat("ui_rotatory_recycler", 0f)
-            
-            if (rotaryEnabled && scrollMultiple > 0) {
-                setOnGenericMotionListener { v, ev ->
-                    if (ev.getAction() == MotionEvent.ACTION_SCROLL &&
-                        ev.getSource() == InputDevice.SOURCE_ROTARY_ENCODER) {
-                        val delta = -ev.getAxisValue(MotionEvent.AXIS_SCROLL) *
-                            ViewConfigurationCompat.getScaledVerticalScrollFactor(
-                                ViewConfiguration.get(getContext()), getContext()) * 2
-                        smoothScrollBy(0, Math.round(delta * scrollMultiple))
+        if (!RotaryScrollHelper.isSupported()) return
+        rotaryEnabled = com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+            .getBoolean("ui_rotatory_enable", false)
+        scrollMultiple = com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+            .getFloat(PREF_ROTARY_RECYCLER, 0f)
+
+        if (rotaryEnabled && scrollMultiple > 0) {
+            setOnGenericMotionListener { _, ev ->
+                if (RotaryScrollHelper.isRotaryScroll(ev)) {
+                    val delta = RotaryScrollHelper.scrollDelta(
+                        context, PREF_ROTARY_RECYCLER, ev.getAxisValue(MotionEvent.AXIS_SCROLL)
+                    )
+                    if (delta != 0) {
+                        smoothScrollBy(0, delta)
                         requestFocus()
-                        true
-                    } else {
-                        false
                     }
+                    true
+                } else {
+                    false
                 }
             }
         }
+    }
+
+    companion object {
+        /** 表冠适配灵敏度（Recycler）设置键 */
+        const val PREF_ROTARY_RECYCLER = "ui_rotatory_recycler"
     }
 }

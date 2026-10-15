@@ -29,21 +29,27 @@ class QualitySelectorAdapter : RecyclerView.Adapter<QualitySelectorAdapter.Quali
     fun setData(qualityNames: Array<String>, qualityValues: IntArray, currentQuality: Int) {
         this.qualityNames = qualityNames
         this.qualityValues = qualityValues
-        this.selectedItemIndex = -1
-
-        for (i in qualityValues.indices) {
-            if (qualityValues[i] == currentQuality) {
-                this.selectedItemIndex = i
-                break
-            }
-        }
-
-        if (this.selectedItemIndex == -1 && qualityValues.size > 0) {
-            this.selectedItemIndex = 0
-        }
+        this.selectedItemIndex = indexOfQuality(currentQuality)
+        // 当前清晰度不在可选列表里时，退回列表第一项（与实际生效的清晰度一致）
+        this.selectedItemIndex = if (selectedItemIndex >= 0) selectedItemIndex
+            else if (qualityValues.size > 0) 0 else -1
+        this.selectedQuality = if (selectedItemIndex >= 0) qualityValues[selectedItemIndex] else currentQuality
 
         notifyDataSetChanged()
     }
+
+    /** 返回清晰度值在列表中的下标，找不到返回 -1。 */
+    private fun indexOfQuality(quality: Int): Int {
+        val values = qualityValues ?: return -1
+        for (i in values.indices) {
+            if (values[i] == quality) return i
+        }
+        return -1
+    }
+
+    /** 记录当前选中项对应的清晰度值，便于外部判断。 */
+    @JvmField
+    var selectedQuality: Int = 0
 
     fun setOnItemClickListener(listener: OnItemClickListener?) {
         this.listener = listener
@@ -51,10 +57,16 @@ class QualitySelectorAdapter : RecyclerView.Adapter<QualitySelectorAdapter.Quali
 
     fun setSelectedItemIndex(selectedItemIndex: Int) {
         val previousSelectedIndex = this.selectedItemIndex
+        val values = qualityValues
+        if (values != null && selectedItemIndex in values.indices) {
+            this.selectedQuality = values[selectedItemIndex]
+        }
         this.selectedItemIndex = selectedItemIndex
-        notifyItemChanged(previousSelectedIndex)
-        notifyItemChanged(selectedItemIndex)
+        if (previousSelectedIndex in 0 until itemCountSafe()) notifyItemChanged(previousSelectedIndex)
+        if (selectedItemIndex in 0 until itemCountSafe()) notifyItemChanged(selectedItemIndex)
     }
+
+    private fun itemCountSafe(): Int = qualityNames?.size ?: 0
 
     @NonNull
     override fun onCreateViewHolder(@NonNull parent: ViewGroup, viewType: Int): QualityHolder {

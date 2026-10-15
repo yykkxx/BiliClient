@@ -33,7 +33,11 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.text.InputType
 import android.widget.EditText
+import android.widget.FrameLayout
+
+import androidx.appcompat.app.AlertDialog
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -113,6 +117,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     /** 播放卡死看门狗（Kotlin）：网络波动导致假死时自动恢复 */
     private var playbackWatchdog: PlaybackWatchdog? = null
 
+    /** 弹幕帧率温控（Kotlin）：按设备温度动态调整弹幕重绘帧率（#8） */
+    private var danmakuThermalController: DanmakuThermalController? = null
+
     private var surfaceView: SurfaceView? = null
     private var textureView: TextureView? = null
     private var mSurfaceTexture: SurfaceTexture? = null
@@ -163,6 +170,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var loading_text1: TextView? = null
     private var text_speed: TextView? = null
     private var text_newspeed: TextView? = null
+
+    /** 长按倍速时显示在视频上方的半透明提示框（#7） */
+    private var text_speed_hint: TextView? = null
 
     @JvmField
     var text_title: TextView? = null
@@ -225,6 +235,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var gesture_moved = false
     private var gesture_scaled = false
     private var gesture_click_disabled = false
+
+    /** 长按倍速的倍率（原实现固定 3.0x，提示框文案“二倍速”按此常量生成） */
+    private val LONG_CLICK_SPEED = 2.0f
     private var video_origX = 0f
     private var video_origY = 0f
     private var timestamp_click: Long = 0
@@ -381,6 +394,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
         batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
 
+        startDanmakuThermalControl()
+
         loop_enabled = SharedPreferencesUtil.getBoolean("player_loop", false)
         // 从设置读取听视频模式的默认值
         isAudioOnlyMode = SharedPreferencesUtil.getBoolean("player_audio_only", false)
@@ -511,6 +526,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         batteryView = findViewById(R.id.battery)
 
         text_speed = findViewById(R.id.text_speed)
+        text_speed_hint = findViewById(R.id.text_speed_hint)
         layout_speed = findViewById(R.id.layout_speed)
         seekbar_speed = findViewById(R.id.seekbar_speed)
         text_newspeed = findViewById(R.id.text_newspeed)
@@ -647,6 +663,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                             if (danmakuReady())
                                 danmakuController!!.setSpeed(normalSpeed)
                             text_speed!!.text = speed_strs[seekbar_speed!!.getProgress()]
+                            hideSpeedHint()
                         }
                         if (gesture_moved)
                             gesture_moved = false
@@ -675,6 +692,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     if (danmakuReady())
                         danmakuController!!.setSpeed(normalSpeed)
                     text_speed!!.text = speed_strs[seekbar_speed!!.getProgress()]
+                    hideSpeedHint()
                 }
                 false
             }
@@ -694,10 +712,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 if (!onLongClick && !gesture_click_disabled) {
                     hidecon.run()
                     if (ijkPlayer != null)
-                        ijkPlayer!!.setSpeed(3.0F)
+                        ijkPlayer!!.setSpeed(LONG_CLICK_SPEED)
                     if (danmakuReady())
-                        danmakuController!!.setSpeed(3.0f)
-                    text_speed!!.text = "x 3.0"
+                        danmakuController!!.setSpeed(LONG_CLICK_SPEED)
+                    text_speed!!.text = "x " + LONG_CLICK_SPEED
+                    // 长按倍速时在视频上方显示半透明提示框（#7）
+                    showSpeedHint(LONG_CLICK_SPEED)
                     onLongClick = true
                     Logu.v("gesture", "longclick_down")
                     return@setOnLongClickListener true
@@ -707,6 +727,113 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             false
         }
 
+    }
+
+    /** 显示长按倍速的半透明提示框（#7） */
+    @SuppressLint("SetTextI18n")
+    private fun showSpeedHint(speed: Float) {
+        val hint = text_speed_hint ?: return
+        runOnUiThread {
+            hint.text = "x " + speed
+            hint.visibility = View.VISIBLE
+        }
+    }
+
+    /** 隐藏长按倍速提示框 */
+    private fun hideSpeedHint() {
+        val hint = text_speed_hint ?: return
+        runOnUiThread { hint.visibility = View.GONE }
+    }
+
+    /**
+     * 启动弹幕帧率温控（#8）。
+     *
+     * 开关打开时忽略用户设置的固定弹幕刷新间隔，按温度在
+     * 15 / 30 / 60 FPS 之间切换；关闭时沿用设置项。
+     */
+    private fun startDanmakuThermalControl() {
+        val controller = DanmakuThermalController(this) { interval ->
+            danmakuController?.thermalIntervalOverride = interval
+            danmakuController?.updateFrameRate(interval)
+        }
+        danmakuThermalController = controller
+        if (controller.isEnabled()) {
+            // 首次先按当前温度定档，并同步给弹幕层
+            val interval = controller.currentInterval()
+            danmakuController?.thermalIntervalOverride = interval
+            controller.start()
+        } else {
+            danmakuController?.thermalIntervalOverride = null
+        }
+    }
+
+    /**
+     * 点击进度时间 → 弹出输入框，支持输入时间跳转视频位置（#24）。
+     *
+     * 支持格式：`90` / `1:30` / `01:02:03`（纯秒数 / mm:ss / hh:mm:ss）。
+     */
+    private fun showTimeJumpDialog() {
+        if (!isPrepared || isLiveMode) return
+        val duration = try {
+            ijkPlayer!!.getDuration()
+        } catch (e: Exception) {
+            0L
+        }
+        if (duration <= 0) {
+            MsgUtil.showMsg("视频时长未知，暂时无法跳转")
+            return
+        }
+
+        val editText = EditText(this)
+        editText.hint = "例如 90 / 1:30 / 01:02:03"
+        editText.isSingleLine = true
+        editText.inputType = InputType.TYPE_CLASS_TEXT
+        editText.setTextColor(0xffffffff.toInt())
+        editText.setHintTextColor(0x80ffffff.toInt())
+        val container = FrameLayout(this)
+        val pad = ToolsUtil.dp2px(12f)
+        container.setPadding(pad, pad, pad, pad)
+        container.addView(editText)
+
+        AlertDialog.Builder(this)
+            .setTitle("跳转到指定时间")
+            .setView(container)
+            .setPositiveButton("跳转") { _, _ ->
+                val seconds = parseTimeInput(editText.text.toString())
+                if (seconds == null) {
+                    MsgUtil.showMsg("时间格式不对，示例：90 / 1:30 / 01:02:03")
+                    return@setPositiveButton
+                }
+                var targetMs = seconds * 1000L
+                if (targetMs < 0) targetMs = 0
+                if (targetMs > duration) targetMs = duration
+                seekToPosition(targetMs)
+                MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+     * 解析用户输入的时间文本为秒数。
+     *
+     * 支持 `90`（秒）、`1:30`（分:秒）、`01:02:03`（时:分:秒），
+     * 解析失败返回 null。
+     */
+    private fun parseTimeInput(raw: String?): Long? {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return null
+
+        val parts = text.split(":")
+        if (parts.size > 3) return null
+
+        var total = 0L
+        for (part in parts) {
+            val value = part.trim().toLongOrNull() ?: return null
+            if (value < 0) return null
+            total = total * 60 + value
+        }
+        return total
     }
 
     private fun autohideReset() {
@@ -1168,6 +1295,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (isLiveMode)
             text_speed!!.visibility = View.GONE
         text_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.VISIBLE }
+        // 点击进度时间输入时间跳转（#24）
+        text_progress!!.setOnClickListener { view -> showTimeJumpDialog() }
         layout_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.GONE }
 
         btn_debug!!.setOnClickListener { view -> showInteractionDebugDialog() }
@@ -1921,6 +2050,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             liveWebSocket!!.close(1000, "")
             liveWebSocket = null
         }
+
+        danmakuThermalController?.stop()
+        danmakuThermalController = null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
             mediaSession!!.release()
@@ -2739,7 +2871,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         runOnUiThread {
             val qualitySelectorRecycler = findViewById<RecyclerView>(R.id.quality_selector_list)
             val adapter = QualitySelectorAdapter()
-            adapter.setData(qnStrList as Array<String>, qnValueList as IntArray, currentQuality)
+            // currentQuality 为 0（还没拿到服务端确认的清晰度）时，用设置里的默认清晰度做兜底，
+            // 保证清晰度框里始终能标出“当前选的是哪个”
+            val highlightQuality = if (currentQuality > 0) currentQuality
+            else SharedPreferencesUtil.getInt("play_qn", 16)
+            adapter.setData(qnStrList as Array<String>, qnValueList as IntArray, highlightQuality)
             adapter.setOnItemClickListener { index ->
                 layout_card_bg!!.visibility = View.GONE
                 card_quality_selector!!.visibility = View.GONE
@@ -2750,6 +2886,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             qualitySelectorRecycler
                     .layoutManager = CustomLinearManager(this, LinearLayoutManager.HORIZONTAL, false)
             qualitySelectorRecycler.adapter = adapter
+
+            // 横向列表：把当前项滚到可见区域，避免选中项在屏幕外看不出来
+            if (adapter.selectedItemIndex >= 0) {
+                qualitySelectorRecycler.scrollToPosition(adapter.selectedItemIndex)
+            }
             layout_card_bg!!.visibility = View.VISIBLE
             card_quality_selector!!.visibility = View.VISIBLE
         }

@@ -69,6 +69,8 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
         sectionList.add(SettingSection("input_float", "弹幕速度", "player_danmaku_speed", "", "1.0"))
         sectionList.add(SettingSection("input_int", "弹幕刷新间隔(ms)", "player_danmaku_refreshrate",
                 getString(R.string.desc_danmaku_refreshrate), "33"))
+        sectionList.add(SettingSection("switch", "弹幕温控", "player_danmaku_thermal",
+                getString(R.string.desc_danmaku_thermal), "false"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 

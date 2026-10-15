@@ -225,6 +225,8 @@
     <string name="pagename_setup_ui">调整界面……</string>
     <string name="pagename_splash">正在连接……</string>
     <string name="desc_danmaku_refreshrate">弹幕层重绘间隔，越大越省电降温。默认33（约30帧），可填16~66；数值越大弹幕越卡顿</string>
+    <string name="desc_theme_color">更换应用的主题色调（标题栏、选中态、链接等会跟随变化）。\n部分写死在布局里的颜色不受影响。修改后重新进入页面生效。</string>
+    <string name="desc_danmaku_thermal">打开后忽略上面的固定帧率，改为按设备温度自动调整：\n大于36℃用15帧，32~36℃用30帧，低于32℃用60帧。\n读不到温度时回退30帧。\n适合长时间观看发热明显的设备。</string>
     <string name="desc_low_latency">开启后减小播放缓冲、优先低延迟，但网络波动时更容易卡顿。关闭则更抗网络抖动（默认关闭）</string>
     <string name="pagename_test">测试页面</string>
     <string name="pagename_tutorial">教程</string>
