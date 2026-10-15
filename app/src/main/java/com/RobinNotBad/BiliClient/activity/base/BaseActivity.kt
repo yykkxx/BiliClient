@@ -224,8 +224,8 @@ open class BaseActivity : AppCompatActivity {
     protected open fun asyncInflate(id: Int, callBack: InflateCallBack) {
         setContentView(R.layout.activity_loading)
         AsyncLayoutInflaterX(this).inflate(id, null) { view, layoutId, parent ->
+            // setContentView 重写里已统一套用主题色，这里无需重复调用
             setContentView(view)
-            ThemeUtil.applyTo(this)
 
             if (this is InstanceActivity) (this as InstanceActivity).setMenuClick()
             else setTopbarExit()
