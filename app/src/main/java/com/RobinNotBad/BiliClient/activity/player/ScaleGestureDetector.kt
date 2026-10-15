@@ -17,7 +17,6 @@
 package com.RobinNotBad.BiliClient.activity.player
 
 import android.content.Context
-import android.os.Build
 import android.os.Handler
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -117,9 +116,27 @@ class ScaleGestureDetector(context: Context, listener: OnScaleGestureListener, h
         mSpanSlop = viewConfiguration.scaledTouchSlop * 2
         mMinSpan = 0
 
-        val targetSdkVersion = context.applicationInfo.targetSdkVersion
-        if (targetSdkVersion > Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            mQuickScaleEnabled = true
+        // Quick scale 必须在构造阶段就打开：mGestureDetector 正是在这里被创建，
+        // 而 onTouchEvent 会无条件把事件转发给它。原 Java 版在构造函数里调用的就是
+        // setQuickScaleEnabled(true)，Kotlin 化时被误改成直接赋值私有字段，
+        // 导致 mGestureDetector 始终为 null，播放界面任意一次触摸都会 NPE。
+        setQuickScaleEnabledInternal(true)
+    }
+
+    /** 与属性 [isQuickScaleEnabled] 的 setter 等价，供 init 块按声明顺序提前调用。 */
+    private fun setQuickScaleEnabledInternal(scales: Boolean) {
+        mQuickScaleEnabled = scales
+        if (mQuickScaleEnabled && mGestureDetector == null) {
+            val gestureListener: GestureDetector.SimpleOnGestureListener = object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    // Double tap: start watching for a swipe
+                    mAnchoredScaleStartX = e.x
+                    mAnchoredScaleStartY = e.y
+                    mAnchoredScaleMode = ANCHORED_SCALE_MODE_DOUBLE_TAP
+                    return true
+                }
+            }
+            mGestureDetector = GestureDetector(mContext, gestureListener, mHandler)
         }
     }
 
@@ -269,19 +286,7 @@ class ScaleGestureDetector(context: Context, listener: OnScaleGestureListener, h
     var isQuickScaleEnabled: Boolean
         get() = mQuickScaleEnabled
         set(scales) {
-            mQuickScaleEnabled = scales
-            if (mQuickScaleEnabled && mGestureDetector == null) {
-                val gestureListener: GestureDetector.SimpleOnGestureListener = object : GestureDetector.SimpleOnGestureListener() {
-                    override fun onDoubleTap(e: MotionEvent): Boolean {
-                        // Double tap: start watching for a swipe
-                        mAnchoredScaleStartX = e.x
-                        mAnchoredScaleStartY = e.y
-                        mAnchoredScaleMode = ANCHORED_SCALE_MODE_DOUBLE_TAP
-                        return true
-                    }
-                }
-                mGestureDetector = GestureDetector(mContext, gestureListener, mHandler!!)
-            }
+            setQuickScaleEnabledInternal(scales)
         }
 
     val scaleFactor: Float
