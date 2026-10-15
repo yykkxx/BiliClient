@@ -1,9 +1,7 @@
 package com.RobinNotBad.BiliClient.api
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.text.TextUtils
 import android.util.Log
@@ -13,14 +11,12 @@ import com.RobinNotBad.BiliClient.BuildConfig
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.update.UpdateInfoActivity
 import com.RobinNotBad.BiliClient.model.Announcement
-import com.RobinNotBad.BiliClient.model.ApiResult
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 
-import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -238,31 +234,7 @@ object AppInfoApi {
         return list
     }
 
-    @JvmStatic
-    fun uploadStack(stack: String, context: Context): ApiResult {
-        //上传崩溃堆栈
-        try {
-            val url = "http://api.biliterminal.cn/terminal/upload/stack"
-
-            val post_data = JSONObject()
-            post_data.put("stack", stack)
-            post_data.put("client_version", context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionCode)
-            post_data.put("device_sdk", Build.VERSION.SDK_INT)
-            post_data.put("device_product", Build.PRODUCT)
-            post_data.put("device_brand", Build.BRAND)
-
-            val res = JSONObject(NetWorkUtil.postJson(url, post_data.toString(), customHeaders).body()!!.string())
-            val msg = if (res.getInt("code") == 200) "" else res.getString("msg")
-            val id = res.optInt("id", -1)
-            return ApiResult(id, msg)
-        } catch (e: IOException) {
-            return ApiResult(-1, context.getString(R.string.err_network))
-        } catch (e: JSONException) {
-            return ApiResult(-514, context.getString(R.string.err_crash_upload_json))
-        } catch (e: PackageManager.NameNotFoundException) {
-            return ApiResult(-1919, "")
-        }
-    }
+    // 崩溃堆栈上传功能已移除（相关界面按钮与逻辑一并删除）
 
     @Throws(Exception::class)
     @JvmStatic

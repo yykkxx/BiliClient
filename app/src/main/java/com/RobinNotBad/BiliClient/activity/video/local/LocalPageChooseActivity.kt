@@ -58,7 +58,7 @@ class LocalPageChooseActivity : BaseActivity() {
             playerData.danmakuUrl = danmakuFileListLocal!![position]
             playerData.title = pageListLocal!![position]
             try {
-                val player = PlayerApi.jumpToPlayer(playerData)
+                val player = PlayerApi.buildPlayerIntent(playerData)
                 // 如果是仅音频文件，标记为音频模式
                 if (mediaPath.endsWith("audio.m4a")) {
                     player.putExtra("audio_only", true)

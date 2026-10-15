@@ -1,19 +1,14 @@
 package com.RobinNotBad.BiliClient.util
 
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.util.Consumer
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
 import java.util.concurrent.FutureTask
-import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,30 +24,8 @@ object CenterThreadPool {
 
     private val MAIN_THREAD_HANDLER = Handler(Looper.getMainLooper())
 
-    //与原Java静态块一致：API<17 无协程可用，退回原生线程池；API>=17 使用协程(Dispatchers.IO)
-    private val COROUTINE_SCOPE: CoroutineScope? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) CoroutineScope(Dispatchers.IO) else null
-
-    private val THREAD_POOL: AtomicReference<ExecutorService?>? =
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) AtomicReference(null) else null
-
-    private fun getThreadPoolInstance(): ExecutorService? {
-        val poolRef = THREAD_POOL ?: return null
-        val bestThreadPoolSize = Runtime.getRuntime().availableProcessors()
-        while (poolRef.get() == null) {
-            poolRef.compareAndSet(
-                null,
-                ThreadPoolExecutor(
-                    bestThreadPoolSize / 2,
-                    bestThreadPoolSize * 2,
-                    60,
-                    TimeUnit.SECONDS,
-                    ArrayBlockingQueue(20)
-                )
-            )
-        }
-        return poolRef.get()
-    }
+    //minSdk 29 起所有设备都支持协程，旧的 API<17 原生线程池回退分支已删除
+    private val COROUTINE_SCOPE: CoroutineScope = CoroutineScope(Dispatchers.IO)
 
     /**
      * 在后台运行, 用于网络请求等耗时操作
@@ -62,22 +35,11 @@ object CenterThreadPool {
     @JvmStatic
     fun run(runnable: Runnable) {
         try {
-            //能用协程用协程
-            val scope = COROUTINE_SCOPE
-            if (scope != null) {
-                scope.launch { runnable.run() }
-                //协程不可用时尝试以原生线程池运行
-            } else if (THREAD_POOL != null) {
-                val service = getThreadPoolInstance()
-                if (service != null) service.submit(runnable)
-                else Thread(runnable).start()
-            } else {
-                //都不可用再开线程
-                Thread(runnable).start()
-            }
+            COROUTINE_SCOPE.launch { runnable.run() }
         } catch (e: Throwable) {
             //最后再放手一博
             e.printStackTrace()
+            Thread(runnable).start()
         }
     }
 

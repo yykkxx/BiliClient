@@ -3,9 +3,6 @@ package com.RobinNotBad.BiliClient.activity.base
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.content.res.Configuration
-import android.content.res.Resources
-import android.os.Build
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.DisplayMetrics
@@ -66,8 +63,7 @@ open class BaseActivity : AppCompatActivity {
         val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val display: Display = windowManager.getDefaultDisplay()
         val metrics = DisplayMetrics()
-        if (Build.VERSION.SDK_INT >= 17) display.getRealMetrics(metrics)
-        else display.getMetrics(metrics)
+        display.getRealMetrics(metrics)
 
         val scrW = metrics.widthPixels
         val scrH = metrics.heightPixels
@@ -104,9 +100,9 @@ open class BaseActivity : AppCompatActivity {
 
     open fun setTopbarExit() {
         val view = findViewById<View>(R.id.top) ?: return
-        if (Build.VERSION.SDK_INT > 17 && view.hasOnClickListeners()) return
+        if (view.hasOnClickListeners()) return
         view.setOnClickListener { view1 ->
-            if (Build.VERSION.SDK_INT < 17 || !isDestroyed()) {
+            if (!isDestroyed()) {
                 finish()
             }
         }
@@ -151,7 +147,7 @@ open class BaseActivity : AppCompatActivity {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_MENU) {
-            if (Build.VERSION.SDK_INT < 17 || !isDestroyed()) {
+            if (!isDestroyed()) {
                 finish()
             }
         }
@@ -201,7 +197,6 @@ open class BaseActivity : AppCompatActivity {
     }
 
     open fun setDensity(targetDensityDpi: Int) {
-        if (Build.VERSION.SDK_INT < 17) return
         val resources = resources
 
         if (resources.configuration.densityDpi == targetDensityDpi) return

@@ -163,9 +163,7 @@ class LiveInfoActivity : BaseActivity() {
 
                             runOnUiThread(Runnable {
                                 try {
-
-                                    val player = PlayerApi.jumpToPlayer(playerData)
-                                    startActivity(player)
+                                    startActivity(PlayerApi.buildPlayerIntent(playerData))
                                 } catch (e: ActivityNotFoundException) {
                                     MsgUtil.showMsg("没有找到播放器，请检查是否安装")
                                 } catch (e: Exception) {

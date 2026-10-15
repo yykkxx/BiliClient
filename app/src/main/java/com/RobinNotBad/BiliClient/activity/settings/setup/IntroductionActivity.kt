@@ -2,13 +2,11 @@ package com.RobinNotBad.BiliClient.activity.settings.setup
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
-import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.google.android.material.card.MaterialCardView
 
@@ -26,11 +24,7 @@ class IntroductionActivity : BaseActivity() {
 
             val intent = Intent()
             intent.putExtra("from_setup", true)
-            if (Build.VERSION.SDK_INT >= 19) {
-                intent.setClass(this@IntroductionActivity, LoginActivity::class.java)   //去扫码登录页面
-            } else {
-                intent.setClass(this@IntroductionActivity, SpecialLoginActivity::class.java)   //4.4以下系统去特殊登录页面
-            }
+            intent.setClass(this@IntroductionActivity, LoginActivity::class.java)   //去扫码登录页面
             startActivity(intent)
             finish()
         }

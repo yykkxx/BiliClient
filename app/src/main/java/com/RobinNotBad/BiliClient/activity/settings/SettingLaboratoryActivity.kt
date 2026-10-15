@@ -41,8 +41,6 @@ class SettingLaboratoryActivity : RefreshListActivity() {
         sectionList.add(SettingSection("title", "UI", "", "", ""))
         sectionList.add(SettingSection("switch", "横屏模式", "ui_landscape", getString(R.string.setting_lab_ui_landscape),
                 "false"))
-        sectionList.add(SettingSection("input_string", "开屏文字", "ui_splashtext",
-                getString(R.string.setting_lab_splashtext), "欢迎使用\n哔哩终端"))
         sectionList.add(SettingSection("switch", "文字跑马灯", "marquee_enable", getString(R.string.setting_lab_marquee),
                 "true"))
 

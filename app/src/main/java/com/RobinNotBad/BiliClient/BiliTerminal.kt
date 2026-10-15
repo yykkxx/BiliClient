@@ -5,9 +5,6 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.Configuration
-import android.os.Build
-import android.util.DisplayMetrics
 import androidx.multidex.MultiDex
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
@@ -17,9 +14,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
-import java.io.IOException
 import java.lang.ref.WeakReference
-import org.json.JSONException
 
 class BiliTerminal : Application() {
 
@@ -111,7 +106,6 @@ class BiliTerminal : Application() {
         @JvmStatic
         fun getFitDisplayContext(old: Context): Context {
             val dpiTimes = SharedPreferencesUtil.getFloat("dpi", 1.0f)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) return old
             if (!DPI_FORCE_CHANGE && dpiTimes == 1.0f) return old
             return try {
                 val displayMetrics = old.resources.displayMetrics

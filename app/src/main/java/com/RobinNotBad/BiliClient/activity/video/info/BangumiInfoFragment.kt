@@ -21,9 +21,9 @@ import androidx.recyclerview.widget.RecyclerView
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity
-import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity
 import com.RobinNotBad.BiliClient.adapter.video.MediaEpisodeAdapter
 import com.RobinNotBad.BiliClient.api.BangumiApi
+import com.RobinNotBad.BiliClient.api.PlayerApi
 import com.RobinNotBad.BiliClient.model.Bangumi
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -258,9 +258,8 @@ class BangumiInfoFragment : Fragment() {
         playButton.setOnClickListener { v ->
             val episode = bangumi.sectionList!!.get(selectedSection).episodeList!!.get(selectedEpisode)
             Glide.get(requireContext()).clearMemory()
-            val intent = Intent(v.getContext(), JumpToPlayerActivity::class.java)
-            intent.putExtra("data", episode.toPlayerData())
-            startActivity(intent)
+            //直接使用内置播放器（已去掉第三方播放器跳转逻辑）
+            startActivity(PlayerApi.buildPlayerIntent(episode.toPlayerData()))
         }
         onFinishLoad()
 

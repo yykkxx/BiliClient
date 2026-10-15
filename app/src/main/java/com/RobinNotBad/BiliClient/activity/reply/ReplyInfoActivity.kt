@@ -2,12 +2,9 @@ package com.RobinNotBad.BiliClient.activity.reply
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.Display
 import android.view.WindowManager
 
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -79,7 +76,7 @@ class ReplyInfoActivity : BaseActivity() {
             val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display = windowManager.defaultDisplay
             val metrics = DisplayMetrics()
-            if (Build.VERSION.SDK_INT >= 17) display.getRealMetrics(metrics) else display.getMetrics(metrics)
+            display.getRealMetrics(metrics)
             val paddings = metrics.widthPixels / 6
             recyclerView!!.setPadding(paddings, 0, paddings, 0)
         }

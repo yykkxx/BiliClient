@@ -1,6 +1,5 @@
 package com.RobinNotBad.BiliClient.activity.settings
 
-import android.os.Build
 import android.os.Bundle
 
 import com.RobinNotBad.BiliClient.R
@@ -41,7 +40,7 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
 
         sectionList.add(SettingSection("choose", "显示方式", "player_display",
                 getString(R.string.desc_display),
-                java.lang.String.valueOf(Build.VERSION.SDK_INT < 26),
+                "false",
                 arrayOf("TextureView", "SurfaceView")))
         sectionList.add(SettingSection("choose", "解码方式", "player_codec",
                 getString(R.string.desc_videocodec), "true",

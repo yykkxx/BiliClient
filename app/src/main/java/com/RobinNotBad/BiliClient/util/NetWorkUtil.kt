@@ -1,10 +1,7 @@
 package com.RobinNotBad.BiliClient.util
 
-import android.annotation.SuppressLint
-import android.os.Build
 import org.json.JSONException
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -19,8 +16,6 @@ import java.util.HashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Inflater
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.X509TrustManager
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.MediaType
@@ -28,7 +23,6 @@ import okhttp3.RequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.ResponseBody
 
 /**
  * 被 luern0313 创建于 2019/10/13.
@@ -109,26 +103,8 @@ object NetWorkUtil {
     @JvmStatic
     @Synchronized
     fun setOkHttpSsl(okhttpBuilder: OkHttpClient.Builder): OkHttpClient.Builder {
-        if (Build.VERSION.SDK_INT > 22) return okhttpBuilder
-        try {
-            val trustAllCert: X509TrustManager = object : X509TrustManager {
-                @SuppressLint("TrustAllX509TrustManager")
-                override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {
-                }
-
-                @SuppressLint("TrustAllX509TrustManager")
-                override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {
-                }
-
-                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> {
-                    return arrayOf()
-                }
-            }
-            val sslSocketFactory = SSLSocketFactoryCompat(trustAllCert)
-            okhttpBuilder.sslSocketFactory(sslSocketFactory, trustAllCert)
-        } catch (e: Exception) {
-            throw RuntimeException(e)
-        }
+        //minSdk 29（Android 10）起系统 TLS 栈已足够完整，
+        //旧版（API<=22）才需要的自建 SSL socket 工厂适配层已删除。
         return okhttpBuilder
     }
 

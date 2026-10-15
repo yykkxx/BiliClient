@@ -37,6 +37,7 @@ import com.RobinNotBad.BiliClient.activity.ImageViewerActivity
 import com.RobinNotBad.BiliClient.activity.base.BaseFragment
 import com.RobinNotBad.BiliClient.activity.dynamic.send.SendDynamicActivity
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity
+import com.RobinNotBad.BiliClient.activity.settings.SettingTerminalPlayerActivity
 import com.RobinNotBad.BiliClient.activity.user.WatchLaterActivity
 import com.RobinNotBad.BiliClient.activity.video.MultiPageActivity
 import com.RobinNotBad.BiliClient.activity.video.QualityChooserActivity
@@ -181,8 +182,7 @@ class VideoInfoFragment : BaseFragment() {
             val windowManager = rootview.getContext().getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display: Display = windowManager.getDefaultDisplay()
             val metrics = DisplayMetrics()
-            if (Build.VERSION.SDK_INT >= 17) display.getRealMetrics(metrics)
-            else display.getMetrics(metrics)
+            display.getRealMetrics(metrics)
             val paddings = metrics.widthPixels / 6
             rootview.setPadding(paddings, 0, paddings, 0)
         }
@@ -336,6 +336,11 @@ class VideoInfoFragment : BaseFragment() {
 
         //播放
         play.setOnClickListener { view1 -> playClick() }
+        //长按播放按钮进入内置播放器设置（原“选择播放器”界面已删除）
+        play.setOnLongClickListener {
+            startActivity(Intent(requireContext(), SettingTerminalPlayerActivity::class.java))
+            true
+        }
 
         //点赞
         rootview.findViewById<View>(R.id.layout_like).setOnClickListener { view1 ->

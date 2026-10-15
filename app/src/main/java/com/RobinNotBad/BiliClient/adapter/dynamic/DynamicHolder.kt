@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.os.Build
 import android.text.TextUtils
 import android.view.View
 import android.widget.ImageView
@@ -364,11 +363,7 @@ class DynamicHolder(@NonNull itemView: View, @JvmField val mActivity: BaseActivi
                 }
                 content.setOnClickListener { view ->
                     val targetView = if (isChild) itemView.findViewById<View>(R.id.dynamic_child) else itemView
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1) {
-                        targetView.callOnClick()
-                    } else {
-                        targetView.performClick()
-                    }
+                    targetView.callOnClick()
                 }
             }
         } else {

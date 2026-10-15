@@ -2,7 +2,6 @@ package com.RobinNotBad.BiliClient.activity.article
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.view.Display
@@ -64,8 +63,7 @@ class OpusInfoFragment : Fragment() {
             val windowManager = view.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display: Display = windowManager.getDefaultDisplay()
             val metrics = DisplayMetrics()
-            if (Build.VERSION.SDK_INT >= 17) display.getRealMetrics(metrics)
-            else display.getMetrics(metrics)
+            display.getRealMetrics(metrics)
             val paddings = metrics.widthPixels / 6
             recyclerView!!.setPadding(paddings, 0, paddings, 0)
         }

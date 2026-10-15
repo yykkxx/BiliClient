@@ -1,11 +1,9 @@
 package com.RobinNotBad.BiliClient.activity.dynamic
 
 import android.content.Context
-import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.Display
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -68,8 +66,7 @@ class DynamicInfoFragment : BaseFragment() {
             val windowManager = view.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display = windowManager.defaultDisplay
             val metrics = DisplayMetrics()
-            if (Build.VERSION.SDK_INT >= 17) display.getRealMetrics(metrics)
-            else display.getMetrics(metrics)
+            display.getRealMetrics(metrics)
             val paddings = metrics.widthPixels / 6
             scrollView.setPadding(paddings, 0, paddings, 0)
         }

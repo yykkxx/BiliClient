@@ -11,7 +11,6 @@ import androidx.core.content.FileProvider
 import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.player.PlayerActivity
-import com.RobinNotBad.BiliClient.activity.video.JumpToPlayerActivity
 import com.RobinNotBad.BiliClient.model.DashAudioStream
 import com.RobinNotBad.BiliClient.model.DashData
 import com.RobinNotBad.BiliClient.model.DashVideoStream
@@ -22,8 +21,10 @@ import com.RobinNotBad.BiliClient.model.SubtitleLink
 import com.RobinNotBad.BiliClient.model.VideoInfo
 import com.RobinNotBad.BiliClient.model.ViewPoint
 import com.RobinNotBad.BiliClient.service.DownloadService
+import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.util.Logu
+import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
@@ -40,33 +41,46 @@ import java.util.HashMap
 import java.util.Map
 
 object PlayerApi {
+    /**
+     * 直接使用内置播放器播放
+     *
+     * 原 JumpToPlayerActivity 已删除（去除播放器跳转逻辑），获取播放地址这一步
+     * 改为在后台线程完成后再启动内置播放器。
+     * 进度上报已改为 PlayerActivity 退出时后台异步执行（见 PlayerActivity#finish）。
+     *
+     * @param playerData 传入aid、cid、qn等必要数据
+     */
     @JvmStatic
     fun startGettingUrl(playerData: PlayerData) {
-        val context = BiliTerminal.context
+        //原 JumpToPlayerActivity 会在这里补默认清晰度，此处保持一致
+        if (playerData.qn == -1) {
+            playerData.qn = SharedPreferencesUtil.getInt("play_qn", 16)
+        }
 
-        val intent = Intent()
-                .setClass(context, JumpToPlayerActivity::class.java)
-                .putExtra("data", playerData)
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+        if (playerData.isLocal()) {
+            //本地文件：无需请求，直接播放
+            val context = BiliTerminal.context
+            context.startActivity(buildPlayerIntent(playerData).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+
+        CenterThreadPool.run(Runnable {
+            try {
+                if (playerData.isBangumi()) getBangumi(playerData)
+                else getVideo(playerData, false)
+                val context = BiliTerminal.context
+                CenterThreadPool.runOnUiThread(Runnable {
+                    context.startActivity(buildPlayerIntent(playerData).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                })
+            } catch (e: Exception) {
+                MsgUtil.showMsg("视频获取失败！\n可能的原因：\n1.本视频仅大会员可播放\n2.视频获取接口失效")
+                e.printStackTrace()
+            }
+        })
     }
 
     @JvmStatic
     fun startDownloading(videoInfo: VideoInfo, page: Int, qn: Int) {
-        if (SharedPreferencesUtil.getBoolean("dev_download_old", false)) {
-            val context = BiliTerminal.context
-
-            val intent = Intent(context, JumpToPlayerActivity::class.java)
-                    .putExtra("data", videoInfo.toPlayerData(page))
-                    .putExtra("download", (if (videoInfo.pagenames!!.size == 1) 1 else 2)) // 1：单页 2：分页
-                    .putExtra("cover", videoInfo.cover)
-                    .putExtra("parent_title", videoInfo.title)
-                    .putExtra("qn", qn)
-                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            return
-        }
-
         if (videoInfo.cids!!.size == 1)
             DownloadService.startDownload(videoInfo.title!!,
                     videoInfo.aid, videoInfo.cids!!.get(0),
@@ -278,109 +292,44 @@ object PlayerApi {
     }
 
     /**
-     * 跳转到播放器
+     * 构造内置播放器的启动 Intent（已去掉第三方播放器跳转逻辑）
      *
      * @param playerData 传入aid、cid、qn等必要数据
-     * @return 播放器跳转Intent
      */
     @JvmStatic
-    fun jumpToPlayer(playerData: PlayerData): Intent {
+    fun buildPlayerIntent(playerData: PlayerData): Intent {
         val context = BiliTerminal.context
-        Logu.v("准备跳转", "--------")
+        Logu.v("准备播放", "--------")
         Logu.v("视频标题", playerData.title)
         Logu.v("视频地址", playerData.videoUrl)
         Logu.v("弹幕地址", playerData.danmakuUrl)
-        Logu.v("准备跳转", "--------")
+        Logu.v("准备播放", "--------")
 
         val intent = Intent()
-        when (SharedPreferencesUtil.getString("player", "null")) {
-            "terminalPlayer" -> {
-                intent.setClass(context, PlayerActivity::class.java)
-                intent.putExtra("url", playerData.videoUrl)
-                intent.putExtra("danmaku", playerData.danmakuUrl)
-                intent.putExtra("title", playerData.title)
-                intent.putExtra("aid", playerData.aid)
-                intent.putExtra("cid", playerData.cid)
-                intent.putExtra("mid", playerData.mid)
-                intent.putExtra("progress", playerData.progress)
-                intent.putExtra("live_mode", playerData.isLive())
-                if (playerData.qnStrList != null && playerData.qnValueList != null) {
-                    intent.putExtra("qnStrList", playerData.qnStrList)
-                    intent.putExtra("qnValueList", playerData.qnValueList)
-                    intent.putExtra("currentQuality", playerData.qn)
-                }
-                if (playerData.pagenames != null && playerData.cids != null && playerData.pagenames!!.size > 1) {
-                    intent.putStringArrayListExtra("pagenames", playerData.pagenames)
-                    val cidArray = LongArray(playerData.cids!!.size)
-                    for (i in playerData.cids!!.indices) {
-                        cidArray[i] = playerData.cids!!.get(i)
-                    }
-                    intent.putExtra("cids", cidArray)
-                    intent.putExtra("currentPageIndex", playerData.currentPageIndex)
-                }
+        intent.setClass(context, PlayerActivity::class.java)
+        intent.putExtra("url", playerData.videoUrl)
+        intent.putExtra("danmaku", playerData.danmakuUrl)
+        intent.putExtra("title", playerData.title)
+        intent.putExtra("aid", playerData.aid)
+        intent.putExtra("cid", playerData.cid)
+        intent.putExtra("mid", playerData.mid)
+        intent.putExtra("progress", playerData.progress)
+        intent.putExtra("live_mode", playerData.isLive())
+        if (playerData.qnStrList != null && playerData.qnValueList != null) {
+            intent.putExtra("qnStrList", playerData.qnStrList)
+            intent.putExtra("qnValueList", playerData.qnValueList)
+            intent.putExtra("currentQuality", playerData.qn)
+        }
+        val pagenames = playerData.pagenames
+        val cids = playerData.cids
+        if (pagenames != null && cids != null && pagenames.size > 1) {
+            intent.putStringArrayListExtra("pagenames", pagenames)
+            val cidArray = LongArray(cids.size)
+            for (i in cids.indices) {
+                cidArray[i] = cids[i]
             }
-
-            "mtvPlayer" -> {
-                intent.setClassName(context.getString(R.string.player_package_mtv),
-                        "com.xinxiangshicheng.wearbiliplayer.cn.player.PlayerActivity")
-                intent.setAction(Intent.ACTION_VIEW)
-                intent.putExtra("cookie", SharedPreferencesUtil.getString("cookies", ""))
-                intent.putExtra("mode", (if (playerData.isLocal()) "2" else "0"))
-                intent.putExtra("url", playerData.videoUrl)
-                intent.putExtra("danmaku", playerData.danmakuUrl)
-                intent.putExtra("title", playerData.title)
-                intent.putExtra("live_mode", playerData.isLive())
-            }
-
-            "aliangPlayer" -> {
-                intent.setClassName(context.getString(R.string.player_package_aliang),
-                        "com.aliangmaker.media.PlayVideoActivity")
-                intent.putExtra("name", playerData.title)
-                intent.putExtra("danmaku", playerData.danmakuUrl)
-                intent.putExtra("live_mode", playerData.isLive())
-
-                intent.setData(Uri.parse(playerData.videoUrl))
-
-                if (!playerData.isLocal()) {
-                    val headers: MutableMap<String, String> = HashMap()
-                    headers.put("Cookie", SharedPreferencesUtil.getString("cookies", "") ?: "")
-                    headers.put("Referer", "https://www.bilibili.com/")
-                    intent.putExtra("cookie", headers as Serializable)
-                    intent.putExtra("agent", NetWorkUtil.USER_AGENT_WEB)
-                    intent.putExtra("progress", playerData.progress * 1000L)
-                }
-                intent.setAction(Intent.ACTION_VIEW)
-
-            }
-
-            else -> {
-                //播放器选择界面已删除，未设置时默认使用内置播放器
-                intent.setClass(context, PlayerActivity::class.java)
-                intent.putExtra("url", playerData.videoUrl)
-                intent.putExtra("danmaku", playerData.danmakuUrl)
-                intent.putExtra("title", playerData.title)
-                intent.putExtra("aid", playerData.aid)
-                intent.putExtra("cid", playerData.cid)
-                intent.putExtra("mid", playerData.mid)
-                intent.putExtra("progress", playerData.progress)
-                intent.putExtra("live_mode", playerData.isLive())
-                if (playerData.qnStrList != null && playerData.qnValueList != null) {
-                    intent.putExtra("qnStrList", playerData.qnStrList)
-                    intent.putExtra("qnValueList", playerData.qnValueList)
-                    intent.putExtra("currentQuality", playerData.qn)
-                }
-                val pagenames = playerData.pagenames
-                val cids = playerData.cids
-                if (pagenames != null && cids != null && pagenames.size > 1) {
-                    intent.putStringArrayListExtra("pagenames", pagenames)
-                    val cidArray = LongArray(cids.size)
-                    for (i in cids.indices) {
-                        cidArray[i] = cids[i]
-                    }
-                    intent.putExtra("cids", cidArray)
-                    intent.putExtra("currentPageIndex", playerData.currentPageIndex)
-                }
-            }
+            intent.putExtra("cids", cidArray)
+            intent.putExtra("currentPageIndex", playerData.currentPageIndex)
         }
         return intent
     }

@@ -2,8 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-sdk tools:overrideLibrary="com.itsaky.androidide.logsender" />
-
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
@@ -30,8 +28,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BiliClient"
         android:usesCleartextTraffic="true"
-        tools:ignore="LockedOrientationActivity,RtlEnabled"
-        tools:targetApi="m">
+        tools:ignore="LockedOrientationActivity,RtlEnabled">
         <service android:name=".service.DownloadService"
             android:foregroundServiceType="mediaProjection"
             android:enabled="true"/>
@@ -283,11 +280,6 @@
             android:name=".activity.video.info.AddFavoriteActivity"
             android:exported="false"
             android:label="添加收藏"
-            android:screenOrientation="locked" />
-        <activity
-            android:name=".activity.video.JumpToPlayerActivity"
-            android:exported="false"
-            android:label="跳转播放"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.reply.WriteReplyActivity"

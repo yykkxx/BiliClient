@@ -12,6 +12,7 @@ import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity
 import com.RobinNotBad.BiliClient.api.AppInfoApi
+import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -22,6 +23,8 @@ class SettingMainActivity : InstanceActivity() {
     private var eggClick = 0
 
     private var refreshTutorialClick = 0
+
+    private var clearLoginClick = 0
 
     @SuppressLint("MissingInflatedId", "InflateParams")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,12 +49,7 @@ class SettingMainActivity : InstanceActivity() {
                 login.visibility = View.VISIBLE
                 login.setOnClickListener { view ->
                     val intent = Intent()
-                    if (Build.VERSION.SDK_INT >= 19)
-                        intent.setClass(this, LoginActivity::class.java)   //去扫码登录页面
-                    else {
-                        intent.setClass(this, SpecialLoginActivity::class.java)   //4.4以下系统去特殊登录页面
-                        intent.putExtra("login", true)
-                    }
+                    intent.setClass(this, LoginActivity::class.java)   //去扫码登录页面
                     startActivity(intent)
                 }
             }
@@ -168,6 +166,30 @@ class SettingMainActivity : InstanceActivity() {
 
                     MsgUtil.showMsg("教程进度已清除")
                 } else MsgUtil.showMsg("再点一次清除")
+            }
+
+            //清空登录数据（cookie / mid / csrf / refresh_token 等）
+            val clearLogin = findViewById<MaterialCardView>(R.id.clear_login)
+            clearLogin.setOnClickListener { view ->
+                if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L &&
+                    SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "").orEmpty().isEmpty()) {
+                    MsgUtil.showMsg("当前没有登录数据")
+                } else if (clearLoginClick++ > 0) {
+                    clearLoginClick = 0
+                    CenterThreadPool.run(Runnable {
+                        try {
+                            UserInfoApi.exitLogin()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    })
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookies)
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.mid)
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf)
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.refresh_token)
+                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookie_refresh)
+                    MsgUtil.showMsg("登录数据已清空")
+                } else MsgUtil.showMsg("清空后需要重新登录，再点一次确认")
             }
 
             val test = findViewById<MaterialCardView>(R.id.test)    //用于测试

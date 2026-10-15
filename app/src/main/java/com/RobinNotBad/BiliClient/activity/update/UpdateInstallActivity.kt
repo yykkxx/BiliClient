@@ -102,22 +102,13 @@ class UpdateInstallActivity : BaseActivity() {
                 return
             }
             val intent = Intent(Intent.ACTION_VIEW)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                val contentUri = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".FileProvider", File(path))
-                intent.setDataAndType(contentUri, "application/vnd.android.package-archive")
-            } else {
-                intent.setDataAndType(Uri.fromFile(File(path)), "application/vnd.android.package-archive")
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            val contentUri = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".FileProvider", File(path))
+            intent.setDataAndType(contentUri, "application/vnd.android.package-archive")
+            if (packageManager.canRequestPackageInstalls()) {
                 startActivity(intent)
             } else {
-                if (packageManager.canRequestPackageInstalls()) {
-                    startActivity(intent)
-                } else {
-                    Toast.makeText(this, "没有授予请求安装应用权限", Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(this, "没有授予请求安装应用权限", Toast.LENGTH_SHORT).show()
             }
         } catch (th: Throwable) {
             Log.e("BiliClient", th.toString())

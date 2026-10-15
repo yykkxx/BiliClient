@@ -53,6 +53,7 @@ import com.RobinNotBad.BiliClient.adapter.QualitySelectorAdapter
 import com.RobinNotBad.BiliClient.adapter.ViewPointAdapter
 import com.RobinNotBad.BiliClient.api.ConfInfoApi
 import com.RobinNotBad.BiliClient.api.DanmakuApi
+import com.RobinNotBad.BiliClient.api.HistoryApi
 import com.RobinNotBad.BiliClient.api.InteractionVideoApi
 import com.RobinNotBad.BiliClient.api.PlayerApi
 import com.RobinNotBad.BiliClient.api.VideoInfoApi
@@ -377,11 +378,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         ijkPlayer = IjkMediaPlayer()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
-            batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
-        } else
-            batteryView!!.visibility = View.GONE
+        batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
+        batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
 
         loop_enabled = SharedPreferencesUtil.getBoolean("player_loop", false)
         // 从设置读取听视频模式的默认值
@@ -753,9 +751,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             text_speed!!.visibility = View.VISIBLE
             updateDebugButtonVisibility()
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
-        }
+        batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
         if (screen_round) {
             text_progress!!.setGravity(Gravity.NO_GRAVITY)
             text_progress!!.setPadding(ToolsUtil.dp2px(24f), 0, 0, 0)
@@ -3372,13 +3368,39 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     override fun finish() {
         if (isPlaying)
             playerPause()
-        if (ijkPlayer != null) {
+
+        val progress = if (ijkPlayer != null) ijkPlayer!!.getCurrentPosition() else -1L
+        if (progress >= 0) {
             val result = Intent()
-            result.putExtra("progress", ijkPlayer!!.getCurrentPosition().toInt())
-            Logu.d("进度回传", ijkPlayer!!.getCurrentPosition().toString())
+            result.putExtra("progress", progress.toInt())
+            Logu.d("进度回传", progress.toString())
             setResult(RESULT_OK, result)
+            reportProgressInBackground(progress)
         } else
             setResult(RESULT_CANCELED)
         super.finish()
+    }
+
+    /**
+     * 退出播放时在后台异步上报观看进度。
+     *
+     * 原先进度上报依赖已删除的 JumpToPlayerActivity 的 onActivityResult 回调，
+     * 并且是在返回播放器界面之后才发起请求；现在改为退出瞬间丢到后台线程执行，
+     * 不阻塞界面退出，也不受调用方是否接收 result 影响。
+     */
+    private fun reportProgressInBackground(progressMs: Long) {
+        if (isLiveMode) return
+        val reportAid = aid
+        val reportCid = cid
+        if (reportAid <= 0 || reportCid <= 0 || mid <= 0) return
+
+        val progressSecond = progressMs / 1000
+        CenterThreadPool.run(Runnable {
+            try {
+                HistoryApi.reportHistory(reportAid, reportCid, progressSecond)
+            } catch (e: Exception) {
+                MsgUtil.err("进度上报：", e)
+            }
+        })
     }
 }

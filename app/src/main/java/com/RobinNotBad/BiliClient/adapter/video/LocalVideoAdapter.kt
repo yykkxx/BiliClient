@@ -69,7 +69,7 @@ class LocalVideoAdapter(val context: Context, val localVideoList: ArrayList<Loca
                     playerData.title = localVideo.title
 
                     try {
-                        val player = PlayerApi.jumpToPlayer(playerData)
+                        val player = PlayerApi.buildPlayerIntent(playerData)
                         // 如果是仅音频文件，标记为音频模式
                         if (mediaPath.endsWith("audio.m4a")) {
                             player.putExtra("audio_only", true)
