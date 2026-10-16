@@ -8,6 +8,7 @@ import com.RobinNotBad.BiliClient.api.HistoryApi
 import com.RobinNotBad.BiliClient.model.ApiResult
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 
 
@@ -23,6 +24,7 @@ class HistoryActivity : RefreshListActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setVideoCardLayout()
 
         setPageName("历史记录")
 
@@ -36,6 +38,7 @@ class HistoryActivity : RefreshListActivity() {
                 lastResult = HistoryApi.getHistory(lastResult, videoListLocal!!)
                 if (lastResult.code == 0) {
                     val adapter = VideoCardAdapter(this, videoListLocal)
+                    adapter.feedLayout = ListLayoutUtil.isDualColumnVideo()
                     videoCardAdapter = adapter
                     setOnLoadMoreListener { p -> continueLoading(p) }
                     setRefreshing(false)

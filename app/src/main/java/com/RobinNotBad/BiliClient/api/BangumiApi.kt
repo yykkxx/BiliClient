@@ -201,7 +201,7 @@ object BangumiApi {
     @JvmStatic
     fun getSections(season_id: Long): ArrayList<Bangumi.Section> {
         val url = "https://api.bilibili.com/pgc/web/season/section?season_id=" + season_id
-        val all = JSONObject(NetWorkUtil.get(url).body()!!.string())  //得到一整个json
+        val all = JSONObject(NetWorkUtil.get(url).body!!.string())  //得到一整个json
         val result = all.getJSONObject("result")
         val sectionList = ArrayList<Bangumi.Section>()
 

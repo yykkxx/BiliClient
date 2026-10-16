@@ -19,7 +19,6 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
-import com.RobinNotBad.BiliClient.util.ThermalPrefetchManager
 
 import org.json.JSONException
 
@@ -157,11 +156,6 @@ class RecommendActivity : RefreshMainActivity() {
                         setAdapter(videoCardAdapter)
                     } else {
                         videoCardAdapter.notifyItemRangeInserted(videoCardList.size - list.size, list.size)
-                    }
-
-                    // 实验室：高温时短时间集中预缓存，之后一段时间不用网络（#22）
-                    if (ThermalPrefetchManager.isEnabled()) {
-                        ThermalPrefetchManager.tryPrefetch(this@RecommendActivity, videoCardList)
                     }
                 }
             } catch (e: Exception) {

@@ -10,6 +10,7 @@ import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
 import com.RobinNotBad.BiliClient.api.FavoriteApi
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 
 import java.util.ArrayList
@@ -31,6 +32,7 @@ class FavoriteVideoListActivity : RefreshListActivity() {
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setVideoCardLayout()
 
         val intent = getIntent()
         mid = intent.getLongExtra("mid", 0)
@@ -47,6 +49,7 @@ class FavoriteVideoListActivity : RefreshListActivity() {
                 val result = FavoriteApi.getFolderVideos(mid, fid, page, videoList)
                 if (result != -1) {
                     val videoCardAdapter = VideoCardAdapter(this, videoList)
+                    videoCardAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo()
                     this.videoCardAdapter = videoCardAdapter
 
                     videoCardAdapter.setOnLongClickListener { position ->

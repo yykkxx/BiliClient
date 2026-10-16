@@ -180,7 +180,7 @@ class QRLoginFragment : Fragment() {
                         return
                     }
 
-                    val str = response.body()!!.string()
+                    val str = response.body!!.string()
                     val loginJson = JSONObject(str)
                     Logu.v("login_state", str)
 

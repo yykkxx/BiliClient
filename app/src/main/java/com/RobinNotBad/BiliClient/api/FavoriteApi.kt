@@ -206,7 +206,7 @@ object FavoriteApi {
         val url = "https://api.bilibili.com/medialist/gateway/coll/resource/deal"
         val per = "rid=" + aid + "&type=2&add_media_ids=" + addFid + "&del_media_ids=&csrf=" + SharedPreferencesUtil.getString("csrf", "")
 
-        val result = JSONObject(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-添加收藏", result.toString())
         return result.getInt("code")
     }
@@ -220,7 +220,7 @@ object FavoriteApi {
         val url = "https://api.bilibili.com/medialist/gateway/coll/resource/batch/del"
         val per = "resources=" + aid + ":2&media_id=" + delFid + "&csrf=" + SharedPreferencesUtil.getString("csrf", "")
 
-        val result = JSONObject(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-删除收藏", result.toString())
         return result.getInt("code")
     }
@@ -235,7 +235,7 @@ object FavoriteApi {
                 .put("privacy", privacy)
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
         val data = formData.toString()
-        val result = JSONObject(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-新建收藏夹", result.toString())
         return result.getInt("code")
     }
@@ -251,7 +251,7 @@ object FavoriteApi {
                 .put("privacy", privacy)
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
         val data = formData.toString()
-        val result = JSONObject(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-修改收藏夹", result.toString())
         return result.getInt("code")
     }
@@ -264,7 +264,7 @@ object FavoriteApi {
                 .put("media_ids", mediaId.toString())
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
         val data = formData.toString()
-        val result = JSONObject(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, data, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-删除收藏夹", result.toString())
         return result.getInt("code")
     }

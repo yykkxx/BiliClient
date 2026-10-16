@@ -11,6 +11,7 @@ import com.RobinNotBad.BiliClient.api.SeriesApi
 import com.RobinNotBad.BiliClient.model.PageInfo
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 
 import java.util.ArrayList
 
@@ -25,6 +26,7 @@ class SeriesInfoActivity : RefreshListActivity() {
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setVideoCardLayout()
 
         val intent = getIntent()
         type = intent.getStringExtra("type")
@@ -45,6 +47,7 @@ class SeriesInfoActivity : RefreshListActivity() {
                 val pageInfo = SeriesApi.getSeriesInfo(typeLocal ?: "", mid, sid, page, videoListLocal)
                 if (pageInfo.return_ps != 0) {
                     val newAdapter = VideoCardAdapter(thisLocal, videoListLocal)
+                    newAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo()
                     videoCardAdapter = newAdapter
 
                     setOnLoadMoreListener { page -> continueLoading(page) }

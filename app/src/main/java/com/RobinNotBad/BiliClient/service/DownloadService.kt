@@ -46,7 +46,8 @@ import java.util.zip.Inflater
 
 import okhttp3.Response
 import okio.BufferedSink
-import okio.Okio
+import okio.sink
+import okio.buffer
 import okio.Sink
 
 class DownloadService : Service() {
@@ -381,35 +382,82 @@ class DownloadService : Service() {
     }
 
     @Throws(IOException::class)
+    /**
+     * 断点续传 + 自动重试（#12）：
+     * 1. 目标文件已有部分数据时，带 Range: bytes=<已有大小>- 续传，追加写入；
+     * 2. 网络抖动/读写出错时自动重试（最多 [MAX_RETRY] 次，指数退避），
+     *    重试仍从已下载的位置继续，而不是推倒重来；
+     * 3. 服务器不支持 Range（返回 200 而非 206）时退回整段重下。
+     */
     private fun downFile(url: String?, file: File): Int {
+        var attempt = 0
+        while (true) {
+            val result = downFileOnce(url, file, attempt > 0)
+            if (result == NORMAL) return NORMAL
+            if (!started) return result          // 用户取消不再重试
+            if (result == ERR_FILE && attempt >= MAX_RETRY) return ERR_FILE
+            if (result == ERR_NETWORK && attempt >= MAX_RETRY) return ERR_NETWORK
+            if (result != ERR_NETWORK && result != ERR_FILE) return result
+            attempt++
+            Logu.w("下载", "第 $attempt 次重试（上次错误码 $result）：$url")
+            try {
+                Thread.sleep(RETRY_BACKOFF_MS * attempt)
+            } catch (ignored: InterruptedException) {
+            }
+        }
+    }
+
+    private fun downFileOnce(url: String?, file: File, allowResume: Boolean): Int {
+        // 断点续传：从已下载的大小继续
+        val resumeFrom = if (allowResume && file.exists()) file.length() else 0L
         val response: Response
         try {
-            response = NetWorkUtil.get(url)
+            response = if (resumeFrom > 0)
+                NetWorkUtil.get(url, arrayListOf("Range", "bytes=$resumeFrom-"))
+            else
+                NetWorkUtil.get(url)
         } catch (e: IOException) {
             return ERR_NETWORK
         }
         var inputStream: InputStream? = null
         var fileOutputStream: FileOutputStream? = null
         try {
-            if (!file.exists() && !file.createNewFile()) return ERR_FILE else if (!file.delete() || !file.createNewFile()) return ERR_FILE
+            val code = response.code
+            if (code != 200 && code != 206) return ERR_NETWORK
 
-            inputStream = response.body()!!.byteStream()
-            fileOutputStream = FileOutputStream(file)
+            if (!file.exists() && !file.createNewFile()) return ERR_FILE
+
+            val body = response.body ?: return ERR_NETWORK
+            inputStream = body.byteStream()
+
+            if (code == 206) {
+                // 服务器支持断点：追加写
+                fileOutputStream = FileOutputStream(file, true)
+            } else {
+                // 不支持 Range（回 200）：清空重下
+                if (resumeFrom > 0) Logu.w("下载", "服务器不支持断点续传，重新下载")
+                fileOutputStream = FileOutputStream(file, false)
+            }
+
             var len: Int
             val bytes = ByteArray(1024 * 10)
-            val TotalFileSize = response.body()!!.contentLength()
+            // 总大小 = 本段长度 + 已有大小
+            val segmentSize = body.contentLength()
+            val TotalFileSize = if (segmentSize > 0) segmentSize + resumeFrom else -1L
             while (inputStream.read(bytes).also { len = it } != -1 && started) {
                 fileOutputStream.write(bytes, 0, len)
                 val CompleteFileSize = file.length()
-                percent = (1.0f * CompleteFileSize / TotalFileSize).toFloat()
+                if (TotalFileSize > 0)
+                    percent = (1.0f * CompleteFileSize / TotalFileSize).toFloat()
             }
             if (!started) return ERR_UNKNOWN
         } catch (e: IOException) {
-            return ERR_FILE
+            // 中途断开：保留已写入部分，外层重试续传
+            return ERR_NETWORK
         } finally {
             inputStream?.close()
             fileOutputStream?.close()
-            response.body()?.close()
+            response.body?.close()
             response.close()
         }
         return NORMAL
@@ -427,16 +475,16 @@ class DownloadService : Service() {
         try {
             if (!danmakuFile.exists() && !danmakuFile.createNewFile()) return ERR_FILE else if (!danmakuFile.delete() || !danmakuFile.createNewFile()) return ERR_FILE
 
-            val sink: Sink = Okio.sink(danmakuFile)
-            val decompressBytes = decompress(response.body()!!.bytes()) // 调用解压函数进行解压，返回包含解压后数据的byte数组
-            bufferedSink = Okio.buffer(sink)
+            val sink: Sink = danmakuFile.sink()
+            val decompressBytes = decompress(response.body!!.bytes()) // 调用解压函数进行解压，返回包含解压后数据的byte数组
+            bufferedSink = sink.buffer()
             bufferedSink.write(decompressBytes) // 将解压后数据写入文件（sink）中
             bufferedSink.close()
         } catch (e: IOException) {
             return ERR_FILE
         } finally {
             bufferedSink?.close()
-            response.body()?.close()
+            response.body?.close()
             response.close()
         }
         return NORMAL
@@ -492,6 +540,12 @@ class DownloadService : Service() {
         @JvmField
         var section: DownloadSection? = null
         private var firstDown: Long = 0
+
+        /** 断点续传自动重试上限（#12） */
+        private const val MAX_RETRY = 5
+
+        /** 重试退避基数（毫秒），按尝试次数线性增长 */
+        private const val RETRY_BACKOFF_MS = 1500L
 
         private const val NORMAL = 0
         private const val ERR_NETWORK = -1

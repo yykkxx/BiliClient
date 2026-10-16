@@ -19,6 +19,8 @@ import java.util.zip.Inflater
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.MediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -72,13 +74,13 @@ object NetWorkUtil {
                             try {
                                 isSslRedirect = location != null && !request.isHttps &&
                                         URI(location).scheme.equals("https", ignoreCase = true) &&
-                                        request.url().host().equals(URI(location).host, ignoreCase = true)
+                                        request.url.host.equals(URI(location).host, ignoreCase = true)
                             } catch (ignored: URISyntaxException) {
                             }
 
                             if (response.isRedirect && location != null) {
                                 val handler = request.tag(RedirectHandler::class.java)
-                                if (request.url().host() == "b23.tv" && !isSslRedirect && handler != null) {
+                                if (request.url.host == "b23.tv" && !isSslRedirect && handler != null) {
                                     handler.handleRedirect(location)
                                 } else {
                                     val newRequest = request.newBuilder()
@@ -122,14 +124,14 @@ object NetWorkUtil {
     @JvmStatic
     @Throws(IOException::class, JSONException::class)
     fun getJson(url: String?): JSONObject {
-        val body = get(url)?.body() ?: throw JSONException("在访问${url}时返回数据为空")
+        val body = get(url)?.body ?: throw JSONException("在访问${url}时返回数据为空")
         body.use { return JSONObject(it.string()) }
     }
 
     @JvmStatic
     @Throws(IOException::class, JSONException::class)
     fun getJson(url: String?, headers: ArrayList<String>?): JSONObject {
-        val body = get(url, headers)?.body() ?: throw JSONException("在访问${url}时返回数据为空")
+        val body = get(url, headers)?.body ?: throw JSONException("在访问${url}时返回数据为空")
         body.use { return JSONObject(it.string()) }
     }
 
@@ -167,7 +169,8 @@ object NetWorkUtil {
         Logu.d("post-url", url ?: "")
         Logu.d("post-data", data ?: "")
         val client = getOkHttpInstance()
-        val body = RequestBody.create(MediaType.parse(contentType + "; charset=utf-8"), data)
+        val mediaType = ((contentType ?: "application/json") + "; charset=utf-8").toMediaTypeOrNull()
+        val body = (data ?: "").toRequestBody(mediaType)
         val requestBuilder = Request.Builder().url(url!!).post(body)
         var i = 0
         while (i < headers!!.size) {

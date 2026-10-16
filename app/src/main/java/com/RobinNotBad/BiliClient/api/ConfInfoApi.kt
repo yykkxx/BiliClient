@@ -15,6 +15,7 @@ import java.util.HashMap
 import java.util.TreeMap
 
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONException
 import java.io.IOException
 
@@ -76,12 +77,12 @@ object ConfInfoApi {
 
         val w_rid = ToolsUtil.md5(calc_str)
 
-        return HttpUrl.parse(url_query)!!.newBuilder().addQueryParameter("w_rid", w_rid).addQueryParameter("wts", wts).build().toString()
+        return url_query.toHttpUrlOrNull()!!.newBuilder().addQueryParameter("w_rid", w_rid).addQueryParameter("wts", wts).build().toString()
     }
 
     @JvmStatic
     fun sortUrlParams(url: String): String {
-        var encodedParam = HttpUrl.parse(url)!!.encodedQuery()
+        var encodedParam = url.toHttpUrlOrNull()!!.encodedQuery
         if (encodedParam == null) encodedParam = ""
         // 解析URL参数
         val paramMap = HashMap<String, String>()

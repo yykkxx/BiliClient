@@ -77,7 +77,7 @@ class ReplyFragment : RefreshListFragment() {
         setForceSingleColumn()
         super.onViewCreated(view, savedInstanceState)
 
-        if (SharedPreferencesUtil.getBoolean("ui_landscape", false)) {
+        if (false) { // 横屏模式已删除（#2）
             val windowManager = view.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display = windowManager.defaultDisplay
             val metrics = DisplayMetrics()

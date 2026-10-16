@@ -74,7 +74,7 @@ object VipApi {
         formData.put("csrf", csrf)
         val response = NetWorkUtil.post(url, formData.toString())
         return response.use { resp ->
-            val body = resp.body() ?: throw JSONException("在访问" + url + "时返回数据为空")
+            val body = resp.body ?: throw JSONException("在访问" + url + "时返回数据为空")
             JSONObject(body.use { it.string() })
         }
     }

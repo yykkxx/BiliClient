@@ -7,6 +7,7 @@ import android.view.View
 import androidx.annotation.NonNull
 
 import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
 import com.RobinNotBad.BiliClient.api.SearchApi
 import com.RobinNotBad.BiliClient.model.VideoCard
@@ -36,6 +37,7 @@ class SearchVideoFragment : SearchFragment() {
 
         videoCardList = ArrayList()
         videoCardAdapter = VideoCardAdapter(requireContext(), videoCardList)
+        videoCardAdapter!!.feedLayout = ListLayoutUtil.isDualColumnVideo()
         setAdapter(videoCardAdapter!!)
 
         setOnRefreshListener { refreshInternal() }
@@ -72,6 +74,7 @@ class SearchVideoFragment : SearchFragment() {
             page = 1
             if (this.videoCardAdapter == null)
                 this.videoCardAdapter = VideoCardAdapter(this.requireContext(), this.videoCardList)
+                this.videoCardAdapter!!.feedLayout = ListLayoutUtil.isDualColumnVideo()
             val size_old = this.videoCardList.size
             this.videoCardList.clear()
             if (size_old != 0) this.videoCardAdapter!!.notifyItemRangeRemoved(0, size_old)

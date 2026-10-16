@@ -62,7 +62,7 @@ object CookiesApi {
     fun activeCookieInfo(): Int {
         val url = "https://api.bilibili.com/x/internal/gaia-gateway/ExClimbWuzhi"
         //NetWorkUtil.postJson(url, genCookiePayload().toString(), genWebHeaders());    //b站自己请求两次，所以我也请求两次（？）
-        return JSONObject(NetWorkUtil.postJson(url, genCookiePayload(), genWebHeaders()).body()!!.string()).getInt("code")
+        return JSONObject(NetWorkUtil.postJson(url, genCookiePayload(), genWebHeaders()).body!!.string()).getInt("code")
     }
 
     /*
@@ -128,7 +128,7 @@ object CookiesApi {
                         .put("hexsign", o)
                         .put("context[ts]", ts.toString())
                         .put("csrf", SharedPreferencesUtil.getString("csrf", "")),
-                "", genWebHeaders()).body()!!.string())
+                "", genWebHeaders()).body!!.string())
         if (result.has("data") && !result.isNull("data")) {
             val data = result.getJSONObject("data")
             return Pair(data.optString("ticket"), data.optInt("created_at"))

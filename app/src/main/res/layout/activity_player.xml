@@ -304,6 +304,16 @@
                         android:scaleType="fitXY"
                         android:src="@mipmap/loopoff" />
 
+                    <!-- 调节进度（#10）：弹出时间调节小窗，支持输入与表冠 -->
+                    <ImageButton
+                        android:id="@+id/time_jump_btn"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:adjustViewBounds="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/icon_time" />
+
                     <ImageButton
                         android:id="@+id/audio_only_btn"
                         android:layout_width="28dp"
@@ -632,6 +642,60 @@
                 android:background="@drawable/background_card_borderless"
                 android:gravity="center"
                 android:text="发送" />
+
+        </LinearLayout>
+
+        <!-- 时间调节小窗（#10）：点折叠栏按钮弹出，可输入数字或转表冠调节 -->
+        <LinearLayout
+            android:id="@+id/time_jump_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:layout_marginHorizontal="6dp"
+            android:background="@drawable/background_card"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="4dp"
+                android:layout_marginTop="4dp"
+                android:paddingHorizontal="3dp"
+                android:text="调节进度"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/time_jump_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="4dp"
+                android:hint="秒数或 时间 90 / 1:30 / 01:02:03"
+                android:inputType="text"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:textColor="@color/textwhite"
+                android:textColorHint="#88ffffff" />
+
+            <TextView
+                android:id="@+id/time_jump_rotary_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="4dp"
+                android:alpha="0.6"
+                android:paddingHorizontal="3dp"
+                android:text="也可转动手表表冠微调进度"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/time_jump_apply"
+                android:layout_width="match_parent"
+                android:layout_height="35dp"
+                android:layout_marginHorizontal="6dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/background_card_borderless"
+                android:gravity="center"
+                android:text="跳转" />
 
         </LinearLayout>
 

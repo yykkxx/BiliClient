@@ -429,7 +429,7 @@ object MessageApi {
                 .put("csrf", csrf)
 
         val response = NetWorkUtil.post(url, formData.toString(), NetWorkUtil.webHeaders)
-        val result = response.body()!!.string()
+        val result = response.body!!.string()
         return JSONObject(result)
     }
 
@@ -459,7 +459,7 @@ object MessageApi {
             formData.put("ai_intercept", settings.getInt("ai_intercept"))
 
         val response = NetWorkUtil.post(url, formData.toString(), NetWorkUtil.webHeaders)
-        val result = response.body()!!.string()
+        val result = response.body!!.string()
         return JSONObject(result)
     }
 }

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 视频信息流卡片（#2）：图片撑满整个小栏，标题在图片下方不省略，
+     每个卡片高度随标题行数自适应 -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardView"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+    android:layout_marginVertical="@dimen/list_margin_vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/img_cover"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@mipmap/placeholder" />
+
+        <TextView
+            android:id="@+id/text_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="8dp"
+            android:paddingTop="6dp"
+            android:text="标题标题标题标题标题标题标题标题标题标题标题标题标题标题标题标题"
+            android:textColor="@color/textwhite"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:id="@+id/extra_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:id="@+id/text_viewcount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.5"
+                android:drawableStart="@drawable/icon_play_12"
+                android:singleLine="true"
+                android:text="11.4万"
+                android:textSize="11sp" />
+
+            <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                android:id="@+id/text_upname"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:alpha="0.5"
+                android:drawableStart="@drawable/icon_person"
+                android:singleLine="true"
+                android:text="蔡徐坤"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

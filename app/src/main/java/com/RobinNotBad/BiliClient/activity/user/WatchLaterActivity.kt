@@ -8,6 +8,7 @@ import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
 import com.RobinNotBad.BiliClient.api.WatchLaterApi
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 
 import org.json.JSONException
@@ -25,6 +26,7 @@ class WatchLaterActivity : RefreshListActivity() {
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setVideoCardLayout()
         setPageName("稍后再看")
         recyclerView!!.setHasFixedSize(true)
 
@@ -32,6 +34,7 @@ class WatchLaterActivity : RefreshListActivity() {
             try {
                 val videoCardList = WatchLaterApi.getWatchLaterList()
                 val adapter = VideoCardAdapter(this, videoCardList)
+                adapter.feedLayout = ListLayoutUtil.isDualColumnVideo()
 
                 adapter.setOnLongClickListener { position ->
                     val timestamp = System.currentTimeMillis()

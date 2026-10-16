@@ -51,7 +51,7 @@ object WatchLaterApi {
 
         val response = NetWorkUtil.post(url, per, NetWorkUtil.webHeaders)
 
-        val result = JSONObject(response.body()!!.string())
+        val result = JSONObject(response.body!!.string())
 
         return result.getInt("code")
     }
@@ -64,7 +64,7 @@ object WatchLaterApi {
 
         val response = NetWorkUtil.post(url, per, NetWorkUtil.webHeaders)
 
-        val result = JSONObject(response.body()!!.string())
+        val result = JSONObject(response.body!!.string())
 
         return result.getInt("code")
     }

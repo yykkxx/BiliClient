@@ -24,7 +24,8 @@ import java.util.TimerTask
 import java.util.zip.Inflater
 import okhttp3.Response
 import okio.BufferedSink
-import okio.Okio
+import okio.sink
+import okio.buffer
 import okio.Sink
 
 class DownloadActivity : BaseActivity() {
@@ -121,11 +122,11 @@ class DownloadActivity : BaseActivity() {
             val response = NetWorkUtil.get(url,
                     if (no_bili_headers) AppInfoApi.customHeaders else NetWorkUtil.webHeaders)
             if (!file.exists()) file.createNewFile()
-            val inputStream: InputStream = response.body()!!.byteStream()
+            val inputStream: InputStream = response.body!!.byteStream()
             val fileOutputStream = FileOutputStream(file)
             var len: Int
             val bytes = ByteArray(1024 * 10)
-            val TotalFileSize = response.body()!!.contentLength()
+            val TotalFileSize = response.body!!.contentLength()
             while (inputStream.read(bytes).also { len = it } != -1) {
                 fileOutputStream.write(bytes, 0, len)
                 val CompleteFileSize = file.length()
@@ -143,7 +144,7 @@ class DownloadActivity : BaseActivity() {
                     }
                 }, 200)
             }
-            response.body()!!.close()
+            response.body!!.close()
             response.close()
         } catch (e: IOException) {
             runOnUiThread { MsgUtil.showMsg("下载失败") }
@@ -160,9 +161,9 @@ class DownloadActivity : BaseActivity() {
             var bufferedSink: BufferedSink? = null
             try {
                 if (!danmakuFile.exists()) danmakuFile.createNewFile()
-                val sink: Sink = Okio.sink(danmakuFile)
-                val decompressBytes = decompress(response.body()!!.bytes())//调用解压函数进行解压，返回包含解压后数据的byte数组
-                bufferedSink = Okio.buffer(sink)
+                val sink: Sink = danmakuFile.sink()
+                val decompressBytes = decompress(response.body!!.bytes())//调用解压函数进行解压，返回包含解压后数据的byte数组
+                bufferedSink = sink.buffer()
                 bufferedSink.write(decompressBytes)//将解压后数据写入文件（sink）中
                 bufferedSink.close()
             } catch (e: Exception) {
@@ -173,7 +174,7 @@ class DownloadActivity : BaseActivity() {
                     bufferedSink.close()
                 }
             }
-            if (response.body() != null) response.body()!!.close()
+            if (response.body != null) response.body!!.close()
             response.close()
         } catch (e: IOException) {
             runOnUiThread { MsgUtil.showMsg("弹幕下载失败！") }

@@ -11,7 +11,7 @@ import com.RobinNotBad.BiliClient.model.SettingSection
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
-import com.RobinNotBad.BiliClient.util.ThermalPrefetchManager
+import com.RobinNotBad.BiliClient.util.StreamPolicyManager
 
 import java.util.ArrayList
 
@@ -41,16 +41,15 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 getString(R.string.setting_lab_path_pictures), FileUtil.getPicturePath().toString()))
 
         sectionList.add(SettingSection("title", "UI", "", "", ""))
-        sectionList.add(SettingSection("switch", "横屏模式", "ui_landscape", getString(R.string.setting_lab_ui_landscape),
-                "false"))
         sectionList.add(SettingSection("switch", "文字跑马灯", "marquee_enable", getString(R.string.setting_lab_marquee),
                 "true"))
         // 视频列表双列模式（#12）
         sectionList.add(SettingSection("switch", "视频列表双列模式", ListLayoutUtil.PREF_DUAL_COLUMN,
                 getString(R.string.setting_lab_dual_column), "false"))
-        // 高温预缓存（#22）
-        sectionList.add(SettingSection("switch", "高温预缓存", ThermalPrefetchManager.PREF_THERMAL_PREFETCH,
-                getString(R.string.setting_lab_thermal_prefetch), "false"))
+        // 拉流策略（#11，替代原"高温预缓存"）：慢速持续=稳（4G 耗电发热）；脉冲式=4G 不发热但可能偶卡
+        sectionList.add(SettingSection("multi_choose", "拉流策略", StreamPolicyManager.PREF_STREAM_POLICY,
+                "①慢速持续拉取：稳定，4G 耗电、发热\n②脉冲式：快速拉一段就停，循环往复——4G 不发热，但可能偶尔卡顿",
+                "1", Pair(arrayOf("慢速持续", "脉冲式"), intArrayOf(StreamPolicyManager.POLICY_CONTINUOUS, StreamPolicyManager.POLICY_PULSE))))
 
         sectionList.add(SettingSection("title", "播放器", "", "", ""))
         sectionList.add(SettingSection("switch", "播放器旋屏兼容方案", "dev_player_rotate_software",

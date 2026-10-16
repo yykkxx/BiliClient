@@ -81,9 +81,9 @@ class TestActivity : BaseActivity() {
                 val result: String
                 if (sw_post!!.isChecked) {
                     val data = input_data!!.text.toString()
-                    result = Objects.requireNonNull(NetWorkUtil.post(url, data).body())!!.string()
+                    result = Objects.requireNonNull(NetWorkUtil.post(url, data).body)!!.string()
                 } else {
-                    result = Objects.requireNonNull(NetWorkUtil.get(url).body())!!.string()
+                    result = Objects.requireNonNull(NetWorkUtil.get(url).body)!!.string()
                 }
 
                 runOnUiThread(Runnable {
@@ -183,7 +183,7 @@ class TestActivity : BaseActivity() {
                     val response = NetWorkUtil.postJson("https://api.deepseek.com/chat/completions",
                             requestJson.toString(),
                             deepseekHeaders)
-                    val body: ResponseBody? = response.body()
+                    val body: ResponseBody? = response.body
                     if (body == null) return@Runnable
                     val source = body.source()
 

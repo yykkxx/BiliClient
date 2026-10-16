@@ -114,7 +114,7 @@ object DanmakuApi {
     @Throws(IOException::class)
     private fun postAndReadBody(url: String, arg: String): String {
         val response = NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders)
-        val body = response.body() ?: throw IOException("请求 $url 返回空响应体")
+        val body = response.body ?: throw IOException("请求 $url 返回空响应体")
         return body.use { it.string() }
     }
 
@@ -143,7 +143,7 @@ object DanmakuApi {
         Logu.d("新版弹幕API", "URL: $url")
 
         val response: Response = NetWorkUtil.get(url, NetWorkUtil.webHeaders)
-        val data = response.body()?.use { it.bytes() }
+        val data = response.body?.use { it.bytes() }
             ?: throw IOException("弹幕分段 $segmentIndex 返回空响应体")
 
         if (data.isEmpty()) {

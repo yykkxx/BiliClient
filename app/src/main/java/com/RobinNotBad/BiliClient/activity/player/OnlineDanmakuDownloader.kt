@@ -3,7 +3,8 @@ package com.RobinNotBad.BiliClient.activity.player
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import okio.BufferedSink
-import okio.Okio
+import okio.sink
+import okio.buffer
 import okio.Sink
 import java.io.File
 import java.io.IOException
@@ -45,7 +46,7 @@ object OnlineDanmakuDownloader {
         var bufferedSink: BufferedSink? = null
         try {
             val response = NetWorkUtil.get(url, NetWorkUtil.webHeaders)
-            val body = response.body() ?: run {
+            val body = response.body ?: run {
                 Logu.w("弹幕下载", "旧版弹幕响应体为空")
                 return null
             }
@@ -60,8 +61,8 @@ object OnlineDanmakuDownloader {
             }
 
             target.parentFile?.mkdirs()
-            val sink: Sink = Okio.sink(target)
-            bufferedSink = Okio.buffer(sink)
+            val sink: Sink = target.sink()
+            bufferedSink = sink.buffer()
             bufferedSink.write(xml)
             bufferedSink.close()
             bufferedSink = null

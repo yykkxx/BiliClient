@@ -72,7 +72,7 @@ class ReplyInfoActivity : BaseActivity() {
 
         setPageName("评论详情")
 
-        if (SharedPreferencesUtil.getBoolean("ui_landscape", false)) {
+        if (false) { // 横屏模式已删除（#2）
             val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display = windowManager.defaultDisplay
             val metrics = DisplayMetrics()

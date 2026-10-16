@@ -146,8 +146,8 @@ object LinkUrlUtil {
                         if (location != null) handleWebURL(context, location)
                     }
                 })
-                if (response.code() == 200) {
-                    val body: ResponseBody? = response.body()
+                if (response.code == 200) {
+                    val body: ResponseBody? = response.body
                     if (body != null) {
                         val json = JSONObject(body.string())
                         if (json.has("code") && json.getInt("code") == -404) {

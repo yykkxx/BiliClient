@@ -7,6 +7,7 @@ import android.view.View
 import androidx.annotation.NonNull
 
 import com.RobinNotBad.BiliClient.activity.base.RefreshListFragment
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
 import com.RobinNotBad.BiliClient.api.RecommendApi
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -45,6 +46,8 @@ class VideoRcmdFragment : RefreshListFragment() {
             .observe(getViewLifecycleOwner()) { result ->
                 result.onSuccess { videoList ->
                     val adapter = VideoCardAdapter(requireContext(), videoList)
+                    adapter.feedLayout = ListLayoutUtil.isDualColumnVideo()
+                    video_card_layout = true
                     setAdapter(adapter)
                     setRefreshing(false)
                 }.onFailure { error -> loadFail(error) }

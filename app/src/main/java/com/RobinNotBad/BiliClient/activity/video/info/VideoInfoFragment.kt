@@ -180,7 +180,7 @@ class VideoInfoFragment : BaseFragment() {
     @SuppressLint("SetTextI18n")
     private fun initView(rootview: View) {
         val videoInfo = this.videoInfo ?: return
-        if (SharedPreferencesUtil.getBoolean("ui_landscape", false)) {
+        if (false) { // 横屏模式已删除（#2）
             val windowManager = rootview.getContext().getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display: Display = windowManager.getDefaultDisplay()
             val metrics = DisplayMetrics()

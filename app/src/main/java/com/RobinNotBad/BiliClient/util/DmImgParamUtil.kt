@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.util
 
 import android.util.Base64
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -27,7 +28,7 @@ object DmImgParamUtil {
 
     @JvmStatic
     fun getDmImgParamsUrl(orig_url: String): String {
-        val builder = Objects.requireNonNull(HttpUrl.parse(orig_url))!!.newBuilder()
+        val builder = orig_url.toHttpUrlOrNull()!!.newBuilder()
         val params = getDmImgParams()
         for ((key, value) in params) {
             builder.addQueryParameter(key, value)

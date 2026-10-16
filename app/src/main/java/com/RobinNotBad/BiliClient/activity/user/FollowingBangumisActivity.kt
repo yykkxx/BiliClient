@@ -8,6 +8,7 @@ import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
 import com.RobinNotBad.BiliClient.api.BangumiApi
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 
 
 //追番列表
@@ -20,6 +21,7 @@ class FollowingBangumisActivity : RefreshListActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setVideoCardLayout()
 
         setPageName("追番列表")
 
@@ -33,6 +35,7 @@ class FollowingBangumisActivity : RefreshListActivity() {
                 val result = BangumiApi.getFollowingList(page, videoListLocal!!)
                 if (result != -1) {
                     val adapter = VideoCardAdapter(this, videoListLocal)
+                    adapter.feedLayout = ListLayoutUtil.isDualColumnVideo()
                     videoCardAdapter = adapter
                     setOnLoadMoreListener { p -> continueLoading(p) }
                     setRefreshing(false)

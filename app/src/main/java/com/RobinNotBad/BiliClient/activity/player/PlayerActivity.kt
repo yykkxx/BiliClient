@@ -78,6 +78,7 @@ import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil.USER_AGENT_WEB
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.StreamPolicyManager
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.google.android.material.snackbar.Snackbar
@@ -135,6 +136,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var layout_top: RelativeLayout? = null
     private var layout_video: RelativeLayout? = null
     private var layout_card_bg: RelativeLayout? = null
+    private var card_time_jump: LinearLayout? = null
+    private var time_jump_input: EditText? = null
     private var layout_audio_only: RelativeLayout? = null
     private var layout_speed: LinearLayout? = null
     private var right_control: LinearLayout? = null
@@ -368,8 +371,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         Logu.v("加载", "加载")
         super.onCreate(savedInstanceState)
 
-        screen_landscape = (SharedPreferencesUtil.getBoolean("player_autolandscape", false) ||
-                SharedPreferencesUtil.getBoolean("ui_landscape", false))
+        // 横屏模式（ui_landscape）已删除（#2），仅保留播放器自身的"默认横屏"偏好
+        screen_landscape = SharedPreferencesUtil.getBoolean("player_autolandscape", false)
         if (SharedPreferencesUtil.getBoolean("dev_player_rotate_software", false) && screen_landscape) {
             MsgUtil.showMsg("不支持默认横屏！")
             screen_landscape = false
@@ -498,6 +501,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         layout_card_bg = findViewById(R.id.card_bg)
         card_subtitle = findViewById(R.id.subtitle_card)
         card_danmaku_send = findViewById(R.id.danmaku_send_card)
+        card_time_jump = findViewById(R.id.time_jump_card)
+        time_jump_input = findViewById(R.id.time_jump_input)
         card_page_selector = findViewById(R.id.page_selector_card)
         card_quality_selector = findViewById(R.id.quality_selector_card)
         card_viewpoint_selector = findViewById(R.id.viewpoint_selector_card)
@@ -948,7 +953,19 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         // 这个坑死我！请允许我为解决此问题而大大地兴奋一下ohhhhhhhhhhhhhhhhhhhhhhhhhhhh
         // ijkplayer是自带一个useragent的，要把默认的改掉才能用！
         if (isOnlineVideo) {
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L)
+            // 拉流策略（#11）：脉冲式=快速拉满缓冲→停→消耗到下限再拉；
+            // 慢速持续=原行为（边播边平滑缓冲）
+            if (StreamPolicyManager.isPulse()) {
+                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+                // 大缓冲：一次多拉一些，随后解析线程停住，期间没有网络请求
+                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 40L * 1024 * 1024)
+                // 缓冲的帧数下限：消耗到这个量之前不再读网络
+                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 600L)
+                // 触底后立刻高速回填
+                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 1L)
+            } else {
+                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L)
+            }
             // 缓冲区依据设备内存自适应：缓冲越足，网络抖动时越不容易卡住。
             // 但缓冲过大反而增加内存压力与耗电，所以按档位区分。
             ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size",
@@ -1298,7 +1315,14 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             text_speed!!.visibility = View.GONE
         text_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.VISIBLE }
         // 点击进度时间输入时间跳转（#24）
-        text_progress!!.setOnClickListener { view -> showTimeJumpDialog() }
+        // 点时间文本同样打开时间调节小窗（#10）
+        text_progress!!.setOnClickListener { view ->
+            if (isPrepared && !isLiveMode) {
+                layout_card_bg!!.visibility = View.VISIBLE
+                card_time_jump!!.visibility = View.VISIBLE
+                showcon()
+            }
+        }
         layout_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.GONE }
 
         btn_debug!!.setOnClickListener { view -> showInteractionDebugDialog() }
@@ -2074,10 +2098,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             mediaSession = null
         }
 
-        setRequestedOrientation(if (SharedPreferencesUtil.getBoolean("ui_landscape", false))
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        else
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+        // 横屏模式已删除（#2）
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
 
         super.onDestroy()
     }
@@ -2129,7 +2151,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 mHeaders.add(USER_AGENT_WEB)
 
                 val response = NetWorkUtil.get(ConfInfoApi.signWBI(url), mHeaders)
-                val data = JSONObject(Objects.requireNonNull(response.body())!!.string())
+                val data = JSONObject(Objects.requireNonNull(response.body)!!.string())
                         .getJSONObject("data")
                 val host = data.getJSONArray("host_list").getJSONObject(0)
 
@@ -2421,10 +2443,38 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             card_page_selector!!.visibility = View.GONE
             card_quality_selector!!.visibility = View.GONE
             card_viewpoint_selector!!.visibility = View.GONE
+            card_time_jump!!.visibility = View.GONE
         }
         btn_danmaku_send!!.setOnClickListener { view ->
             layout_card_bg!!.visibility = View.VISIBLE
             card_danmaku_send!!.visibility = View.VISIBLE
+        }
+
+        // 时间调节小窗（#10）：与发送弹幕小窗同款卡片
+        findViewById<View>(R.id.time_jump_btn).setOnClickListener { view ->
+            if (!isPrepared || isLiveMode) {
+                MsgUtil.showMsg("当前无法调节进度")
+                return@setOnClickListener
+            }
+            layout_card_bg!!.visibility = View.VISIBLE
+            card_time_jump!!.visibility = View.VISIBLE
+            showcon()
+        }
+        findViewById<View>(R.id.time_jump_apply).setOnClickListener { view1 ->
+            val editText = time_jump_input ?: return@setOnClickListener
+            val seconds = parseTimeInput(editText.text.toString())
+            if (seconds == null) {
+                MsgUtil.showMsg("时间格式不对，示例：90 / 1:30 / 01:02:03")
+                return@setOnClickListener
+            }
+            val duration = try { ijkPlayer!!.getDuration() } catch (e: Exception) { 0L }
+            var targetMs = seconds * 1000L
+            if (targetMs < 0) targetMs = 0
+            if (duration > 0 && targetMs > duration) targetMs = duration
+            seekToPosition(targetMs)
+            MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
+            layout_card_bg!!.visibility = View.GONE
+            card_time_jump!!.visibility = View.GONE
         }
         findViewById<View>(R.id.danmaku_send).setOnClickListener { view1 ->
             val editText = findViewById<EditText>(R.id.danmaku_send_edit)
@@ -2521,20 +2571,37 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      * 无需再去拖动进度条。每次一档约 5 秒，符合手表上“微调”的定位。
      */
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (isPrepared && !isLiveMode && menu_opened &&
+        if (isPrepared && !isLiveMode &&
             event.action == MotionEvent.ACTION_SCROLL &&
             (event.source and InputDevice.SOURCE_CLASS_MASK) == InputDevice.SOURCE_ROTARY_ENCODER
         ) {
-            val steps = -event.getAxisValue(MotionEvent.AXIS_SCROLL)
-            if (steps != 0f) {
-                val deltaMs = (steps * CROWN_SEEK_STEP_MS).toLong()
-                var target = ijkPlayer!!.getCurrentPosition() + deltaMs
-                val duration = ijkPlayer!!.getDuration()
-                if (target < 0) target = 0
-                if (duration > 0 && target > duration) target = duration
-                seekToPosition(target)
-                showSeekHint(target)
+            // 时间调节小窗打开时（#10），表冠在输入框基础上 ±5s 微调并回填输入框
+            if (card_time_jump != null && card_time_jump!!.visibility == View.VISIBLE) {
+                val steps = -event.getAxisValue(MotionEvent.AXIS_SCROLL)
+                if (steps != 0f) {
+                    val base = parseTimeInput(time_jump_input?.text?.toString() ?: "") ?: 0L
+                    val durationSec = (try { ijkPlayer!!.getDuration() } catch (e: Exception) { 0L }) / 1000
+                    var target: Long = base + (steps * CROWN_SEEK_STEP_MS / 1000f).toInt()
+                    if (target < 0) target = 0
+                    if (durationSec > 0 && target > durationSec) target = durationSec
+                    time_jump_input?.setText(StringUtil.toTime(target.toInt()))
+                    time_jump_input?.setSelection(time_jump_input?.text?.length ?: 0)
+                    return true
+                }
                 return true
+            }
+            if (menu_opened) {
+                val steps = -event.getAxisValue(MotionEvent.AXIS_SCROLL)
+                if (steps != 0f) {
+                    val deltaMs = (steps * CROWN_SEEK_STEP_MS).toLong()
+                    var target = ijkPlayer!!.getCurrentPosition() + deltaMs
+                    val duration = ijkPlayer!!.getDuration()
+                    if (target < 0) target = 0
+                    if (duration > 0 && target > duration) target = duration
+                    seekToPosition(target)
+                    showSeekHint(target)
+                    return true
+                }
             }
         }
         return super.onGenericMotionEvent(event)

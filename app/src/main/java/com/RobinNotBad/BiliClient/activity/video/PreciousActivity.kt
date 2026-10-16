@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
 import com.RobinNotBad.BiliClient.api.RecommendApi
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.view.ImageAutoLoadScrollListener
@@ -59,7 +60,7 @@ class PreciousActivity : InstanceActivity() {
         Log.e("debug", "刷新")
         page = 1
         if (firstRefresh) {
-            recyclerView!!.layoutManager = CustomLinearManager(this)
+            recyclerView!!.layoutManager = ListLayoutUtil.createVideoCard(this, false) // #2 视频列表专用：双列信息流
             videoCardList = ArrayList()
         } else {
             val last = videoCardList!!.size
@@ -87,6 +88,7 @@ class PreciousActivity : InstanceActivity() {
                 if (firstRefresh) {
                     firstRefresh = false
                     videoCardAdapter = VideoCardAdapter(this, videoCardList)
+                    videoCardAdapter!!.feedLayout = ListLayoutUtil.isDualColumnVideo()
                     recyclerView!!.adapter = videoCardAdapter
 
                     recyclerView!!.addOnScrollListener(object : RecyclerView.OnScrollListener() {

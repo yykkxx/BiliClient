@@ -42,7 +42,7 @@ object LoginApi {
     @JvmStatic
     fun requestSSOs() {
         val listUrl = "https://passport.bilibili.com/x/passport-login/web/sso/list"
-        val listResult = JSONObject(NetWorkUtil.post(listUrl, NetWorkUtil.FormData().put("csrf", SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "")).toString()).body()!!.string())
+        val listResult = JSONObject(NetWorkUtil.post(listUrl, NetWorkUtil.FormData().put("csrf", SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "")).toString()).body!!.string())
         if (listResult.has("data") && !listResult.isNull("data")) {
             val sso = listResult.getJSONObject("data").getJSONArray("sso")
             for (i in 0 until sso.length()) {

@@ -117,7 +117,7 @@ object ArticleApi {
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
         try {
-            return JSONObject(resp.body()!!.string()).getInt("code")
+            return JSONObject(resp.body!!.string()).getInt("code")
         } catch (ignored: JSONException) {
             return -1
         }
@@ -143,7 +143,7 @@ object ArticleApi {
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
         try {
-            return JSONObject(resp.body()!!.string()).getInt("code")
+            return JSONObject(resp.body!!.string()).getInt("code")
         } catch (ignored: JSONException) {
             return -1
         }
@@ -163,7 +163,7 @@ object ArticleApi {
                 .put("id", cvid)
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
-        return JSONObject(resp.body()!!.string()).getInt("code")
+        return JSONObject(resp.body!!.string()).getInt("code")
     }
 
     /**
@@ -180,7 +180,7 @@ object ArticleApi {
                 .put("id", cvid)
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
-        return JSONObject(resp.body()!!.string()).getInt("code")
+        return JSONObject(resp.body!!.string()).getInt("code")
     }
 
     @Throws(IOException::class, JSONException::class)

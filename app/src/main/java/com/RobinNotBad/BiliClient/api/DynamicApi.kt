@@ -54,7 +54,7 @@ object DynamicApi {
                 .put("csrf", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
         try {
-            val body = resp.body()
+            val body = resp.body
             if (body == null) return -1
             val result = JSONObject(body.string())
             if (result.getString("code") == "0" && result.has("data"))
@@ -99,7 +99,7 @@ object DynamicApi {
         Logu.v("publishComplex reqBody=$reqBody")
         val resp = NetWorkUtil.postJson(url, reqBody.toString())!!
         try {
-            val body = resp.body()
+            val body = resp.body
             if (body == null) return -1
             val result = JSONObject(body.string())
             if (result.getString("code") == "0" && result.has("data"))
@@ -160,7 +160,7 @@ object DynamicApi {
                 .put("csrf_token", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
         try {
-            val body = resp.body()
+            val body = resp.body
             if (body == null) return -1
             val result = JSONObject(body.string())
             if (result.getString("code") == "0" && result.has("data"))
@@ -255,7 +255,7 @@ object DynamicApi {
                 .put("csrf_token", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
         try {
-            val responseBody = resp.body()
+            val responseBody = resp.body
             if (responseBody == null) return -1
             val result = JSONObject(responseBody.string())
             return result.getInt("code")
@@ -274,7 +274,7 @@ object DynamicApi {
                 .put("csrf_token", SharedPreferencesUtil.getString("csrf", ""))
                 .toString(), NetWorkUtil.webHeaders)!!
         try {
-            val body = resp.body()
+            val body = resp.body
             if (body == null) return -1
             val result = JSONObject(body.string())
             return result.getInt("code")

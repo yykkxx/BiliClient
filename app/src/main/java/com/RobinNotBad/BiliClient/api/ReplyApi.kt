@@ -162,7 +162,7 @@ object ReplyApi {
         val url = "https://api.bilibili.com/x/v2/reply/add"
         val arg = "oid=" + oid + "&type=" + type + (if (root == 0L) "" else ("&root=" + root + "&parent=" + parent)) +
                 "&message=" + text + "&jsonp=jsonp&csrf=" + (SharedPreferencesUtil.getString("csrf", "") ?: "")
-        val result = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-发送评论", result.toString())
         var reply: JSONObject? = null
         if (result.has("data") && !result.isNull("data") && result.getJSONObject("data").has("reply") && !result.getJSONObject("data").isNull("reply")) {
@@ -188,7 +188,7 @@ object ReplyApi {
     fun likeReply(oid: Long, root: Long, action: Boolean): Int {
         val url = "https://api.bilibili.com/x/v2/reply/action"
         val arg = "oid=" + oid + "&type=1&rpid=" + root + "&action=" + (if (action) "1" else "0") + "&jsonp=jsonp&csrf=" + (SharedPreferencesUtil.getString("csrf", "") ?: "")
-        val result = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-点赞评论", result.toString())
         return result.getInt("code")
     }
@@ -211,7 +211,7 @@ object ReplyApi {
                 .put("rpid", rpid)
                 .put("csrf", SharedPreferencesUtil.getString("csrf", "") ?: "")
                 .toString()
-        val result = JSONObject(NetWorkUtil.post(url, reqBody, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, reqBody, NetWorkUtil.webHeaders).body!!.string())
         Log.e("debug-点赞评论", result.toString())
         return result.getInt("code")
     }

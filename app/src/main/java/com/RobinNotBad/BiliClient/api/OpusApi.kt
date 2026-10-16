@@ -36,8 +36,8 @@ object OpusApi {
         try {
             var response = NetWorkUtil.get(url)
             if (id <= 100000000)
-                response = NetWorkUtil.get(response.headers().get("location")) // 访问/read/cv[id]的话会重定向到/opus/，这里要手动“重定向”，因为OkHTTP不认。
-            val responseBody = response.body()
+                response = NetWorkUtil.get(response.headers.get("location")) // 访问/read/cv[id]的话会重定向到/opus/，这里要手动“重定向”，因为OkHTTP不认。
+            val responseBody = response.body
             if (responseBody == null) return opus
 
             val html = responseBody.string()
@@ -107,7 +107,7 @@ object OpusApi {
             url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?";
             url += "timezone_offset=-480&platform=web&gaia_source=main_web&id=" + id + "&features=itemOpusStyle,opusBigCover,onlyfansVote,endFooterHidden,decorationCard,onlyfansAssetsV2,ugcDelete,onlyfansQaCard,editable,opusPrivateVisible,avatarAutoTheme&web_location=333.1368&x-bili-device-req-json=%7B%22platform%22:%22web%22,%22device%22:%22pc%22%7D&x-bili-web-req-json=%7B%22spm_id%22:%22333.1368%22%7D";
             Response response = NetWorkUtil.get(ConfInfoApi.signWBI(url));
-            ResponseBody responseBody = response.body();
+            ResponseBody responseBody = response.body;
             if(responseBody == null) return opus;
 
             JSONObject json = new JSONObject(responseBody.string());

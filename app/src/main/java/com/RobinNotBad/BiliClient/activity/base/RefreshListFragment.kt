@@ -143,8 +143,20 @@ open class RefreshListFragment : BaseFragment() {
         setRefreshing(false)
     }
 
+    /** 视频卡片列表页标记（#2）：打开后可用实验室「双列模式」信息流布局 */
+    @JvmField
+    var video_card_layout: Boolean = false
+
     open fun getLayoutManager(): RecyclerView.LayoutManager {
-        return ListLayoutUtil.create(requireContext(), force_single_column)
+        return if (video_card_layout)
+            ListLayoutUtil.createVideoCard(requireContext(), force_single_column)
+        else
+            ListLayoutUtil.create(requireContext(), force_single_column)
+    }
+
+    /** 标记为视频卡片列表页（#2），并让 adapter 使用信息流卡片 */
+    open fun setVideoCardLayout() {
+        video_card_layout = true
     }
 
     open fun setForceSingleColumn() {

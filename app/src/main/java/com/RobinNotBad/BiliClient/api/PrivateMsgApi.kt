@@ -227,7 +227,7 @@ object PrivateMsgApi {
                     "&msg[receiver_id]=" + receiverUid +
                     "&msg[timestamp]=" + timestamp
 
-        val result = JSONObject(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body()!!.string())
+        val result = JSONObject(NetWorkUtil.post(url, per, NetWorkUtil.webHeaders).body!!.string())
 
         Log.e("debug-发送私信", result.toString())
         Log.e("debug-发送私信", NetWorkUtil.webHeaders.toString())
@@ -251,8 +251,8 @@ object PrivateMsgApi {
         per.append("&mobi_app=web")
 
         val response = NetWorkUtil.post(url, per.toString(), NetWorkUtil.webHeaders)
-        if (response.body() != null) {
-            return JSONObject(response.body()!!.string())
+        if (response.body != null) {
+            return JSONObject(response.body!!.string())
         }
         return JSONObject()
     }

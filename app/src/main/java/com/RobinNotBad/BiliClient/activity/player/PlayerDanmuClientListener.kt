@@ -136,8 +136,8 @@ class PlayerDanmuClientListener : WebSocketListener() {
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
         super.onMessage(webSocket, bytes)
 
-        if (bytes.size() < 16) return
-        val actionCode = bytes.getByte(11).toInt()
+        if (bytes.size < 16) return
+        val actionCode = bytes[11].toInt()
         when (actionCode) {
             8 -> {
                 // 认证成功：启动心跳
@@ -223,8 +223,8 @@ class PlayerDanmuClientListener : WebSocketListener() {
     private fun plainPackage(bytes: ByteString) {
         try {
             val result: JSONObject
-            val headerSize = bytes.getByte(5).toInt()
-            if (headerSize < 0 || headerSize >= bytes.size()) return
+            val headerSize = bytes[5].toInt()
+            if (headerSize < 0 || headerSize >= bytes.size) return
             val body = bytes.substring(headerSize)
 
             // 有些包不会压缩，判断方式与原实现保持一致
@@ -237,8 +237,8 @@ class PlayerDanmuClientListener : WebSocketListener() {
 
             if (decompressed != null && decompressed.size > 5) {
                 val inner = ByteString.of(*decompressed)
-                val innerHeader = inner.getByte(5).toInt()
-                if (innerHeader < 0 || innerHeader >= inner.size()) return
+                val innerHeader = inner[5].toInt()
+                if (innerHeader < 0 || innerHeader >= inner.size) return
                 result = JSONObject(inner.substring(innerHeader).utf8())
             } else {
                 val text = body.utf8()

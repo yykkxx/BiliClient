@@ -60,8 +60,8 @@ object CookieRefreshApi {
         if (Objects.equals(CorrespondPath, "")) return ""
         val url = "https://www.bilibili.com/correspond/1/" + CorrespondPath
         val response = NetWorkUtil.get(url)
-        if (response.body() != null) {
-            val document = Jsoup.parse(response.body()!!.string())
+        if (response.body != null) {
+            val document = Jsoup.parse(response.body!!.string())
             if (document.select("#1-name").size > 0)
                 return document.select("#1-name").get(0).text()
             else return ""
@@ -82,7 +82,7 @@ object CookieRefreshApi {
         val url = "https://passport.bilibili.com/x/passport-login/web/cookie/refresh"
         val args = "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!) + "&refresh_csrf=" + RefreshCsrf + "&source=main_web&refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "")
         val response = NetWorkUtil.post(url, args, NetWorkUtil.webHeaders)
-        val result = JSONObject(response.body()!!.string())
+        val result = JSONObject(response.body!!.string())
         if (result.getInt("code") == 0) {
             val refreshToken_new = result.getJSONObject("data").getString("refresh_token")
             Logu.v("新的RefreshToken", refreshToken_new)
@@ -92,7 +92,7 @@ object CookieRefreshApi {
 
 
             //使老的Cookie失效
-            val confirmCode = JSONObject(NetWorkUtil.post("https://passport.bilibili.com/x/passport-login/web/confirm/refresh", "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new) + "&refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), NetWorkUtil.webHeaders).body()!!.string()).getInt("code")
+            val confirmCode = JSONObject(NetWorkUtil.post("https://passport.bilibili.com/x/passport-login/web/confirm/refresh", "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new) + "&refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), NetWorkUtil.webHeaders).body!!.string()).getInt("code")
             if (confirmCode != 0) { //必须要等确认更新Cookie成功，不然就无法完成Cookie的刷新
                 Logu.e("Cookie刷新失败", "确认刷新时返回:$confirmCode")
                 SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies_old)

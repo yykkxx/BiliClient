@@ -59,7 +59,7 @@ class OpusInfoFragment : Fragment() {
 
         recyclerView = view.findViewById(R.id.recyclerView)
 
-        if (SharedPreferencesUtil.getBoolean("ui_landscape", false)) {
+        if (false) { // 横屏模式已删除（#2）
             val windowManager = view.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val display: Display = windowManager.getDefaultDisplay()
             val metrics = DisplayMetrics()

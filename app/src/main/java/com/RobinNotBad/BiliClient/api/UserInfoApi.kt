@@ -216,7 +216,7 @@ object UserInfoApi {
         var arg = "fid=" + mid + "&csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!)
         if (isFollow) arg += "&act=1" //关注
         else arg += "&act=2" //取消关注
-        val all = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()!!.string())
+        val all = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body!!.string())
         return all.getInt("code")
     }
 
@@ -236,7 +236,7 @@ object UserInfoApi {
         val url = "https://api.bilibili.com/x/v1/contract/add_contract"
         val csrf = NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!)
         val arg = "aid=&up_mid=" + upMid + "&source=4&scene=105&platform=web&mobi_app=pc&csrf=" + csrf
-        val all = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()!!.string())
+        val all = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body!!.string())
         return all.getInt("code")
     }
 
@@ -260,7 +260,7 @@ object UserInfoApi {
         if (userSign != null) {
             arg += "&user_sign=" + URLEncoder.encode(userSign, "UTF-8")
         }
-        val all = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body()!!.string())
+        val all = JSONObject(NetWorkUtil.post(url, arg, NetWorkUtil.webHeaders).body!!.string())
         return all
     }
 }

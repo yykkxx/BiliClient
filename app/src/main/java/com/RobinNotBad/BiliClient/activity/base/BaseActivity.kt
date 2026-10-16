@@ -55,10 +55,8 @@ open class BaseActivity : AppCompatActivity {
         val overlayStyle = ThemeUtil.overlayStyle()
         if (overlayStyle != 0) setTheme(overlayStyle)
 
-        requestedOrientation = if (SharedPreferencesUtil.getBoolean("ui_landscape", false))
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        else
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        // 横屏模式已删除（#2）：页面固定竖屏
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         super.onCreate(savedInstanceState)
 
@@ -244,8 +242,20 @@ open class BaseActivity : AppCompatActivity {
         fun finishInflate(view: View, id: Int)
     }
 
+    /** 视频卡片列表页标记（#2）：打开后可用实验室「双列模式」信息流布局 */
+    @JvmField
+    var video_card_layout: Boolean = false
+
     open fun getLayoutManager(): RecyclerView.LayoutManager {
-        return ListLayoutUtil.create(this, force_single_column)
+        return if (video_card_layout)
+            ListLayoutUtil.createVideoCard(this, force_single_column)
+        else
+            ListLayoutUtil.create(this, force_single_column)
+    }
+
+    /** 标记为视频卡片列表页（#2），并让 adapter 使用信息流卡片 */
+    open fun setVideoCardLayout() {
+        video_card_layout = true
     }
 
     open fun setForceSingleColumn() {
