@@ -38,9 +38,11 @@ class ThemeChooseActivity : BaseActivity() {
         adapter.setOnItemClickListener(OnItemClickListener { position ->
             val name = ThemeUtil.NAMES[position]
             if (ThemeUtil.setColorByName(name)) {
-                MsgUtil.showMsg("已切换为「$name」，重新进入页面后全面生效")
+                MsgUtil.showMsg("已切换为「$name」")
+                // 主题色即时生效（#8）：重建当前页面套用新覆盖主题，
+                // 其余页面在创建时自动套用
+                recreate()
             }
-            finish()
         })
 
         recyclerView.layoutManager = CustomLinearManager(this)

@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -74,13 +75,13 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         when (videoCard.type) {
             "live" -> {
                 val sstr_live = SpannableString("[直播]" + StringUtil.htmlToString(videoCard.title ?: ""))
-                sstr_live.setSpan(ForegroundColorSpan(Color.rgb(207, 75, 95)), 0, 4,
+                sstr_live.setSpan(ForegroundColorSpan(ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())), 0, 4,
                         Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
                 title!!.text = sstr_live
             }
             "series" -> {
                 val sstr_series = SpannableString("[系列]" + StringUtil.htmlToString(videoCard.title ?: ""))
-                sstr_series.setSpan(ForegroundColorSpan(Color.rgb(207, 75, 95)), 0, 4,
+                sstr_series.setSpan(ForegroundColorSpan(ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())), 0, 4,
                         Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
                 title!!.text = sstr_series
             }

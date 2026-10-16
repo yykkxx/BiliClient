@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -92,7 +93,7 @@ class PrivateMsgAdapter(msgList: MutableList<PrivateMessage>?, emoteArray: JSONA
             }
             if (msg.uid == selfUid) {
                 holder.root.setGravity(Gravity.END)
-                holder.textContentCard.setCardBackgroundColor(context.resources.getColor(R.color.pink))
+                holder.textContentCard.setCardBackgroundColor(ThemeUtil.getColor())
                 holder.textContentCard.setStrokeWidth(0)
             } else {
                 holder.root.setGravity(Gravity.START)

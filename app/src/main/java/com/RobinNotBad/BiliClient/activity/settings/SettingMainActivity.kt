@@ -54,18 +54,9 @@ class SettingMainActivity : InstanceActivity() {
                 }
             }
 
-            //播放器（原"选择播放器"界面已删除，入口改为清晰度设置）
+            //播放器设置（#4 清晰度设置已并入播放器设置页）
             val playerSetting = findViewById<MaterialCardView>(R.id.playerSetting)
             playerSetting.setOnClickListener { view ->
-                val intent = Intent()
-                intent.setClass(this, SettingQualityActivity::class.java)
-                startActivity(intent)
-            }
-
-
-            //内置播放器设置
-            val clientPlayerSetting = findViewById<MaterialCardView>(R.id.terminalPlayerSetting)
-            clientPlayerSetting.setOnClickListener { view ->
                 val intent = Intent()
                 intent.setClass(this, SettingTerminalPlayerActivity::class.java)
                 startActivity(intent)

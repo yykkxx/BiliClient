@@ -42,6 +42,7 @@ import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -165,7 +166,7 @@ class UserDynamicAdapter(private val context: Context, private val dynamicList: 
                 lvStr.append("  ").append(vipTypeMap[userInfo.vip_role]).append(" ")
                 lvStr.setSpan(
                         RadiusBackgroundSpan(1, context.resources.getDimension(R.dimen.card_round).toInt(),
-                                Color.WHITE, Color.rgb(207, 75, 95)),
+                                Color.WHITE, ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())),
                         ("Lv" + userInfo.level).length + 1, lvStr.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             }
             this.userLevel.text = lvStr

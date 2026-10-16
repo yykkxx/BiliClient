@@ -39,4 +39,44 @@
     <style name="Theme.NoSwipe.AppCompat" parent="Theme.BiliClient">
         <item name="android:windowSwipeToDismiss" tools:ignore="NewApi">false</item>
     </style>
+
+<!-- 主题色调覆盖层（#8）：按选择的主题色重定义激活态控件色，
+     让开关/复选/单选/按钮/输入框光标/进度条等全部跟随主题色调 -->
+<style name="ThemeOverlay.Accent.Default" parent="Theme.BiliClient" />
+
+<style name="ThemeOverlay.Accent.Blue" parent="Theme.BiliClient">
+    <item name="colorPrimary">#66CCFF</item>
+    <item name="colorSecondary">#66CCFF</item>
+    <item name="colorControlActivated">#66CCFF</item>
+</style>
+
+<style name="ThemeOverlay.Accent.BiliPink" parent="Theme.BiliClient">
+    <item name="colorPrimary">#FB7299</item>
+    <item name="colorSecondary">#FB7299</item>
+    <item name="colorControlActivated">#FB7299</item>
+</style>
+
+<style name="ThemeOverlay.Accent.Mint" parent="Theme.BiliClient">
+    <item name="colorPrimary">#4CD9A0</item>
+    <item name="colorSecondary">#4CD9A0</item>
+    <item name="colorControlActivated">#4CD9A0</item>
+</style>
+
+<style name="ThemeOverlay.Accent.Orange" parent="Theme.BiliClient">
+    <item name="colorPrimary">#FF9A3C</item>
+    <item name="colorSecondary">#FF9A3C</item>
+    <item name="colorControlActivated">#FF9A3C</item>
+</style>
+
+<style name="ThemeOverlay.Accent.Purple" parent="Theme.BiliClient">
+    <item name="colorPrimary">#9B7EDE</item>
+    <item name="colorSecondary">#9B7EDE</item>
+    <item name="colorControlActivated">#9B7EDE</item>
+</style>
+
+<style name="ThemeOverlay.Accent.White" parent="Theme.BiliClient">
+    <item name="colorPrimary">#EBE0E2</item>
+    <item name="colorSecondary">#EBE0E2</item>
+    <item name="colorControlActivated">#EBE0E2</item>
+</style>
 </resources>

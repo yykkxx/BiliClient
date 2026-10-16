@@ -16,6 +16,14 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
         setPageName("内置播放器设置")
 
         val sectionList = ArrayList<SettingSection>()
+
+        //默认清晰度（#4）：从主设置页移入播放器设置，Chip 高亮当前选中清晰度
+        val qnNames = SettingQualityActivity.qnMap.keys.toTypedArray()
+        val qnValues = SettingQualityActivity.qnMap.values.toIntArray()
+        sectionList.add(SettingSection("multi_choose", "默认清晰度", "play_qn",
+                "点按切换默认清晰度，选中的清晰度会高亮显示",
+                "16", Pair(qnNames, qnValues)))
+
         sectionList.add(SettingSection("switch", "长按倍速", "player_longclick", "", "true"))
         sectionList.add(SettingSection("switch", "双击快进快退", "player_doubletap_seek", "", "false"))
         sectionList.add(SettingSection("input_int", "快进快退秒数", "player_doubletap_seek_seconds", "", "10"))

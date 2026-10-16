@@ -458,8 +458,15 @@
             android:name=".activity.video.RecommendActivity"
             android:exported="true"
             android:label="推荐"
+            android:screenOrientation="locked" />
+        <!-- 启动页（#9）：打开软件先进入「哔哩终端」，再跳推荐/登录/初次设置；
+             渠道包构建脚本把这里的 label 改为对应应用名（如 QQ音乐） -->
+        <activity
+            android:name=".activity.video.LauncherActivity"
+            android:exported="true"
+            android:label="@string/app_name"
             android:screenOrientation="locked">
-            <intent-filter android:label="哔哩终端">
+            <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />

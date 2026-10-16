@@ -39,6 +39,7 @@ import com.RobinNotBad.BiliClient.activity.dynamic.send.SendDynamicActivity
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity
 import com.RobinNotBad.BiliClient.activity.settings.SettingTerminalPlayerActivity
 import com.RobinNotBad.BiliClient.activity.user.WatchLaterActivity
+import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteFolderListActivity
 import com.RobinNotBad.BiliClient.activity.video.MultiPageActivity
 import com.RobinNotBad.BiliClient.activity.video.QualityChooserActivity
 import com.RobinNotBad.BiliClient.activity.video.collection.CollectionInfoActivity
@@ -61,6 +62,7 @@ import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.bumptech.glide.Glide
@@ -424,6 +426,13 @@ class VideoInfoFragment : BaseFragment() {
             intent.putExtra("bvid", videoInfo.bvid)
             favLauncher.launch(intent)
         }
+        //长按收藏打开收藏页面（#13，与长按稍后再看打开稍后再看页一致）
+        rootview.findViewById<View>(R.id.layout_fav).setOnLongClickListener { view1 ->
+            val intent = Intent()
+            intent.setClass(requireContext(), FavoriteFolderListActivity::class.java)
+            startActivity(intent)
+            true
+        }
 
         //稍后再看
         addWatchlater.setOnClickListener { view1 ->
@@ -570,7 +579,7 @@ class VideoInfoFragment : BaseFragment() {
         if (string == null) return SpannableString(videoInfo.title ?: "")
 
         val titleStr = SpannableString(" " + string + " " + (videoInfo.title ?: ""))
-        val badgeBG = RadiusBackgroundSpan(0, getResources().getDimension(R.dimen.card_round).toInt(), Color.WHITE, Color.rgb(207, 75, 95))
+        val badgeBG = RadiusBackgroundSpan(0, getResources().getDimension(R.dimen.card_round).toInt(), Color.WHITE, ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt()))
         titleStr.setSpan(badgeBG, 0, string.length + 2, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
         return titleStr
     }

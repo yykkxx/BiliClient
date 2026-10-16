@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.google.android.material.card.MaterialCardView
 
 import org.json.JSONException
@@ -57,7 +58,7 @@ class FolderChooseAdapter(context: Context?, folderList: ArrayList<String>, fidL
         holder.itemView.setOnClickListener {
             if (!adding && position < chooseState.size && position < fidList.size) {
                 adding = true
-                cardView.setStrokeColor(context!!.resources.getColor(R.color.low_pink))
+                cardView.setStrokeColor(ThemeUtil.withAlpha(ThemeUtil.getColor(), 0x99))
                 cardView.setStrokeWidth(ToolsUtil.dp2px(1f))
 
                 if (chooseState[position]) {
@@ -126,7 +127,7 @@ class FolderChooseAdapter(context: Context?, folderList: ArrayList<String>, fidL
 
     private fun setCardView(cardView: MaterialCardView, bool: Boolean) {
         if (bool) {
-            cardView.setStrokeColor(context!!.resources.getColor(R.color.pink))
+            cardView.setStrokeColor(ThemeUtil.getColor())
             cardView.setStrokeWidth(ToolsUtil.dp2px(1f))
         } else {
             cardView.setStrokeColor(context!!.resources.getColor(R.color.gray))

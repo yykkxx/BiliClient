@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 
+import com.RobinNotBad.BiliClient.R
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 
@@ -61,6 +62,24 @@ object ThemeUtil {
         SharedPreferencesUtil.putInt(PREF_THEME_COLOR, color)
     }
 
+    /** 预设色 → 覆盖主题样式名（#8） */
+    private val OVERLAY_STYLES: Map<Int, Int> = mapOf(
+        0xFFFBFB8787.toInt() to R.style.ThemeOverlay_Accent_Default,
+        0xFF66CCFF.toInt() to R.style.ThemeOverlay_Accent_Blue,
+        0xFFFB7299.toInt() to R.style.ThemeOverlay_Accent_BiliPink,
+        0xFF4CD9A0.toInt() to R.style.ThemeOverlay_Accent_Mint,
+        0xFFFF9A3C.toInt() to R.style.ThemeOverlay_Accent_Orange,
+        0xFF9B7EDE.toInt() to R.style.ThemeOverlay_Accent_Purple,
+        0xFFEBE0E2.toInt() to R.style.ThemeOverlay_Accent_White
+    )
+
+    /**
+     * 取当前主题色对应的覆盖主题样式；自定义色（不在预设里）返回 0。
+     * 在 Activity super.onCreate 之前调用 setTheme 生效。
+     */
+    @JvmStatic
+    fun overlayStyle(): Int = OVERLAY_STYLES[getColor()] ?: 0
+
     /** 按名称设置主题色；名称未知时返回 false。 */
     @JvmStatic
     fun setColorByName(name: String?): Boolean {
@@ -98,6 +117,18 @@ object ThemeUtil {
     }
 
     private fun isLegacyAccent(color: Int): Boolean = LEGACY_ACCENT_COLORS.contains(color)
+
+    /**
+     * 非主题色相关的旧色值 → 当前主题色的映射（#8）：
+     * 把代码里散落的"点赞红/直播红"等粉系强调色统一染成主题色，
+     * 让主题切换对全应用的观感真正可见。
+     */
+    @JvmStatic
+    fun mapLegacyColor(color: Int): Int = when (color) {
+        0xFFCF4B5F.toInt() -> getColor()        // Color.rgb(207,75,95) 系列红
+        0xFFFE679A.toInt() -> getColor()        // 点赞红
+        else -> color
+    }
 
     private fun applyToView(view: View, color: Int) {
         when (view) {

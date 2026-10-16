@@ -407,14 +407,15 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- 长按倍速时在视频上方显示的半透明提示框（#7） -->
+        <!-- 长按倍速提示框（#6）：上移到画面顶部区域，避免挡住视频主体；
+             整体透明度降低（0.55），背景与描边也更透明 -->
         <TextView
             android:id="@+id/text_speed_hint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="56dp"
-            android:alpha="0.85"
+            android:layout_marginTop="8dp"
+            android:alpha="0.55"
             android:background="@drawable/background_speed_hint"
             android:gravity="center"
             android:paddingHorizontal="14dp"

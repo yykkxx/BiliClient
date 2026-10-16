@@ -36,6 +36,7 @@ import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -159,7 +160,7 @@ class ReplyAdapter(
                 name_str.append(sender.name)
                 name_str.setSpan(
                         RadiusBackgroundSpan(2, context.resources.getDimension(R.dimen.round_small).toInt(),
-                                Color.WHITE, Color.rgb(207, 75, 95)),
+                                Color.WHITE, ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())),
                         0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 name_str.setSpan(RelativeSizeSpan(0.8f), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             } else
@@ -201,7 +202,7 @@ class ReplyAdapter(
             replyHolder.likeCount.setText(StringUtil.toWan(reply.likeCount.toLong()))
 
             if (reply.liked) {
-                replyHolder.likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a))
+                replyHolder.likeCount.setTextColor(ThemeUtil.mapLegacyColor(0xFFFE679A.toInt()))
                 replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
                         ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null, null)
             } else {
@@ -233,7 +234,7 @@ class ReplyAdapter(
                             childMsg.append(child.sender!!.name)
                             childMsg.setSpan(RadiusBackgroundSpan(2,
                                     context.resources.getDimension(R.dimen.round_small).toInt(), Color.WHITE,
-                                    Color.rgb(207, 75, 95)), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                                    ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                             childMsg.setSpan(RelativeSizeSpan(0.8f), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         } else
                             childMsg.append(child.sender!!.name)
@@ -321,7 +322,7 @@ class ReplyAdapter(
                                 (context as Activity).runOnUiThread {
                                     MsgUtil.showMsg("点赞成功")
                                     replyHolder.likeCount.setText(StringUtil.toWan((++reply.likeCount).toLong()))
-                                    replyHolder.likeCount.setTextColor(Color.rgb(0xfe, 0x67, 0x9a))
+                                    replyHolder.likeCount.setTextColor(ThemeUtil.mapLegacyColor(0xFFFE679A.toInt()))
                                     replyHolder.likeCount.setCompoundDrawablesWithIntrinsicBounds(
                                             ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null,
                                             null)

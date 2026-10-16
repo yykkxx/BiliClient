@@ -29,6 +29,7 @@ import androidx.annotation.NonNull
 import androidx.core.content.res.ResourcesCompat
 
 import com.RobinNotBad.BiliClient.R
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.activity.CopyTextActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.ReplyApi
@@ -254,7 +255,7 @@ object StringUtil {
 
     @JvmStatic
     fun setTopSpan(spannableString: SpannableStringBuilder) {
-        spannableString.setSpan(ForegroundColorSpan(Color.rgb(207, 75, 95)), 0, ReplyApi.TOP_TIP.length, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
+        spannableString.setSpan(ForegroundColorSpan(ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())), 0, ReplyApi.TOP_TIP.length, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
     }
 
     @JvmStatic

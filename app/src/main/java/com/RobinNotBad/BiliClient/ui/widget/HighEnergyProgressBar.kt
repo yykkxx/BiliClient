@@ -7,6 +7,8 @@ import android.graphics.Path
 import android.util.AttributeSet
 import androidx.annotation.Nullable
 
+import com.RobinNotBad.BiliClient.util.ThemeUtil
+
 class HighEnergyProgressBar : androidx.appcompat.widget.AppCompatSeekBar {
     private var highEnergyData: FloatArray? = null
     private var linePaint: Paint = Paint()
@@ -27,9 +29,11 @@ class HighEnergyProgressBar : androidx.appcompat.widget.AppCompatSeekBar {
     }
 
     private fun init() {
+        // 高能进度条跟随主题色调（#8）
+        val accent = ThemeUtil.getColor()
         linePaint = Paint()
         linePaint.isAntiAlias = true
-        linePaint.color = 0xA8FB7299.toInt()
+        linePaint.color = ThemeUtil.withAlpha(accent, 0xA8)
         linePaint.style = Paint.Style.STROKE
         linePaint.strokeWidth = 2f * context.resources.displayMetrics.density // 2dp线宽
         linePaint.strokeCap = Paint.Cap.ROUND
@@ -37,7 +41,7 @@ class HighEnergyProgressBar : androidx.appcompat.widget.AppCompatSeekBar {
 
         fillPaint = Paint()
         fillPaint.isAntiAlias = true
-        fillPaint.color = 0x33FB7299
+        fillPaint.color = ThemeUtil.withAlpha(accent, 0x33)
         fillPaint.style = Paint.Style.FILL
     }
 

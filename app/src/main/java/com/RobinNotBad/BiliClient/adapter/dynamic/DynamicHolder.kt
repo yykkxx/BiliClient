@@ -33,6 +33,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
@@ -395,7 +396,7 @@ class DynamicHolder(@NonNull itemView: View, @JvmField val mActivity: BaseActivi
             val stats = dynamic.stats
             if (stats != null) {
                 if (stats.liked) { // 这里，还有下面，一定要加else！否则会导致错乱
-                    likeCount!!.setTextColor(Color.rgb(0xfe, 0x67, 0x9a))
+                    likeCount!!.setTextColor(ThemeUtil.mapLegacyColor(0xFFFE679A.toInt()))
                     likeCount!!.setCompoundDrawablesWithIntrinsicBounds(
                             ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null, null)
                 } else {
@@ -417,7 +418,7 @@ class DynamicHolder(@NonNull itemView: View, @JvmField val mActivity: BaseActivi
                                     MsgUtil.showMsg("点赞成功")
                                     dynamic.stats!!.like = dynamic.stats!!.like + 1
                                     likeCount!!.text = StringUtil.toWan(dynamic.stats!!.like.toLong())
-                                    likeCount!!.setTextColor(Color.rgb(0xfe, 0x67, 0x9a))
+                                    likeCount!!.setTextColor(ThemeUtil.mapLegacyColor(0xFFFE679A.toInt()))
                                     likeCount!!.setCompoundDrawablesWithIntrinsicBounds(
                                             ContextCompat.getDrawable(context, R.drawable.icon_reply_like1), null, null,
                                             null)

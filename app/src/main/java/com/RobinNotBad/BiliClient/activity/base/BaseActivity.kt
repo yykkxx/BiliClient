@@ -50,6 +50,11 @@ open class BaseActivity : AppCompatActivity {
 
     //调整页面边距，参考了hankmi的方式
     override fun onCreate(@Nullable savedInstanceState: Bundle?) {
+        //主题色调覆盖层（#8）：在任何视图创建前把主题样式套上，
+        //让开关/单选/复选/按钮/进度条等控件的激活态直接跟随主题色
+        val overlayStyle = ThemeUtil.overlayStyle()
+        if (overlayStyle != 0) setTheme(overlayStyle)
+
         requestedOrientation = if (SharedPreferencesUtil.getBoolean("ui_landscape", false))
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else

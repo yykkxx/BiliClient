@@ -18,6 +18,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.model.SettingSection
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.material.switchmaterial.SwitchMaterial
 
 //设置项
@@ -35,7 +38,8 @@ class SettingsAdapter(
         "choose" to 1,
         "input_int" to 2,
         "input_float" to 3,
-        "input_string" to 4
+        "input_string" to 4,
+        "multi_choose" to 5
     )
 
     override fun getItemViewType(position: Int): Int {
@@ -49,6 +53,8 @@ class SettingsAdapter(
                 LayoutInflater.from(this.context).inflate(R.layout.cell_setting_choose, parent, false))
             2, 3, 4 -> InputHolder(
                 LayoutInflater.from(this.context).inflate(R.layout.cell_setting_input, parent, false))
+            5 -> MultiChooseHolder(
+                LayoutInflater.from(this.context).inflate(R.layout.cell_setting_multi_choose, parent, false))
             -1 -> DividerHolder(
                 LayoutInflater.from(this.context).inflate(R.layout.cell_divider, parent, false))
             -2 -> TitleHolder(
@@ -80,6 +86,10 @@ class SettingsAdapter(
             2, 3, 4 -> {
                 val inputHolder = holder as InputHolder
                 inputHolder.bind(settingSection)
+            }
+            5 -> {
+                val multiChooseHolder = holder as MultiChooseHolder
+                multiChooseHolder.bind(settingSection)
             }
             else -> {
                 val switchHolder = holder as SwitchHolder
@@ -225,6 +235,66 @@ class SettingsAdapter(
                         }
                     })
                 }
+            }
+        }
+    }
+
+    /**
+     * 多选一设置项（#4）：以 Chip 流式排布全部候选值，高亮当前选中项。
+     * 选中值以字符串形式存进 SharedPreferences（与 play_qn 等 int 值通过
+     * valueIds 一一对应）。
+     */
+    class MultiChooseHolder(@NonNull itemView: View) : RecyclerView.ViewHolder(itemView) {
+        @JvmField
+        val name: TextView = itemView.findViewById(R.id.setting_multi_name)
+
+        @JvmField
+        val desc: TextView = itemView.findViewById(R.id.setting_multi_desc)
+
+        @JvmField
+        val chipGroup: ChipGroup = itemView.findViewById(R.id.setting_multi_chips)
+
+        fun bind(settingSection: SettingSection) {
+            if (settingSection.desc == null || settingSection.desc.isEmpty())
+                desc.setVisibility(View.GONE)
+            else {
+                desc.setText(settingSection.desc)
+                desc.setVisibility(View.VISIBLE)
+            }
+            name.setText(settingSection.name)
+
+            @Suppress("UNCHECKED_CAST")
+            val options = settingSection.extra as? Pair<Array<String>, IntArray> ?: return
+            val labels = options.first
+            val valueIds = options.second
+
+            val current = SharedPreferencesUtil.getInt(settingSection.id,
+                settingSection.defaultValue?.toIntOrNull() ?: 0)
+
+            chipGroup.removeAllViews()
+            for (i in labels.indices) {
+                val chip = Chip(chipGroup.context)
+                chip.text = labels[i]
+                chip.isCheckable = true
+                chip.isCheckedIconVisible = false
+                chip.id = View.generateViewId()
+                // 高亮当前选中项：选中色走主题色，未选中保持灰
+                if (valueIds[i] == current) {
+                    chip.isChecked = true
+                    chip.chipBackgroundColor = android.content.res.ColorStateList.valueOf(ThemeUtil.withAlpha(ThemeUtil.getColor(), 0x66))
+                    chip.chipStrokeWidth = 0f
+                } else {
+                    chip.isChecked = false
+                    chip.chipBackgroundColor = android.content.res.ColorStateList.valueOf(0x33FFFFFF.toInt())
+                    chip.chipStrokeColor = android.content.res.ColorStateList.valueOf(0x33FFFFFF.toInt())
+                    chip.chipStrokeWidth = 1f * chip.resources.displayMetrics.density
+                }
+                chip.setOnClickListener {
+                    SharedPreferencesUtil.putInt(settingSection.id, valueIds[i])
+                    // 重新绑定以刷新高亮
+                    (chipGroup.tag as? Runnable)?.run() ?: bind(settingSection)
+                }
+                chipGroup.addView(chip)
             }
         }
     }

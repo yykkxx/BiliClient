@@ -112,7 +112,7 @@ PY_EOF
 
 # 2.3 第二个包：删除启动 Activity 的 MAIN / LAUNCHER
 if [ "$VARIANT" = "qqmusic-hidden" ]; then
-  echo "==> 删除启动 Activity 的 MAIN + LAUNCHER（从桌面消失）…"
+  echo "==> 删除启动 Activity（LauncherActivity）的 MAIN + LAUNCHER（从桌面消失）…"
   python3 - "$WORK_ROOT/app/src/main/AndroidManifest.xml" <<'PY_EOF'
 import re, sys
 path = sys.argv[1]
@@ -120,7 +120,7 @@ with open(path, encoding='utf-8') as f:
     text = f.read()
 
 pattern = re.compile(
-    r'(<activity\b[^>]*android:name="\.activity\.video\.RecommendActivity".*?</activity>)', re.S)
+    r'(<activity\b[^>]*android:name="\.activity\.video\.LauncherActivity".*?</activity>)', re.S)
 
 def strip_launcher(match):
     block = match.group(1)
@@ -129,12 +129,12 @@ def strip_launcher(match):
         r'<category android:name="android\.intent\.category\.LAUNCHER"\s*/>\s*</intent-filter>',
         '', block, flags=re.S)
     if cleaned == block:
-        raise SystemExit("未能定位 RecommendActivity 的 MAIN/LAUNCHER intent-filter")
+        raise SystemExit("未能定位 LauncherActivity 的 MAIN/LAUNCHER intent-filter")
     return cleaned
 
 new_text, count = pattern.subn(strip_launcher, text)
 if count != 1:
-    raise SystemExit(f"RecommendActivity 匹配数量异常: {count}")
+    raise SystemExit(f"LauncherActivity 匹配数量异常: {count}")
 with open(path, 'w', encoding='utf-8') as f:
     f.write(new_text)
 print("  已移除启动器入口（MAIN + LAUNCHER）")

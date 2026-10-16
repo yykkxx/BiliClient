@@ -26,6 +26,7 @@ import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.request.RequestOptions
@@ -43,7 +44,7 @@ class PrivateMsgSessionsAdapter(context: Context?, sessionsList: ArrayList<Priva
     private val cardRoundRadius: Int
     companion object {
         private val BADGE_TEXT_COLOR = Color.WHITE
-        private val BADGE_BG_COLOR = Color.rgb(207, 75, 95)
+        private val BADGE_BG_COLOR get() = ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt())
         private const val BADGE_TEXT = "  未读 "
     }
 
