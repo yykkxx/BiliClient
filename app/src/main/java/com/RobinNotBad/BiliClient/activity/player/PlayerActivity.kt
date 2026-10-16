@@ -848,13 +848,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private fun clickUI() {
         val now_timestamp = System.currentTimeMillis()
         if (now_timestamp - timestamp_click < 300) {
-            if (SharedPreferencesUtil.getBoolean("player_scale", true) && scaleGestureListener!!.can_reset) {
-                scaleGestureListener!!.can_reset = false
-                layout_video!!.setX(video_origX)
-                layout_video!!.setY(video_origY)
-                layout_video!!.setScaleX(1.0f)
-                layout_video!!.setScaleY(1.0f)
-            } else if (!isLiveMode) {
+            // 双击 = 暂停/继续（#7）。原逻辑双击时先还原缩放、暂停/继续只在
+            // “无缩放可还原”时触发，导致缩放状态下双击无法暂停。
+            // 现在缩放的还原交给手势本身（缩回 1x 后 can_reset 自动变 false），
+            // 双击无条件走暂停/继续。
+            if (!isLiveMode) {
                 if (isPlaying)
                     playerPause()
                 else

@@ -44,6 +44,21 @@ object CenterThreadPool {
     }
 
     /**
+     * Kotlin 尾随 lambda 重载（#3）。
+     *
+     * `CenterThreadPool.run { ... }` 这种写法此前没有 `() -> Unit` 参数的函数可匹配，
+     * 会被 Kotlin 解析成标准库作用域函数 `kotlin.run`，闭包在**调用线程同步执行**——
+     * 在点击监听器里就是主线程，直接导致 NetworkOnMainThreadException
+     * （添加收藏页点收藏夹报错就是这个原因）。
+     * 补上此重载后，尾随 lambda 与 run(Runnable) 一样进 IO 协程。
+     * 注意：如需提前返回，请用 return@run。
+     */
+    @JvmStatic
+    fun run(block: () -> Unit) {
+        run(Runnable { block() })
+    }
+
+    /**
      * 在后台运行, 用于网络请求等耗时操作, 有返回值,
      * 在fragment, activity等位置使用LiveData.observe()获取返回值, 会自动切到主线程,不需要再runOnUiThread().
      *

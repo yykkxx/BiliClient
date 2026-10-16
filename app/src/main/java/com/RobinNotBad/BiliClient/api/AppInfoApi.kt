@@ -102,20 +102,20 @@ object AppInfoApi {
         customHeaders.add(NetWorkUtil.USER_AGENT_WEB)    //防止携带b站cookies导致可能存在的开发者盗号问题（
         customHeaders.add("App-Info")
         try {
-            customHeaders.add(JSONObject()
+            customHeaders.add(asciiHeaderValue(JSONObject()
                     .put("versionName", BuildConfig.VERSION_NAME)
                     .put("versionCode", BuildConfig.VERSION_CODE)
                     .put("isBeta", BuildConfig.BETA)
                     .put("applicationId", BuildConfig.APPLICATION_ID)
                     .put("buildType", BuildConfig.BUILD_TYPE)
                     .put("debugEnabled", BuildConfig.DEBUG)
-                    .toString())
+                    .toString()))
         } catch (e: JSONException) {
             MsgUtil.showMsg("版本信息json生成出错\n无影响，正常情况下你应该不会遇到")
         }
         customHeaders.add("Device-Info")
         try {
-            customHeaders.add(JSONObject()
+            customHeaders.add(asciiHeaderValue(JSONObject()
                     .put("sdk", Build.VERSION.SDK_INT)
                     .put("release", Build.VERSION.RELEASE)
                     .put("product", Build.PRODUCT)
@@ -123,10 +123,34 @@ object AppInfoApi {
                     .put("device", Build.DEVICE)
                     .put("type", Build.TYPE)
                     .put("id", Build.ID)
-                    .toString())
+                    .toString()))
         } catch (e: JSONException) {
             MsgUtil.showMsg("设备信息json生成出错\n无影响，正常情况下你应该不会遇到")
         }
+    }
+
+    /**
+     * OkHttp 拒绝含非 ASCII 字符的请求头值（#1）：
+     * 渠道包 versionName 为 "QQ音乐" 时，App-Info 头直接抛
+     * IllegalArgumentException: Unexpected char 0x97f3，导致主界面首次打开就报
+     * “终端接口出现问题（不影响软件内容）”。
+     * 这里把头值里 0x20~0x7E 之外的 UTF-8 字节做百分号编码（逐字节，信息无损），
+     * 保证任何包名/版本名组合下头值都合法。
+     */
+    private fun asciiHeaderValue(value: String): String {
+        val bytes = value.toByteArray(Charsets.UTF_8)
+        val sb = StringBuilder(bytes.size)
+        for (b in bytes) {
+            val c = b.toInt() and 0xFF
+            if (c in 0x20..0x7E) sb.append(c.toChar())
+            else {
+                sb.append('%')
+                val hex = Integer.toHexString(c).uppercase()
+                if (hex.length < 2) sb.append('0')
+                sb.append(hex)
+            }
+        }
+        return sb.toString()
     }
 
     private fun checkUpdate(context: Context, need_toast: Boolean, debug_ver: Boolean) {
