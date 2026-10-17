@@ -207,7 +207,19 @@ class PlayerDanmakuController(
                 }
             }
 
-            override fun danmakuShown(danmaku: BaseDanmaku) {}
+            override fun danmakuShown(danmaku: BaseDanmaku) {
+                // #2：弹幕文本里带时间戳（如 "8:17"、"1:02:03"）时提示可跳转。
+                // 弹幕层没有点击焦点，所以展示时解析、由播放页决定是否提供跳转入口。
+                val listener = timestampListener ?: return
+                val text = danmaku.text ?: return
+                val ms = parseTimestamp(text)
+                if (ms > 0) {
+                    try {
+                        listener.onTimestamp(text.toString(), ms)
+                    } catch (ignored: Exception) {
+                    }
+                }
+            }
 
             override fun drawingFinished() {}
         })
@@ -574,6 +586,41 @@ class PlayerDanmakuController(
         danmaku.textSize = textSize * (ctx.displayer.density - 0.6f)
         danmaku.time = currentTime() + 100
         view.addDanmaku(danmaku)
+    }
+
+    /** 弹幕显示时回调（时间戳跳转用，#2）。参数为解析出的毫秒数。 */
+    fun interface DanmakuTimestampListener {
+        fun onTimestamp(text: String, timeMs: Long)
+    }
+
+    /** 弹幕文本时间戳监听（播放页注入，null 关闭该功能） */
+    @JvmField
+    var timestampListener: DanmakuTimestampListener? = null
+
+    /**
+     * 弹幕文本时间戳格式：8:17 / 04:16 / 1:02:03。
+     * 必须整段独立出现（前后不是数字/冒号），避免把 1:02:03 的 "02:03" 或
+     * "比分 3:2" 之类误判；纯 hh:mm:ss 与 mm:ss 都接受。
+     */
+    private val timestampPattern = Regex("(?<![0-9:])[0-9]{1,2}:[0-9]{1,2}(?::[0-9]{1,2})?(?![0-9:])")
+
+    /**
+     * 从弹幕文本解析第一个时间戳（毫秒），格式不匹配返回 -1。
+     * 在绘制线程调用，必须轻量。
+     */
+    private fun parseTimestamp(text: CharSequence): Long {
+        val s = text.toString().trim()
+        if (s.isEmpty() || s.length > 60) return -1L
+        val m = timestampPattern.find(s) ?: return -1L
+        val parts = m.value.split(":")
+        var total = 0L
+        for (part in parts) {
+            val v = part.toLongOrNull() ?: return -1L
+            if (v < 0 || v >= 60 && part !== parts.last()) return -1L
+            total = total * 60 + v
+        }
+        // 至少要有实际的分钟+秒结构（m:ss），纯 "5" 之类不会匹配正则
+        return if (total > 0) total * 1000 else -1L
     }
 
     // ------------------------------------------------------------------

@@ -467,7 +467,8 @@ object DynamicApi {
                         card.aid = BangumiApi.getMdidFromEpid(bangumi.getLong("epid"))
                         card.title = bangumi.getString("title")
                         card.cover = bangumi.getString("cover")
-                        card.view = bangumi.getJSONObject("stat").getString("play")
+                        card.view = bangumi.getJSONObject("stat").optString("play", "")
+                        // org.json 的 getString 对 JSON null 会返回字面量 "null"（#5），改 optString 兜底
                         dynamic.major_object = card
                     }
                     "MAJOR_TYPE_ARTICLE" -> {
@@ -581,13 +582,14 @@ object DynamicApi {
     }
 
     private fun analyzeVideoCard(jsonObject: JSONObject): VideoCard {
+        // #5：getString 对 JSON null 返回字面量 "null"，全部换成带兜底的 optString
         return VideoCard(
-                jsonObject.getString("title"),
+                jsonObject.optString("title", ""),
                 "投稿视频",
-                jsonObject.getJSONObject("stat").getString("play"),
-                jsonObject.getString("cover"),
-                jsonObject.getString("aid").toLong(),
-                jsonObject.getString("bvid")
+                jsonObject.getJSONObject("stat").optString("play", ""),
+                jsonObject.optString("cover", ""),
+                jsonObject.optString("aid", "0").toLongOrNull() ?: 0L,
+                jsonObject.optString("bvid", "")
         )
     }
 

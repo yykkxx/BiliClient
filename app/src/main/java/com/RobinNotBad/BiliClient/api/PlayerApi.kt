@@ -50,8 +50,33 @@ object PlayerApi {
      *
      * @param playerData 传入aid、cid、qn等必要数据
      */
+    // #6：播放器防重复打开。地址解析是异步的，解析完成后才 startActivity，
+    // 连续点击"播放"会触发两次解析 + 两个 PlayerActivity 实例。
+    // 用时间戳去抖 + 解析进行中标志双保险。
+    private const val PLAYER_LAUNCH_DEBOUNCE_MS = 800L
+
+    @Volatile
+    private var lastPlayerLaunchAt = 0L
+
+    @Volatile
+    private var playerLaunchInFlight = false
+
     @JvmStatic
     fun startGettingUrl(playerData: PlayerData) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        synchronized(this) {
+            if (playerLaunchInFlight) {
+                Logu.d("播放器", "解析进行中，忽略重复打开请求")
+                return
+            }
+            if (now - lastPlayerLaunchAt < PLAYER_LAUNCH_DEBOUNCE_MS) {
+                Logu.d("播放器", "启动过于频繁，忽略重复打开请求")
+                return
+            }
+            lastPlayerLaunchAt = now
+            playerLaunchInFlight = true
+        }
+
         //原 JumpToPlayerActivity 会在这里补默认清晰度，此处保持一致
         if (playerData.qn == -1) {
             playerData.qn = SharedPreferencesUtil.getInt("play_qn", 16)
@@ -59,6 +84,7 @@ object PlayerApi {
 
         if (playerData.isLocal()) {
             //本地文件：无需请求，直接播放
+            playerLaunchInFlight = false
             val context = BiliTerminal.context
             context.startActivity(buildPlayerIntent(playerData).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
@@ -75,6 +101,8 @@ object PlayerApi {
             } catch (e: Exception) {
                 MsgUtil.showMsg("视频获取失败！\n可能的原因：\n1.本视频仅大会员可播放\n2.视频获取接口失效")
                 e.printStackTrace()
+            } finally {
+                playerLaunchInFlight = false
             }
         })
     }

@@ -161,6 +161,7 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:label="内置播放器"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.NoSwipe" />
         <activity
             android:name=".activity.article.OpusInfoActivity"

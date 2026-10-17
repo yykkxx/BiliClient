@@ -111,15 +111,16 @@ object SearchApi {
                 for (j in 0 until data.length()) {
                     val card = data.getJSONObject(j) // 获得番剧卡片
 
-                    var title = card.getString("title")
+                    var title = card.optString("title", "")
                     title = title.replace("<em class=\"keyword\">", "").replace("</em>", "")
                     // 标题里的红字,直接上面复制粘贴
                     title = StringUtil.htmlToString(title)
-                    val cover = card.getString("cover")
-                    val upName = card.getString("areas")
-                    val aid = card.getLong("media_id")
-                    val bvid = card.getString("season_id")
-                    val playTimesStr = card.getString("index_show")
+                    val cover = card.optString("cover", "")
+                    // #5：getString 对 JSON null 返回字面量 "null"（areas/index_show 常缺省）
+                    val upName = card.optString("areas", "")
+                    val aid = card.optLong("media_id", 0L)
+                    val bvid = card.optString("season_id", "")
+                    val playTimesStr = card.optString("index_show", "")
                     videoCardList.add(VideoCard(title, upName, playTimesStr, cover, aid, bvid, type))
                 }
             }

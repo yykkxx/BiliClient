@@ -224,6 +224,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var progress_history: Long = 0
     private var progress_str: String? = null
 
+    /** 控制条隐藏期间的低频刷新计数（#1） */
+    private var hiddenTickCount = 0
+
+    /** 最近一条带时间戳弹幕解析出的时间（毫秒，#2），-1 表示无 */
+    @Volatile
+    private var lastDanmakuTimestamp = -1L
+
     private var screen_width = 0
     private var screen_height = 0
     private var video_width = 0
@@ -793,6 +800,24 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             return
         }
 
+        // #2：最近有带时间戳的弹幕出现过，直接提供"跳到弹幕时间"的快捷项
+        val danmakuTs = lastDanmakuTimestamp
+        if (danmakuTs in 1 until duration) {
+            AlertDialog.Builder(this)
+                    .setTitle("弹幕时间跳转")
+                    .setMessage("跳转到弹幕提到的时间：" + StringUtil.toTime((danmakuTs / 1000).toInt()) + "？")
+                    .setPositiveButton("跳转") { _, _ ->
+                        seekToPosition(danmakuTs)
+                        MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((danmakuTs / 1000).toInt()))
+                    }
+                    .setNegativeButton("取消") { _, _ -> showTimeJumpInputDialog(duration) }
+                    .show()
+            return
+        }
+        showTimeJumpInputDialog(duration)
+    }
+
+    private fun showTimeJumpInputDialog(duration: Long) {
         val editText = EditText(this)
         editText.hint = "例如 90 / 1:30 / 01:02:03"
         editText.isSingleLine = true
@@ -1010,7 +1035,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         ijkPlayer!!.setDisplay(surfaceHolder)
                         startPrepareIfNeeded()
                         if (isPrepared) {
-                            ijkPlayer!!.seekTo(seekbar_progress!!.getProgress().toLong())
+                            // #1：用播放器真实进度回 seek。之前用 SeekBar 的进度，
+                            // 但 UI 隐藏期间进度条可能停在其被隐藏前的旧位置，
+                            // surface 重建（旋转/切后台回来）就会把视频跳回旧时间
+                            val resumePos = try {
+                                ijkPlayer!!.getCurrentPosition()
+                            } catch (ignored: Exception) {
+                                seekbar_progress!!.getProgress().toLong()
+                            }
+                            if (resumePos > 0)
+                                ijkPlayer!!.seekTo(resumePos)
                         }
                     }
                 }
@@ -1118,6 +1152,19 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
 
         ijkPlayer!!.setOnBufferingUpdateListener { mp, percent ->
+            // #1：percent 变化顺带校准总时长——部分流 prepare 完时 getDuration 仍是 0
+            if (video_all <= 0 && percent > 0 && ijkPlayer != null) {
+                val dur = try {
+                    ijkPlayer!!.getDuration().toInt()
+                } catch (ignored: Exception) {
+                    0
+                }
+                if (dur > 0) {
+                    video_all = dur
+                    seekbar_progress!!.setMax(video_all)
+                    progress_str = StringUtil.toTime(video_all / 1000)
+                }
+            }
             seekbar_progress!!.setSecondaryProgress(percent * video_all / 100)
         }
 
@@ -1183,6 +1230,25 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         isPrepared = true
         video_all = ijkPlayer!!.getDuration().toInt()
+        // #1：DASH 流刚 prepare 完 getDuration 可能返回 0/负值，
+        // 会把进度条 max 设成 0（进度显示全乱、总时长 00:00 不动）。
+        // 晚些再取一次；仍取不到就等缓冲回调里补设。
+        if (video_all <= 0) {
+            mainHandler!!.postDelayed({
+                if (!destroyed && isPrepared && ijkPlayer != null) {
+                    val dur = try {
+                        ijkPlayer!!.getDuration().toInt()
+                    } catch (ignored: Exception) {
+                        0
+                    }
+                    if (dur > 0 && video_all <= 0) {
+                        video_all = dur
+                        seekbar_progress!!.setMax(video_all)
+                        progress_str = StringUtil.toTime(video_all / 1000)
+                    }
+                }
+            }, 1000)
+        }
 
         // 播放就绪：启动/复位卡死看门狗（仅在线播放需要）
         if (isOnlineVideo || isLiveMode) {
@@ -1447,18 +1513,28 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 if (video_now_last == position)
                     return // 进度没变化，不做任何 UI 更新
 
-                // 性能优化（#20）：界面不可见（控制条已隐藏且无字幕/看点需要更新）时，
-                // 只需要维持看门狗与进度记录，不必每秒 4 次跨线程刷新 UI 与 SeekBar。
-                // SeekBar.setProgress 会触发 onProgressChanged + 文字刷新，
-                // 在后台/息屏继续播放的场景下这是持续的无效开销（耗电发热）。
+                // 性能优化（#20）+ 时间同步修复（#1）：界面不可见时降低刷新频率
+                // 但不停止——之前直接跳过 UI 更新，导致 SeekBar 停在旧位置：
+                // 呼出控制条时看到的是过期进度（要等下一个 tick 才同步），
+                // surfaceCreated 回 seek 时用的也是旧值（视频"偶尔跳转"）。
+                // 现在隐藏时也每 4 个 tick（约 1s）刷新一次进度条，开销可忽略。
                 val uiVisible = bottom_buttons!!.getVisibility() == View.VISIBLE ||
                         (subtitles != null) || isLiveMode ||
                         (viewPointAdapter != null && viewPoints != null && !viewPoints!!.isEmpty())
                 if (!uiVisible) {
                     video_now_last = position
                     video_now = position
+                    if (++hiddenTickCount >= 4) {
+                        hiddenTickCount = 0
+                        runOnUiThread {
+                            if (destroyed)
+                                return@runOnUiThread
+                            seekbar_progress!!.setProgress(position)
+                        }
+                    }
                     return
                 }
+                hiddenTickCount = 0
 
                 video_now_last = position
                 video_now = position
@@ -1801,6 +1877,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             )
             danmakuController!!.oldApiUrl = danmaku_url
             danmakuController!!.cacheFile = danmakuFile
+            // #2：弹幕文本时间戳 → 点击弹幕跳转到对应时间。
+            // 悬浮提示 + 再次点按弹幕所在时间文本即可跳转，不做自动 seek（避免打断观看）
+            danmakuController!!.timestampListener =
+                    PlayerDanmakuController.DanmakuTimestampListener { text, timeMs ->
+                        runOnUiThread {
+                            if (destroyed || !isPrepared) return@runOnUiThread
+                            lastDanmakuTimestamp = timeMs
+                            MsgUtil.showMsg("弹幕「$text」- 点击此弹幕时间可跳转：${StringUtil.toTime((timeMs / 1000).toInt())}")
+                        }
+                    }
         }
         danmakuController!!.buildContext()
         return true
@@ -2071,24 +2157,40 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         cancelAllTimers()
 
-        releaseDanmakuLayer()
-        if (ijkPlayer != null) {
-            // 必须先stop再release：release在native层等待播放线程退出，直接release可能长时间阻塞
+        // #3：ijkPlayer 的 stop/release 是 native 同步调用，会等播放/解码线程退出；
+        // 弹幕层 release 也要等绘制线程退出。弱网缓冲中退出时它们可能阻塞主线程
+        // 数秒（"退出至详情页卡死"的主因）。destroyed 已置位，所有异步回调都有守卫，
+        // 这里把整段释放搬到后台线程，主线程只做轻量清理后立刻返回。
+        val playerRef = ijkPlayer
+        ijkPlayer = null
+        val danmakuFileRef = danmakuFile
+        val liveWsRef = liveWebSocket
+        liveWebSocket = null
+        CenterThreadPool.run(Runnable {
             try {
-                ijkPlayer!!.stop()
-            } catch (ignored: IllegalStateException) {
+                releaseDanmakuLayer()
+            } catch (ignored: Exception) {
             }
-            ijkPlayer!!.release()
-            ijkPlayer = null
-        }
-
-        if (isOnlineVideo && danmakuFile != null && danmakuFile!!.exists())
-            danmakuFile!!.delete()
-
-        if (liveWebSocket != null) {
-            liveWebSocket!!.close(1000, "")
-            liveWebSocket = null
-        }
+            if (playerRef != null) {
+                // 必须先stop再release：release在native层等待播放线程退出，直接release可能长时间阻塞
+                try {
+                    playerRef.stop()
+                } catch (ignored: IllegalStateException) {
+                } catch (ignored: Exception) {
+                }
+                try {
+                    playerRef.release()
+                } catch (ignored: Exception) {
+                }
+            }
+            if (isOnlineVideo && danmakuFileRef != null && danmakuFileRef.exists())
+                //noinspection ResultOfMethodCallIgnored
+                danmakuFileRef.delete()
+            try {
+                liveWsRef?.close(1000, "")
+            } catch (ignored: Exception) {
+            }
+        })
 
         danmakuThermalController?.stop()
         danmakuThermalController = null
@@ -2512,6 +2614,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         seekbar_progress!!.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             @SuppressLint("SetTextI18n")
             override fun onProgressChanged(seekBar: SeekBar, position: Int, fromUser: Boolean) {
+                // 只有用户拖动才需要预览文本；程序 setProgress 走这条回调时
+                // 不重复写 text_progress（进度定时器自己会刷新，防止两路更新互相覆盖）
+                if (!fromUser)
+                    return
                 runOnUiThread {
                     if (!isLiveMode)
                         text_progress!!.text = StringUtil.toTime(position / 1000) + "/" + progress_str
@@ -3631,10 +3737,18 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     override fun finish() {
-        if (isPlaying)
-            playerPause()
+        // #3：playerPause 内的 ijkPlayer.pause() 是 native 同步调用，
+        // 网络缓冲/TCP 重传状态下可能阻塞主线程数百毫秒（退出卡死的元凶之一）。
+        // 状态位同步翻转，真正的 pause 移到后台。
+        isPlaying = false
+        if (playbackWatchdog != null)
+            playbackWatchdog!!.setUserWantsPlay(false)
 
-        val progress = if (ijkPlayer != null) ijkPlayer!!.getCurrentPosition() else -1L
+        val progress: Long = try {
+            if (ijkPlayer != null) ijkPlayer!!.getCurrentPosition() else -1L
+        } catch (e: Exception) {
+            -1L
+        }
         if (progress >= 0) {
             val result = Intent()
             result.putExtra("progress", progress.toInt())
@@ -3643,6 +3757,22 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             reportProgressInBackground(progress)
         } else
             setResult(RESULT_CANCELED)
+
+        // 后台补一次 pause + 弹幕暂停（主线程不再等 native 返回）
+        CenterThreadPool.run(Runnable {
+            try {
+                if (ijkPlayer != null && isPrepared)
+                    ijkPlayer!!.pause()
+                if (hasDanmaku() && danmakuReady())
+                    danmakuController!!.pause()
+            } catch (ignored: Exception) {
+            }
+        })
+
+        // 进度条按钮态直接更新（不依赖 playerPause 的 UI 分支）
+        if (btn_control != null)
+            btn_control!!.setImageResource(R.drawable.btn_player_play)
+
         super.finish()
     }
 

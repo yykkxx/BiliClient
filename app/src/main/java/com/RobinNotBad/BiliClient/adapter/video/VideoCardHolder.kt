@@ -44,12 +44,13 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     @SuppressLint("SetTextI18n")
     fun showVideoCard(videoCard: VideoCard, context: Context) {
         val str_upName = videoCard.upName
-        if (str_upName == null || str_upName.isEmpty()) {
+        if (str_upName == null || str_upName.isEmpty() || str_upName == "null") {
             upName!!.visibility = View.GONE
         } else upName!!.text = str_upName
 
         val str_viewCount = videoCard.view
-        if (str_viewCount == null || str_viewCount.isEmpty()) {
+        // "null" 字面量兜底（#5）：部分老数据源 getString(JSON null) 产生
+        if (str_viewCount == null || str_viewCount.isEmpty() || str_viewCount == "null") {
             viewCount!!.visibility = View.GONE
         } else {
             viewCount!!.text = str_viewCount
