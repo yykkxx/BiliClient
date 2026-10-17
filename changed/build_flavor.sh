@@ -53,6 +53,11 @@ echo "==> 应用名  : $APP_NAME"
 echo "==> 版本    : $VERSION_NAME ($VERSION_CODE)"
 echo "==> 变体    : $VARIANT"
 
+# 新设备环境（JDK17 + SDK + GRADLE_USER_HOME 不在默认位置时）通过 FLAVOR_ENV 引入，
+# 必须在任何 gradlew 调用之前 source（JAVA_HOME 决定 daemon 用的 JVM）。
+[ -n "${FLAVOR_ENV:-}" ] && [ -f "$FLAVOR_ENV" ] && source "$FLAVOR_ENV"
+[ -n "${JAVA_HOME:-}" ] || { echo "JAVA_HOME 未设置：请先 source /data/dsh/env/env.sh 或用 FLAVOR_ENV 指定" >&2; exit 1; }
+
 [ -f "$MAIN_ICON" ] || { echo "缺少图标文件: $MAIN_ICON" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
@@ -187,8 +192,13 @@ PY_EOF
 # ---------------------------------------------------------------------------
 echo "==> 构建 release APK …"
 pushd "$WORK_ROOT" >/dev/null
+# FLAVOR_OFFLINE=1 时走 --offline（依赖已缓存的老机器）；新环境默认联网解析
+OFFLINE_FLAG=""
+[ "${FLAVOR_OFFLINE:-0}" = "1" ] && OFFLINE_FLAG="--offline"
+# 用显式 JAVA_HOME 启动 daemon，避免被系统其它 Java 抢占
+export JAVA_HOME
 set +e
-sh ./gradlew :app:assembleRelease --offline --max-workers=2
+sh ./gradlew :app:assembleRelease $OFFLINE_FLAG --max-workers=2
 BUILD_STATUS=$?
 set -e
 popd >/dev/null
