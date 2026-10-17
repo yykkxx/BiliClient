@@ -22,6 +22,7 @@ import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.model.VideoInfo
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.bumptech.glide.Glide
@@ -36,6 +37,11 @@ import java.util.Objects
 
 class CollectionInfoActivity : RefreshListActivity() {
     private var collection: Collection? = null
+
+    init {
+        // #4：双列模式适用于所有视频列表（合集详情页）
+        video_card_layout = true
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +86,10 @@ class CollectionInfoActivity : RefreshListActivity() {
 
         val data: List<VideoCard> = collection.cards
 
+        /** 信息流布局（#4）：由外部按双列开关赋值 */
+        @JvmField
+        var feedLayout: Boolean = ListLayoutUtil.isDualColumnVideo()
+
         override fun getItemViewType(position: Int): Int {
             return if (position == 0) -1 else 0
         }
@@ -89,7 +99,8 @@ class CollectionInfoActivity : RefreshListActivity() {
                 val view = LayoutInflater.from(this.context).inflate(R.layout.cell_collection_info, parent, false)
                 CollectionInfoHolder(view)
             } else {
-                val view = LayoutInflater.from(this.context).inflate(R.layout.cell_video_list, parent, false)
+                val layoutRes = if (feedLayout) R.layout.cell_video_feed else R.layout.cell_video_list // #4
+                val view = LayoutInflater.from(this.context).inflate(layoutRes, parent, false)
                 VideoCardHolder(view)
             }
         }
@@ -136,6 +147,10 @@ class CollectionInfoActivity : RefreshListActivity() {
     class SectionAdapter(val context: Context, val collection: Collection, val recyclerView: RecyclerView) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         val data: List<Collection.Section> = collection.sections
+
+        /** 信息流布局（#4）：由外部按双列开关赋值 */
+        @JvmField
+        var feedLayout: Boolean = ListLayoutUtil.isDualColumnVideo()
         val types = ArrayList<Int>()
 
         override fun getItemViewType(position: Int): Int {
@@ -183,7 +198,8 @@ class CollectionInfoActivity : RefreshListActivity() {
                 val view = LayoutInflater.from(this.context).inflate(R.layout.cell_collection_info, parent, false)
                 CollectionInfoHolder(view)
             } else if (viewType == 0) {
-                val view = LayoutInflater.from(this.context).inflate(R.layout.cell_video_list, parent, false)
+                val layoutRes = if (feedLayout) R.layout.cell_video_feed else R.layout.cell_video_list // #4
+                val view = LayoutInflater.from(this.context).inflate(layoutRes, parent, false)
                 VideoCardHolder(view)
             } else {
                 SectionHolder(TextView(context))

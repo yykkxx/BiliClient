@@ -22,13 +22,18 @@ class LiveCardAdapter(@JvmField val context: Context, @JvmField val roomList: Li
     @JvmField
     var longClickListener: OnItemLongClickListener? = null
 
+    /** 信息流布局（#4）：双列模式下图片撑满卡片、标题在下方不省略 */
+    @JvmField
+    var feedLayout: Boolean = false
+
     fun setOnLongClickListener(listener: OnItemLongClickListener) {
         this.longClickListener = listener
     }
 
     @NonNull
     override fun onCreateViewHolder(@NonNull parent: ViewGroup, viewType: Int): VideoCardHolder {
-        val view: View = LayoutInflater.from(this.context).inflate(R.layout.cell_video_list, parent, false)
+        val layoutRes = if (feedLayout) R.layout.cell_video_feed else R.layout.cell_video_list
+        val view: View = LayoutInflater.from(this.context).inflate(layoutRes, parent, false)
         return VideoCardHolder(view)
     }
 

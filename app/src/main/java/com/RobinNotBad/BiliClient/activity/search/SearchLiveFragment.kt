@@ -6,8 +6,10 @@ import android.util.Log
 import android.view.View
 
 import androidx.annotation.NonNull
+import androidx.recyclerview.widget.RecyclerView
 
 import com.RobinNotBad.BiliClient.adapter.LiveCardAdapter
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
 import com.RobinNotBad.BiliClient.api.LiveApi
 import com.RobinNotBad.BiliClient.api.SearchApi
@@ -35,12 +37,18 @@ class SearchLiveFragment : SearchFragment() {
         super.onCreate(savedInstanceState)
     }
 
+    // #4：搜索"直播"标签也走双列信息流
+    override fun getLayoutManager(): RecyclerView.LayoutManager {
+        return ListLayoutUtil.createVideoCard(requireContext(), false)
+    }
+
     @SuppressLint("SetTextI18n")
     override fun onViewCreated(@NonNull view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         roomList = ArrayList()
         liveCardAdapter = LiveCardAdapter(requireContext(), roomList)
+        liveCardAdapter!!.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
         setAdapter(liveCardAdapter!!)
 
         setOnRefreshListener { refreshInternal() }

@@ -28,8 +28,8 @@ android {
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
-        versionCode 20261020
-        versionName "4.4.0"
+        versionCode 20261021
+        versionName "4.5.0"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

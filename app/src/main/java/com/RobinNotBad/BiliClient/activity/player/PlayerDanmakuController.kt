@@ -154,6 +154,13 @@ class PlayerDanmakuController(
             .setDanmakuTransparency(SharedPreferencesUtil.getFloat("player_danmaku_transparency", 0.5f))
             .preventOverlapping(overlap)
 
+        // #7：同屏数量硬上限。默认 -1 走"自动"（ELAPSED_TIME 过滤），弹幕密集时
+        // 同屏仍可能堆几十条导致绘制/缓存压力大而卡顿。改为固定数量过滤
+        // （QUANTITY 过滤器），超出部分按优先级丢弃，画面清爽且 GPU 压力可控。
+        val maxInScreen = SharedPreferencesUtil.getInt("player_danmaku_maxinscreen", 30)
+        if (maxInScreen > 0)
+            ctx.setMaximumVisibleSizeInScreen(maxInScreen)
+
         context = ctx
         return ctx
     }
@@ -444,7 +451,14 @@ class PlayerDanmakuController(
                 override fun onSegmentFetched(index: Int, reply: DmSegMobileReply) {
                     if (destroyedProvider()) return
                     Logu.d("弹幕", "补拉分段 $index 增量渲染（${reply.elems.size} 条）")
-                    addSegment(reply)
+                    // #7：不在回调线程直接解析。补拉回调可能多段集中到达，
+                    // 每段几百条弹幕的 parseSegment + 逐条 addDanmaku 必须放在
+                    // 后台线程执行（与首次拉取路径一致），否则主线程被卡，
+                    // 表现为"弹幕太多时界面卡住"。
+                    CenterThreadPool.run {
+                        if (destroyedProvider()) return@run
+                        addSegment(reply)
+                    }
                 }
 
                 override fun onFinished(pendingCount: Int) {

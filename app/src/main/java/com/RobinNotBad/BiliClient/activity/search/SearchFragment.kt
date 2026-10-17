@@ -155,7 +155,12 @@ open class SearchFragment : Fragment() {
         setRefreshing(false)
     }
 
-    fun getLayoutManager(): RecyclerView.LayoutManager {
+    /**
+     * 布局管理器：#4 双列模式适用于所有视频列表。
+     * 基类默认单列；搜索"视频"标签（SearchVideoFragment）覆写为可双列，
+     * 其他标签（直播/用户/文章）保持各自默认。
+     */
+    open fun getLayoutManager(): RecyclerView.LayoutManager {
         return ListLayoutUtil.create(requireContext(), false)
     }
 

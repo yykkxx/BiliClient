@@ -17,6 +17,7 @@ import com.RobinNotBad.BiliClient.helper.TutorialHelper
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
@@ -47,6 +48,9 @@ class RecommendActivity : RefreshMainActivity() {
         setOnLoadMoreListener { addRecommend() }
 
         setPageName("推荐")
+
+        // #4：双列模式适用于所有视频列表（推荐页）
+        video_card_layout = true
 
         recyclerView!!.setHasFixedSize(true)
 
@@ -153,6 +157,7 @@ class RecommendActivity : RefreshMainActivity() {
                     if (firstRefresh) {
                         firstRefresh = false
                         videoCardAdapter = VideoCardAdapter(this, videoCardList)
+                        videoCardAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
                         setAdapter(videoCardAdapter)
                     } else {
                         videoCardAdapter.notifyItemRangeInserted(videoCardList.size - list.size, list.size)

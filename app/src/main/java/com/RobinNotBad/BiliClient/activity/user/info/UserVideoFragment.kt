@@ -9,6 +9,7 @@ import androidx.annotation.NonNull
 
 import com.RobinNotBad.BiliClient.activity.base.RefreshListFragment
 import com.RobinNotBad.BiliClient.adapter.video.UserVideoAdapter
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -20,6 +21,11 @@ import java.util.ArrayList
 //2024-05-03
 
 class UserVideoFragment : RefreshListFragment() {
+
+    init {
+        // #4：双列模式适用于所有视频列表（UP主投稿页）
+        video_card_layout = true
+    }
 
     private var mid: Long = 0
     private var videoList: ArrayList<VideoCard>? = null
@@ -55,6 +61,7 @@ class UserVideoFragment : RefreshListFragment() {
                 if (isAdded) {
                     setRefreshing(false)
                     adapter = UserVideoAdapter(requireContext(), mid, videoList!!)
+                    adapter!!.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
                     setAdapter(adapter!!)
                     if (bottom && videoList!!.isEmpty()) showEmptyView()
                 }

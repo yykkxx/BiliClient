@@ -18,9 +18,14 @@ import java.util.ArrayList
 
 class SeriesCardAdapter(val context: Context, val seasonList: ArrayList<Series>) : RecyclerView.Adapter<VideoCardHolder>() {
 
+    /** 信息流布局（#4）：双列模式下图片撑满卡片、标题在下方不省略 */
+    @JvmField
+    var feedLayout: Boolean = false
+
     @NonNull
     override fun onCreateViewHolder(@NonNull parent: ViewGroup, viewType: Int): VideoCardHolder {
-        val view: View = LayoutInflater.from(this.context).inflate(R.layout.cell_video_list, parent, false)
+        val layoutRes = if (feedLayout) R.layout.cell_video_feed else R.layout.cell_video_list
+        val view: View = LayoutInflater.from(this.context).inflate(layoutRes, parent, false)
         return VideoCardHolder(view)
     }
 

@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.View
 
 import androidx.annotation.NonNull
+import androidx.recyclerview.widget.RecyclerView
 
 import com.RobinNotBad.BiliClient.adapter.video.VideoCardAdapter
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
@@ -30,6 +31,11 @@ class SearchVideoFragment : SearchFragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+    }
+
+    // #4：搜索"视频"标签也走双列信息流
+    override fun getLayoutManager(): RecyclerView.LayoutManager {
+        return ListLayoutUtil.createVideoCard(requireContext(), false)
     }
 
     override fun onViewCreated(@NonNull view: View, savedInstanceState: Bundle?) {

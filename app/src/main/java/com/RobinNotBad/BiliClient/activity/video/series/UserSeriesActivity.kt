@@ -5,6 +5,7 @@ import android.util.Log
 
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.video.SeriesCardAdapter
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.api.SeriesApi
 import com.RobinNotBad.BiliClient.model.Series
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -20,6 +21,11 @@ import java.util.ArrayList
 //2024-10-20
 
 class UserSeriesActivity : RefreshListActivity() {
+
+    init {
+        // #4：双列模式适用于所有视频列表（UP主系列页）
+        video_card_layout = true
+    }
 
     private var mid: Long = 0
     private var seriesList: ArrayList<Series>? = null
@@ -42,6 +48,7 @@ class UserSeriesActivity : RefreshListActivity() {
                 bottom = SeriesApi.getUserSeries(mid, page, seriesListLocal) == 1
                 setRefreshing(false)
                 val newAdapter = SeriesCardAdapter(thisLocal, seriesListLocal)
+                newAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
                 adapter = newAdapter
                 setAdapter(newAdapter)
                 if (bottom && seriesListLocal.isEmpty()) showEmptyView()

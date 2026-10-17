@@ -6,6 +6,7 @@ import android.util.Log
 
 import com.RobinNotBad.BiliClient.activity.base.RefreshMainActivity
 import com.RobinNotBad.BiliClient.adapter.LiveCardAdapter
+import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.api.LiveApi
 import com.RobinNotBad.BiliClient.model.LiveRoom
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -22,6 +23,9 @@ open class RecommendLiveActivity : RefreshMainActivity() {
 
         setPageName("推荐直播")
 
+        // #4：双列模式适用于所有视频列表（推荐直播）
+        video_card_layout = true
+
         recyclerView!!.setHasFixedSize(true)
 
         roomList = ArrayList()
@@ -32,6 +36,7 @@ open class RecommendLiveActivity : RefreshMainActivity() {
             try {
                 roomList = LiveApi.getRecommend(page)!! as MutableList<LiveRoom>
                 val newAdapter = LiveCardAdapter(this, roomList!!)
+                newAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
                 adapter = newAdapter
                 setOnLoadMoreListener { pageNum -> continueLoading(pageNum) }
                 setRefreshing(false)
