@@ -39,7 +39,7 @@ class AppRcmdLoginActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_rcmd_login)
-        setPageName("移动端登录")
+        setPageName("移动端登录（" + AppRcmdApi.getIdentity().displayName + "）")
         setTopbarExit()
 
         qrImageView = findViewById(R.id.appRcmdQrImage)
@@ -138,7 +138,8 @@ class AppRcmdLoginActivity : BaseActivity() {
                         }
                         //待扫码
                         code == 86039 -> CenterThreadPool.runOnUiThread {
-                            if (!isDestroyed) scanStat!!.text = "请使用官方手机端哔哩哔哩扫码登录"
+                            if (!isDestroyed) scanStat!!.text =
+                                "请使用官方手机端哔哩哔哩，扫描${AppRcmdApi.getIdentity().displayName}二维码登录"
                         }
                         else -> CenterThreadPool.runOnUiThread {
                             if (!isDestroyed) {

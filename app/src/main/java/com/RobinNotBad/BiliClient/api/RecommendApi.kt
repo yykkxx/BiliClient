@@ -114,8 +114,9 @@ object RecommendApi {
             val card = item.optJSONObject(i) ?: continue
 
             //过滤广告与无法播放的卡片（参照 PiliPlus _filterAppRcmd）
+            //av=普通视频卡片；inline_av/inline_av_v2=TV/手机端返回的内联视频卡片（字段结构与 av 一致，goto 也是 av）
             val cardGoto = card.optString("card_goto")
-            if (cardGoto != "av") {    //只保留普通视频；bangumi 等卡片的 param 不是 aid，本客户端打不开
+            if (cardGoto != "av" && cardGoto != "inline_av" && cardGoto != "inline_av_v2") {    //只保留普通视频；bangumi 等卡片的 param 不是 aid，本客户端打不开
                 Log.d("BiliClient", "RecommendApi getRecommendApp: skip card_goto=$cardGoto")
                 continue
             }
@@ -149,16 +150,18 @@ object RecommendApi {
     }
 
     private fun requestAppRcmd(accessToken: String): JSONObject {
+        //按当前客户端身份（HD/TV/手机）取请求参数与签名密钥
+        val identity = AppRcmdApi.getIdentity()
         val formData = NetWorkUtil.FormData().setUrlParam(true)
-            .put("build", 8430300)
+            .put("build", identity.feedBuild)
             .put("c_locale", "zh_CN")
             .put("channel", "master")
-            .put("column", 2)
-            .put("device", "phone")
-            .put("device_name", "android")
+            .put("column", identity.feedColumn)
+            .put("device", identity.feedDevice)
+            .put("device_name", identity.feedDeviceName)
             .put("device_type", 0)
             .put("disable_rcmd", 0)
-            .put("flush", 8)
+            .put("flush", identity.feedFlush)
             .put("fnval", 976)
             .put("fnver", 0)
             .put("force_host", 2)   //使用https
@@ -166,7 +169,7 @@ object RecommendApi {
             .put("guidance", 1)
             .put("https_url_req", 1)
             .put("idx", rcmdIdx)
-            .put("mobi_app", "android_i")
+            .put("mobi_app", identity.feedMobiApp)
             .put("network", "wifi")
             .put("platform", "android")
             .put("player_net", 1)

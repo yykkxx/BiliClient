@@ -212,7 +212,7 @@ export JAVA_HOME
 set +e
 sh ./gradlew :app:assembleRelease $OFFLINE_FLAG $DAEMON_FLAG \
     --max-workers="$WORKERS" \
-    -Dorg.gradle.jvmargs="-Xmx$XMX -XX:MaxMetaspaceSize=320m -XX:+UseSerialGC" \
+    -Dorg.gradle.jvmargs="-Xmx$XMX -XX:MaxMetaspaceSize=${FLAVOR_META:-512m} -XX:+UseSerialGC" \
     -Pkotlin.compiler.execution.strategy=in-process
 BUILD_STATUS=$?
 set -e

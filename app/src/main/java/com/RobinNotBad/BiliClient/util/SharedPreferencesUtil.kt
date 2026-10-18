@@ -21,6 +21,14 @@ object SharedPreferencesUtil {
     @JvmField
     val APP_RCMD_ENABLED = "app_rcmd_enabled"
 
+    // 移动端推荐客户端身份：hd（默认，旧版本唯一身份）/ tv
+    @JvmField
+    val APP_RCMD_IDENTITY = "app_rcmd_identity"
+
+    // 已存 token 属于哪个身份（切换身份后需重新扫码登录，旧 token 保留可切回）
+    @JvmField
+    val APP_RCMD_TOKEN_IDENTITY = "app_rcmd_token_identity"
+
     @JvmField
     val APP_RCMD_BUVID = "app_rcmd_buvid"
 
