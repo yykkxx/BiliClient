@@ -2,6 +2,10 @@ package com.RobinNotBad.BiliClient.activity.player
 
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.UnderlineSpan
 import com.RobinNotBad.BiliClient.api.DanmakuApi
 import com.RobinNotBad.BiliClient.model.DmSegMobileReply
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -53,6 +57,9 @@ class PlayerDanmakuController(
 
         /** 弹幕重绘频率设置键 */
         const val PREF_REFRESH_RATE = "player_danmaku_refreshrate"
+
+        /** 弹幕时间跳转开关设置键（#2） */
+        const val PREF_TIME_JUMP = "player_danmaku_timejump"
 
         /** 等待播放器解析时长的上限 */
         private const val DURATION_WAIT_MS = 4000L
@@ -161,9 +168,32 @@ class PlayerDanmakuController(
         if (maxInScreen > 0)
             ctx.setMaximumVisibleSizeInScreen(maxInScreen)
 
+        // #2：时间戳弹幕需要"蓝色 + 下划线"的富文本绘制，这里装上支持 Spanned 的填充器
+        ensureCacheStuffer(ctx)
+
         context = ctx
         return ctx
     }
+
+    /**
+     * 确保弹幕上下文已装上支持富文本的绘制填充器（#2）。
+     *
+     * 普通（非 Spanned）弹幕在这个填充器内部会退回 SimpleTextCacheStuffer 的原生
+     * 快速路径，所以对绝大多数弹幕没有任何额外开销。
+     */
+    private fun ensureCacheStuffer(ctx: DanmakuContext) {
+        try {
+            ctx.setCacheStuffer(TimestampSpannedCacheStuffer(), null)
+        } catch (ignored: Exception) {
+        }
+    }
+
+    /**
+     * 是否启用"弹幕时间跳转"（#2）。关闭时既不标记蓝色下划线，也不响应点击跳转。
+     * 开关在「内置播放器设置 → 弹幕时间跳转」。
+     */
+    val timeJumpEnabled: Boolean
+        get() = SharedPreferencesUtil.getBoolean(PREF_TIME_JUMP, true)
 
     private fun prefs(): SharedPreferences? = SharedPreferencesUtil.getSharedPreferences()
 
@@ -178,6 +208,9 @@ class PlayerDanmakuController(
     fun attach(danmakuFile: String? = null, segments: List<DmSegMobileReply>? = null) {
         val view = danmakuView ?: return
         val ctx = context ?: buildContext()
+        // 兜底：cacheStuffer 必须在 prepare() 之前装好，否则本轮的富文本标记
+        // （蓝色下划线时间戳）不会被绘制出来。context 被复用时这里再设一次是幂等的。
+        ensureCacheStuffer(ctx)
 
         // prepare 是异步的：在 prepared() 回调回来之前，解析器的 mContext 仍为 null，
         // 此时任何 addSegment 都会解析失败被丢弃。所以先标记「未就绪」，
@@ -195,7 +228,7 @@ class PlayerDanmakuController(
                 // 把「先于弹幕层就绪」到达的分段补渲染，避免这部分弹幕丢失
                 flushPendingSegments()
 
-                // 弹幕层就绪后，如果之前已经在播放，立刻对齐时间轴
+                // 弹幕层就绪后，如果当前期望播放，立刻对齐时间轴
                 if (started) {
                     view.start(positionProvider())
                 }
@@ -215,17 +248,9 @@ class PlayerDanmakuController(
             }
 
             override fun danmakuShown(danmaku: BaseDanmaku) {
-                // #2：弹幕文本里带时间戳（如 "8:17"、"1:02:03"）时提示可跳转。
-                // 弹幕层没有点击焦点，所以展示时解析、由播放页决定是否提供跳转入口。
-                val listener = timestampListener ?: return
-                val text = danmaku.text ?: return
-                val ms = parseTimestamp(text)
-                if (ms > 0) {
-                    try {
-                        listener.onTimestamp(text.toString(), ms)
-                    } catch (ignored: Exception) {
-                    }
-                }
+                // #2：时间戳弹幕不再弹任何提示（原来的巨大 Toast 严重干扰观看）。
+                // 视觉标识在渲染前由 markTimestamps() 打成"蓝色 + 下划线"，
+                // 点击跳转由播放页在触摸事件里做命中检测（见 findTimestampAt）。
             }
 
             override fun drawingFinished() {}
@@ -565,6 +590,7 @@ class PlayerDanmakuController(
         val ctx = context ?: buildContext()
         val p = BiliProtobufDanmakuParser()
         p.sharedPreferences = prefs()
+        p.setTextMarker(textMarker)
         p.setConfig(ctx)
         p.setDisplayer(ctx.displayer)
         p.setTimer(DanmakuTimer())
@@ -575,16 +601,76 @@ class PlayerDanmakuController(
     private fun addDanmakus(danmakus: IDanmakus?) {
         val view = danmakuView ?: return
         if (danmakus == null || danmakus.isEmpty) return
+        val markTimestamp = timeJumpEnabled
         var count = 0
         val it = danmakus.iterator()
         while (it.hasNext()) {
             val item = it.next() ?: continue
+            if (markTimestamp) markTimestampSpan(item)
             view.addDanmaku(item)
             count++
         }
         if (count > 0) hasDanmaku = true
         Logu.d("danmaku", "增量追加 $count 条弹幕")
     }
+
+    /**
+     * 把弹幕文本里的时间戳标成"蓝色 + 下划线"（#2）。
+     *
+     * 只有确实含时间戳的弹幕才会被包装成 Spanned，其余沿用纯文本快速路径；
+     * 多行弹幕（含换行符被拆到 lines 的）不处理，避免分行下标错位。
+     */
+    private fun markTimestampSpan(item: BaseDanmaku) {
+        if (item.lines != null) return
+        // 幂等：已经包装成富文本的弹幕不再重复处理
+        if (item.text is Spanned) return
+        val raw = item.text?.toString() ?: return
+        if (raw.isEmpty() || raw.length > 60) return
+        val match = timestampPattern.find(raw) ?: return
+        val ms = parseTimestamp(raw)
+        if (ms <= 0) return
+
+        val spanned = SpannableString(raw)
+        val start = match.range.first
+        val end = match.range.last + 1
+        spanned.setSpan(ForegroundColorSpan(TIMESTAMP_COLOR), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        spanned.setSpan(UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        item.text = spanned
+    }
+
+    /**
+     * 命中检测：返回屏幕坐标 (x, y) 处"带时间戳的弹幕"所指向的时间（毫秒）；
+     * 没有命中或功能关闭时返回 -1（#2）。
+     *
+     * 之所以自己做而不是用 DanmakuTouchHelper：弹幕层上方覆盖着控制层
+     * （layout_control 可点击并消费触摸事件），库自带的点击回调根本收不到事件。
+     * 这里由播放页的触摸监听在"轻点"时调用，命中范围在弹幕矩形上做了少量外扩，
+     * 让手表上的手指更好点。
+     */
+    fun findTimestampAt(x: Float, y: Float): Long {
+        if (!timeJumpEnabled) return -1L
+        val visible = danmakuView?.currentVisibleDanmakus ?: return -1L
+        if (visible.isEmpty) return -1L
+
+        var hitText: CharSequence? = null
+        val it = visible.iterator()
+        while (it.hasNext()) {
+            val danmaku = it.next() ?: continue
+            if (danmaku.isOutside) continue
+            if (x < danmaku.left - HIT_SLOP || x > danmaku.right + HIT_SLOP) continue
+            if (y < danmaku.top - HIT_SLOP || y > danmaku.bottom + HIT_SLOP) continue
+            // 后画的弹幕在更上层，命中更靠后的那条更符合直觉
+            hitText = danmaku.text
+        }
+        val text = hitText?.toString() ?: return -1L
+        return parseTimestamp(text)
+    }
+
+    /** 时间戳标记色：B站蓝（#2） */
+    private val TIMESTAMP_COLOR = Color.rgb(0x40, 0xC0, 0xFF)
+
+    /** 命中检测外扩像素 */
+    private val HIT_SLOP = 6f
 
     /** 插入一条本地弹幕（欢迎语 / 自己发送的弹幕 / 直播弹幕） */
     fun addLocalDanmaku(text: String?, color: Int, textSize: Int, type: Int, backgroundColor: Int) {
@@ -601,15 +687,6 @@ class PlayerDanmakuController(
         danmaku.time = currentTime() + 100
         view.addDanmaku(danmaku)
     }
-
-    /** 弹幕显示时回调（时间戳跳转用，#2）。参数为解析出的毫秒数。 */
-    fun interface DanmakuTimestampListener {
-        fun onTimestamp(text: String, timeMs: Long)
-    }
-
-    /** 弹幕文本时间戳监听（播放页注入，null 关闭该功能） */
-    @JvmField
-    var timestampListener: DanmakuTimestampListener? = null
 
     /**
      * 弹幕文本时间戳格式：8:17 / 04:16 / 1:02:03。
@@ -642,19 +719,12 @@ class PlayerDanmakuController(
     // ------------------------------------------------------------------
 
     private fun createParser(danmakuFile: String?, segments: List<DmSegMobileReply>?): BaseDanmakuParser {
-        if (segments != null && segments.isNotEmpty()) {
-            val p = BiliProtobufDanmakuParser()
-            p.sharedPreferences = prefs()
-            p.setDanmakuSegments(segments)
-            protobufParser = p
-            return p
-        }
-
         if (segments != null) {
             // 空分段：仍使用 protobuf 解析器占位，后续可增量追加
             val p = BiliProtobufDanmakuParser()
             p.sharedPreferences = prefs()
             p.setDanmakuSegments(segments)
+            p.setTextMarker(textMarker)
             protobufParser = p
             return p
         }
@@ -664,17 +734,24 @@ class PlayerDanmakuController(
             protobufParser = null
             return object : BaseDanmakuParser() {
                 override fun parse(): IDanmakus = Danmakus()
-            }
+            }.also { it.setTextMarker(textMarker) }
         }
 
-        // 旧版 XML
+        // 旧版 XML：这里的 parse() 在解析器内部一次性完成，
+        // 外部增量接口覆盖不到，所以标记必须在这一层统一注入。
         val loader = DanmakuLoaderFactory.create(DanmakuLoaderFactory.TAG_BILI)
         loader?.load(danmakuFile)
         val p = BiliDanmukuParser()
         p.sharedPreferences = prefs()
+        p.setTextMarker(textMarker)
         val source = loader?.dataSource
         if (source != null) p.load(source)
         protobufParser = null
         return p
+    }
+
+    /** 解析期文本标记器：把时间戳弹幕标成蓝色下划线（#2），供 XML / protobuf 两条路径共用 */
+    private val textMarker = BaseDanmakuParser.DanmakuTextMarker { danmaku ->
+        if (timeJumpEnabled) markTimestampSpan(danmaku)
     }
 }

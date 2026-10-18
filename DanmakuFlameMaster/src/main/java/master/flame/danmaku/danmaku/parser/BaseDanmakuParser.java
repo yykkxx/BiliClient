@@ -17,7 +17,9 @@
 package master.flame.danmaku.danmaku.parser;
 
 import android.content.SharedPreferences;
+import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
+import master.flame.danmaku.danmaku.model.IDanmakuIterator;
 import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.IDisplayer;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
@@ -40,6 +42,44 @@ public abstract class BaseDanmakuParser {
     protected DanmakuContext mContext;
     
     public SharedPreferences sharedPreferences = null;
+
+    /**
+     * 解析结果文本标记器（宿主 App 注入）。
+     *
+     * 用途：由宿主在"解析出弹幕之后、渲染之前"统一改写弹幕文本，
+     * 例如把弹幕里的时间戳标成蓝色下划线（BiliClient #2）。
+     *
+     * 之所以放在解析器层：旧版 XML 弹幕是解析器内部一次性 parse 出来的，
+     * 外部的增量追加接口（parseSegment）覆盖不到它；在这里统一做，
+     * protobuf / XML 两条路径的行为才能保持一致。
+     */
+    public interface DanmakuTextMarker {
+        void mark(BaseDanmaku danmaku);
+    }
+
+    private DanmakuTextMarker mTextMarker;
+
+    public BaseDanmakuParser setTextMarker(DanmakuTextMarker marker) {
+        mTextMarker = marker;
+        return this;
+    }
+
+    /** 对已解析出的弹幕统一应用文本标记（幂等：已标记过的不会被重复包装） */
+    protected void applyTextMarker() {
+        DanmakuTextMarker marker = mTextMarker;
+        if (marker == null || mDanmakus == null || mDanmakus.isEmpty()) {
+            return;
+        }
+        IDanmakuIterator it = mDanmakus.iterator();
+        while (it.hasNext()) {
+            BaseDanmaku danmaku = it.next();
+            if (danmaku == null) continue;
+            try {
+                marker.mark(danmaku);
+            } catch (Exception ignored) {
+            }
+        }
+    }
     
     public BaseDanmakuParser setDisplayer(IDisplayer disp){
         mDisp = disp;
@@ -83,6 +123,7 @@ public abstract class BaseDanmakuParser {
             return mDanmakus;
         mContext.mDanmakuFactory.resetDurationsData();
         mDanmakus = parse();
+        applyTextMarker();
         releaseDataSource();
         mContext.mDanmakuFactory.updateMaxDanmakuDuration();
         return mDanmakus;

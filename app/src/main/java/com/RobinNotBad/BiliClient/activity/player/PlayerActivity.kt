@@ -227,10 +227,6 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     /** 控制条隐藏期间的低频刷新计数（#1） */
     private var hiddenTickCount = 0
 
-    /** 最近一条带时间戳弹幕解析出的时间（毫秒，#2），-1 表示无 */
-    @Volatile
-    private var lastDanmakuTimestamp = -1L
-
     private var screen_width = 0
     private var screen_height = 0
     private var video_width = 0
@@ -271,6 +267,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
     private var screen_landscape = false
     private var screen_round = false
+
 
     /** 弹幕层是否已装载内容（委托给 Kotlin 控制器） */
     private fun hasDanmaku(): Boolean {
@@ -681,6 +678,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                             text_speed!!.text = speed_strs[seekbar_speed!!.getProgress()]
                             hideSpeedHint()
                         }
+                        // #2：轻点命中"带时间戳的弹幕"时直接跳转（无任何提示）。
+                        // 位置判断必须在重置 gesture_moved / gesture_scaled 之前，
+                        // 否则拖动结束的那一下会被误判成点击。
+                        if (tryJumpByDanmakuTap(event))
+                            gesture_click_disabled = true
                         if (gesture_moved)
                             gesture_moved = false
                         if (gesture_scaled)
@@ -710,6 +712,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     text_speed!!.text = speed_strs[seekbar_speed!!.getProgress()]
                     hideSpeedHint()
                 }
+                // #2：未开启视频缩放时同样支持点击时间戳弹幕跳转
+                if (motionEvent.getAction() == MotionEvent.ACTION_UP && tryJumpByDanmakuTap(motionEvent))
+                    gesture_click_disabled = true
                 false
             }
         }
@@ -743,6 +748,30 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             false
         }
 
+    }
+
+    /**
+     * 轻点时命中"带时间戳的弹幕"则直接跳转（#2）。
+     *
+     * 返回 true 表示已消费这次点击（调用方应阻止随后的 clickUI 展开/收起控制栏）。
+     * 弹幕层被"弹幕按钮"关掉时不参与命中，避免关掉弹幕后还能点到看不见的弹幕。
+     */
+    private fun tryJumpByDanmakuTap(event: MotionEvent): Boolean {
+        if (destroyed || !isPrepared || isLiveMode) return false
+        if (gesture_moved || gesture_scaled) return false
+        if (!danmakuReady() || !isDanmakuVisible()) return false
+        if (!danmakuController!!.timeJumpEnabled) return false
+
+        // 触摸坐标属于 layout_control，弹幕视图在圆屏模式（player_ui_round）下会被
+        // 加上上下边距，两者不一定重合，这里换算成弹幕视图自身的坐标系。
+        val danmakuView = mDanmakuView?.getView() ?: return false
+        val x = event.getX() + layout_control!!.getLeft() - danmakuView.getLeft()
+        val y = event.getY() + layout_control!!.getTop() - danmakuView.getTop()
+
+        val timeMs = danmakuController!!.findTimestampAt(x, y)
+        if (timeMs <= 0) return false
+        jumpToDanmakuTimestamp(timeMs)
+        return true
     }
 
     /** 显示长按倍速的半透明提示框（#7） */
@@ -784,9 +813,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     /**
-     * 点击进度时间 → 弹出输入框，支持输入时间跳转视频位置（#24）。
+     * 弹出"跳转到指定时间"的输入框。
      *
-     * 支持格式：`90` / `1:30` / `01:02:03`（纯秒数 / mm:ss / hh:mm:ss）。
+     * 输入格式见 [parseTimeInput]：纯秒数、`分:秒`、`时:分:秒`，
+     * 分隔符可用空格 / 中文冒号 / 英文冒号（#4）。
+     *
+     * 注意：这个方法只应由**左侧进度时间**（控制栏展开时）与**右侧收缩栏的时间按钮**
+     * 触发；底部收起状态下的时间文本不再作为入口（#3）。
      */
     private fun showTimeJumpDialog() {
         if (!isPrepared || isLiveMode) return
@@ -799,27 +832,26 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             MsgUtil.showMsg("视频时长未知，暂时无法跳转")
             return
         }
-
-        // #2：最近有带时间戳的弹幕出现过，直接提供"跳到弹幕时间"的快捷项
-        val danmakuTs = lastDanmakuTimestamp
-        if (danmakuTs in 1 until duration) {
-            AlertDialog.Builder(this)
-                    .setTitle("弹幕时间跳转")
-                    .setMessage("跳转到弹幕提到的时间：" + StringUtil.toTime((danmakuTs / 1000).toInt()) + "？")
-                    .setPositiveButton("跳转") { _, _ ->
-                        seekToPosition(danmakuTs)
-                        MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((danmakuTs / 1000).toInt()))
-                    }
-                    .setNegativeButton("取消") { _, _ -> showTimeJumpInputDialog(duration) }
-                    .show()
-            return
-        }
         showTimeJumpInputDialog(duration)
+    }
+
+    /** 直接跳到弹幕里提到的时间（#2，点击蓝色下划线时间触发） */
+    private fun jumpToDanmakuTimestamp(timeMs: Long) {
+        if (!isPrepared || isLiveMode || timeMs <= 0) return
+        val duration = try {
+            ijkPlayer!!.getDuration()
+        } catch (e: Exception) {
+            0L
+        }
+        var target = timeMs
+        if (target < 0) target = 0
+        if (duration > 0 && target > duration) target = duration
+        seekToPosition(target)
     }
 
     private fun showTimeJumpInputDialog(duration: Long) {
         val editText = EditText(this)
-        editText.hint = "例如 90 / 1:30 / 01:02:03"
+        editText.hint = "例如 90、1:30、5 30、1：02：03"
         editText.isSingleLine = true
         editText.inputType = InputType.TYPE_CLASS_TEXT
         editText.setTextColor(0xffffffff.toInt())
@@ -835,7 +867,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             .setPositiveButton("跳转") { _, _ ->
                 val seconds = parseTimeInput(editText.text.toString())
                 if (seconds == null) {
-                    MsgUtil.showMsg("时间格式不对，示例：90 / 1:30 / 01:02:03")
+                    MsgUtil.showMsg("时间格式不对，示例：90、1:30、5 30、1：02：03")
                     return@setPositiveButton
                 }
                 var targetMs = seconds * 1000L
@@ -849,17 +881,22 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     /**
-     * 解析用户输入的时间文本为秒数。
+     * 解析用户输入的时间文本为秒数（#4）。
      *
-     * 支持 `90`（秒）、`1:30`（分:秒）、`01:02:03`（时:分:秒），
-     * 解析失败返回 null。
+     * 分隔符同时接受：**空格**、**中文冒号（：）**、**英文冒号（:）**，
+     * 且可以混用。例如 `90`（秒）、`1:30`、`1：30`、`5 30`（= 5 分 30 秒）、
+     * `01:02:03`（时:分:秒）都解析为总秒数；解析失败返回 null。
+     *
+     * 规则：按分隔符拆成若干段，从前往后按 60 进位累加
+     * （最后一段是最低位的秒），因此 `5 30` 与 `5:30` 等价。
      */
     private fun parseTimeInput(raw: String?): Long? {
         val text = raw?.trim().orEmpty()
         if (text.isEmpty()) return null
 
-        val parts = text.split(":")
-        if (parts.size > 3) return null
+        // 空格（含多空格 / 制表符）+ 中文冒号 + 英文冒号 都作为分隔符
+        val parts = text.split(Regex("[\\s:：]+")).filter { it.isNotEmpty() }
+        if (parts.isEmpty() || parts.size > 3) return null
 
         var total = 0L
         for (part in parts) {
@@ -868,6 +905,27 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             total = total * 60 + value
         }
         return total
+    }
+
+    /**
+     * 统一刷新左下角进度时间文本（#1）。
+     *
+     * 形如 `当前时间/总时长`，其中总时长在未知时用 `00:00` 兜底（原来会拼出字符串
+     * `null`）。直播模式下不显示总时长。
+     *
+     * 之所以抽成一个函数：进度文本此前只在"用户拖动进度条"这一条路径上被刷新，
+     * 播放过程中的定时刷新完全没碰它，导致时间显示永远不动。
+     */
+    @SuppressLint("SetTextI18n")
+    private fun updateProgressText(positionMs: Int) {
+        val text = text_progress ?: return
+        val current = StringUtil.toTime(positionMs / 1000)
+        if (isLiveMode) {
+            text.text = current
+        } else {
+            val total = progress_str ?: "00:00"
+            text.text = "$current/$total"
+        }
     }
 
     private fun autohideReset() {
@@ -1380,14 +1438,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (isLiveMode)
             text_speed!!.visibility = View.GONE
         text_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.VISIBLE }
-        // 点击进度时间输入时间跳转（#24）
-        // 点时间文本同样打开时间调节小窗（#10）
+        // 点击进度时间打开"跳转时间"小窗（#3）。
+        // 关键：只有控制栏展开（即左侧显示进度条+时间）时这个入口才生效；
+        // 收起状态下屏幕下方那行时间只是一行普通文字，点了不应该弹出任何东西。
         text_progress!!.setOnClickListener { view ->
-            if (isPrepared && !isLiveMode) {
-                layout_card_bg!!.visibility = View.VISIBLE
-                card_time_jump!!.visibility = View.VISIBLE
-                showcon()
-            }
+            if (!isPrepared || isLiveMode) return@setOnClickListener
+            val controlsShown = bottom_buttons!!.getVisibility() == View.VISIBLE
+            if (!controlsShown) return@setOnClickListener
+            layout_card_bg!!.visibility = View.VISIBLE
+            card_time_jump!!.visibility = View.VISIBLE
+            showcon()
         }
         layout_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.GONE }
 
@@ -1529,6 +1589,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         runOnUiThread {
                             if (destroyed)
                                 return@runOnUiThread
+                            if (!isLiveMode)
+                                updateProgressText(position)
                             seekbar_progress!!.setProgress(position)
                         }
                     }
@@ -1552,8 +1614,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         text_progress!!.text = StringUtil.toTime(curr_sec.toInt())
                         text_online!!.text = online_number
                     } else {
+                        // #1：时间文本必须在这里直接刷新。
+                        // 原实现把文字更新放在进度条的 onProgressChanged 里、且只在
+                        // fromUser（用户拖动）时才写，而这里是程序 setProgress，
+                        // 走的是 !fromUser 分支直接 return —— 于是播放中时间文本
+                        // 一直停在布局初始值 00:00/00:00，这就是"时间不动"的根因。
+                        updateProgressText(position)
                         seekbar_progress!!.setProgress(position)
-                        // progressBar上有一个onProgressChange的监听器，文字更改在那里
                     }
                     // 避免每 250ms 都调用 setVisibility（会触发无谓的 requestLayout）
                     if (subtitleVisible) {
@@ -1877,16 +1944,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             )
             danmakuController!!.oldApiUrl = danmaku_url
             danmakuController!!.cacheFile = danmakuFile
-            // #2：弹幕文本时间戳 → 点击弹幕跳转到对应时间。
-            // 悬浮提示 + 再次点按弹幕所在时间文本即可跳转，不做自动 seek（避免打断观看）
-            danmakuController!!.timestampListener =
-                    PlayerDanmakuController.DanmakuTimestampListener { text, timeMs ->
-                        runOnUiThread {
-                            if (destroyed || !isPrepared) return@runOnUiThread
-                            lastDanmakuTimestamp = timeMs
-                            MsgUtil.showMsg("弹幕「$text」- 点击此弹幕时间可跳转：${StringUtil.toTime((timeMs / 1000).toInt())}")
-                        }
-                    }
+            // #2：时间戳弹幕的视觉标识（蓝色下划线）与点击跳转都由控制器负责，
+            // 这里不再注册任何会弹提示的回调（原来的巨大 Toast 已删除）。
         }
         danmakuController!!.buildContext()
         return true
@@ -2566,7 +2625,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             val editText = time_jump_input ?: return@setOnClickListener
             val seconds = parseTimeInput(editText.text.toString())
             if (seconds == null) {
-                MsgUtil.showMsg("时间格式不对，示例：90 / 1:30 / 01:02:03")
+                MsgUtil.showMsg("时间格式不对，示例：90、1:30、5 30、1：02：03")
                 return@setOnClickListener
             }
             val duration = try { ijkPlayer!!.getDuration() } catch (e: Exception) { 0L }
@@ -2620,7 +2679,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     return
                 runOnUiThread {
                     if (!isLiveMode)
-                        text_progress!!.text = StringUtil.toTime(position / 1000) + "/" + progress_str
+                        updateProgressText(position)
                 }
             }
 

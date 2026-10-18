@@ -4,6 +4,7 @@ import android.os.Bundle
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
+import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
 
@@ -79,6 +80,11 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
                 getString(R.string.desc_danmaku_refreshrate), "33"))
         sectionList.add(SettingSection("switch", "弹幕温控", "player_danmaku_thermal",
                 getString(R.string.desc_danmaku_thermal), "false"))
+        // #2：弹幕时间跳转开关。开启时弹幕里的时间戳会标成蓝色下划线，
+        // 点击即可跳到该时间；关闭后既不标记也不响应点击。
+        sectionList.add(SettingSection("switch", "弹幕时间跳转",
+                PlayerDanmakuController.PREF_TIME_JUMP,
+                getString(R.string.desc_danmaku_timejump), "true"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 
