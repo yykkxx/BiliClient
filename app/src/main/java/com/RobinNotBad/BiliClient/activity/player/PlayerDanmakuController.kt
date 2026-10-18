@@ -93,6 +93,16 @@ class PlayerDanmakuController(
     private var started = false
 
     /**
+     * 期望弹幕层处于播放状态（#6）。
+     *
+     * 与 [started] 的区别：起停由播放器状态驱动（暂停/缓冲/后台切回），
+     * 而 [wantRunning] 记录"用户当前希望它跑着"。有了它，弹幕层
+     * prepare 完成（异步）时才能正确决定要不要自动启动——否则会出现
+     * "暂停状态下重建弹幕层，prepared 回调把它悄悄启动了"（弹幕自己滚，画面却停着）。
+     */
+    private var wantRunning = false
+
+    /**
      * 已到达但弹幕层尚未 prepare 完成的分段。
      *
      * 必要性：DanmakuView.prepare() 是异步的（要等 Surface 就绪 + 建绘制线程），
@@ -229,7 +239,8 @@ class PlayerDanmakuController(
                 flushPendingSegments()
 
                 // 弹幕层就绪后，如果当前期望播放，立刻对齐时间轴
-                if (started) {
+                if (wantRunning) {
+                    started = true
                     view.start(positionProvider())
                 }
                 val msg = if (protobufParser != null) {
@@ -270,6 +281,7 @@ class PlayerDanmakuController(
     fun start() {
         val view = danmakuView ?: return
         started = true
+        wantRunning = true
         val position = try {
             positionProvider()
         } catch (e: Exception) {
@@ -279,11 +291,15 @@ class PlayerDanmakuController(
     }
 
     fun pause() {
+        wantRunning = false
         danmakuView?.pause()
     }
 
     fun resume() {
-        if (hasDanmaku || started) danmakuView?.resume()
+        if (hasDanmaku || started) {
+            wantRunning = true
+            danmakuView?.resume()
+        }
     }
 
     fun seekTo(ms: Long) {
@@ -309,6 +325,26 @@ class PlayerDanmakuController(
         danmakuView?.hide()
     }
 
+    /**
+     * 关闭弹幕并**立即清屏**（#6）。
+     *
+     * 只调用 hide() 时，清屏动作是交给弹幕绘制线程执行的；一旦绘制线程
+     * 因为弱网/后台切换卡死，这条消息永远得不到处理，就会出现
+     * "弹幕按钮已经关了、弹幕还留在屏幕上"。
+     * 这里额外在 UI 线程直接触发一次画布清空（只置标志 + postInvalidate，
+     * 不依赖绘制线程），保证按钮关掉后画面立刻干净。
+     */
+    fun hideAndClear() {
+        danmakuVisible = false
+        wantRunning = false
+        val view = danmakuView ?: return
+        view.hide()
+        try {
+            (view as? DanmakuView)?.clear()
+        } catch (ignored: Exception) {
+        }
+    }
+
     fun show() {
         danmakuVisible = true
         danmakuView?.show()
@@ -318,6 +354,14 @@ class PlayerDanmakuController(
         fetchCancelled?.set(true)
         backfiller?.cancel()
         backfiller = null
+        started = false
+        wantRunning = false
+        // 释放后视图的绘制线程会被 quit，之前暂存的分段/解析器状态全部作废
+        synchronized(pendingSegments) { pendingSegments.clear() }
+        layerPrepared = false
+        parser = null
+        protobufParser = null
+        hasDanmaku = false
         danmakuView?.release()
     }
 

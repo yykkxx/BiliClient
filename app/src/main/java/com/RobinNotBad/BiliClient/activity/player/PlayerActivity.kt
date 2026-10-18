@@ -268,6 +268,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var screen_landscape = false
     private var screen_round = false
 
+    /** 是否刚从后台切回（#6），用于判断弹幕层要不要重建 */
+    private var wentToBackground = false
+
+    /** 弹幕层是否正在重建（#6），避免重入导致同时存在两个弹幕层 */
+    private var danmakuRestarting = false
+
 
     /** 弹幕层是否已装载内容（委托给 Kotlin 控制器） */
     private fun hasDanmaku(): Boolean {
@@ -1327,9 +1333,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 // 当前可见则隐藏，隐藏则显示（以控制器的状态为准，避免两套状态不一致）
                 val willShow = !isDanmakuVisible()
                 if (willShow) {
-                    danmakuController!!.show()
+                    // #6：重开弹幕时把"获取流程"从头走一遍（见 restartDanmakuFetch）。
+                    // 弱网下弹幕层可能已经处于半死状态，单纯 show() 救不回来；
+                    // 重建后重新拉取才是一次干净的复位。
+                    restartDanmakuFetch(true)
                 } else {
-                    danmakuController!!.hide()
+                    // #6：关闭时直接清屏，避免"按钮已关、弹幕还在屏幕上"
+                    danmakuController!!.hideAndClear()
                 }
                 btn_danmaku!!.setImageResource(if (willShow) R.mipmap.danmakuon else R.mipmap.danmakuoff)
                 SharedPreferencesUtil.putBoolean("pref_switch_danmaku", willShow)
@@ -1337,7 +1347,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             // 按用户偏好初始化可见性
             val prefShow = SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true)
             if (!prefShow) {
-                danmakuController!!.hide()
+                danmakuController!!.hideAndClear()
                 btn_danmaku!!.setImageResource(R.mipmap.danmakuoff)
             } else {
                 danmakuController!!.show()
@@ -1925,6 +1935,106 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
     }
 
+    /**
+     * 把弹幕获取流程从头走一遍（#6）。
+     *
+     * 触发场景：
+     * 1. 用户把弹幕按钮关掉再打开（最常见的手动"救活"手段）；
+     * 2. 从后台切回前台时发现弹幕层已不健康（弱网下绘制线程卡死）。
+     *
+     * 做三件事：
+     * - **中断**上一次拉取（取消标志 + 补拉器），避免旧请求回来污染新弹幕层；
+     * - **重建**弹幕层（release 旧控制器与视图，重新 findViewById）——
+     *   绘制线程已经坏掉时，只有重建才能恢复；
+     * - **重新拉取**全部弹幕分段（在线）或重新加载本地文件。
+     *
+     * 线程安排很重要：release() 会 join 弹幕绘制线程，弱网/卡死时可能阻塞数秒，
+     * 绝不能在主线程做（那会变成新的"点一下卡半天"）。所以：
+     * 主线程只负责立刻清屏，真正的释放与重建放到后台 + 回主线程重挂。
+     *
+     * @param showDanmaku 重建后是否让弹幕层可见（按钮点击路径恒为 true；
+     *                    后台切回路径按用户偏好传入）
+     */
+    private fun restartDanmakuFetch(showDanmaku: Boolean) {
+        if (destroyed) return
+        if (danmakuRestarting) return
+        danmakuRestarting = true
+
+        // 立刻清屏：即便下面的重建失败，也不会留下"按钮关了弹幕还在"的残影
+        try {
+            danmakuController?.hideAndClear()
+        } catch (ignored: Exception) {
+        }
+
+        CenterThreadPool.run(Runnable {
+            // release 可能阻塞（join 绘制线程），必须在后台执行
+            try {
+                releaseDanmakuLayer()
+            } catch (e: Exception) {
+                Logu.w("弹幕", "重建弹幕层时释放失败: " + e.message)
+            }
+            runOnUiThread {
+                if (destroyed) {
+                    danmakuRestarting = false
+                    return@runOnUiThread
+                }
+                rebuildDanmakuLayer(showDanmaku)
+                danmakuRestarting = false
+            }
+        })
+    }
+
+    /** [restartDanmakuFetch] 的第二段：在主线程重新挂载弹幕层并重新拉取 */
+    private fun rebuildDanmakuLayer(showDanmaku: Boolean) {
+        // release 时已把视图引用置空，这里重新拿到
+        mDanmakuView = findViewById<View>(R.id.sv_danmaku) as IDanmakuView
+
+        // 直播模式：空弹幕层 + 立刻启动
+        if (isLiveMode) {
+            if (streamDanmaku(null) && danmakuReady()) {
+                if (showDanmaku) danmakuController!!.show() else danmakuController!!.hideAndClear()
+                danmakuController!!.start()
+            }
+            return
+        }
+
+        // 在线视频重新拉取全部分段；本地弹幕重新加载文件
+        if (isOnlineVideo) {
+            danmakuFile = File(cacheDir, "danmaku.xml")
+            if (danmakuFile!!.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                danmakuFile!!.delete()
+            }
+            downdanmu()
+        } else {
+            val file = danmakuFile
+            if (file != null && file.exists()) {
+                streamDanmaku(file.toString())
+            } else {
+                streamDanmaku(danmaku_url)
+            }
+        }
+
+        // 重建后弹幕层是全新的：恢复可见性，并把时间轴对齐到当前播放位置
+        if (danmakuReady()) {
+            if (showDanmaku) {
+                danmakuController!!.show()
+            } else {
+                danmakuController!!.hideAndClear()
+            }
+            if (isPrepared && ijkPlayer != null) {
+                val pos = try {
+                    ijkPlayer!!.getCurrentPosition()
+                } catch (e: Exception) {
+                    0L
+                }
+                danmakuController!!.seekTo(pos)
+                if (showDanmaku && isPlaying)
+                    danmakuController!!.start()
+            }
+        }
+    }
+
     /** 初始化弹幕控制器（只做一次），并注入播放器相关的能力；视图未就绪时返回 false */
     private fun ensureDanmakuController(): Boolean {
         if (mDanmakuView == null)
@@ -2184,11 +2294,38 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     override fun onResume() {
         super.onResume()
         Logu.v("onResume")
+        // #6：从后台切回时，弹幕绘制线程可能已经死了（表面被销毁）。
+        // 只要发现弹幕层不健康，就整条重建 + 重新拉取，避免"卡死/残留"。
+        if (wentToBackground) {
+            wentToBackground = false
+            if (isPrepared && !isLiveMode && danmakuReady() && !isDanmakuLayerHealthy()) {
+                Logu.w("弹幕", "切回前台发现弹幕层异常，重建并重新拉取")
+                restartDanmakuFetch(SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true))
+            }
+        }
+    }
+
+    /**
+     * 弹幕层是否健康：绘制线程还存在即视为可用。
+     *
+     * 判据只能是 "handler != null"：
+     * DanmakuView.stop()/release() 会把 handler 置空并 join 绘制线程，
+     * 这是"弹幕层真的坏了"的唯一可靠信号。
+     * 注意**不能**用 `handler.isStop`：播放暂停时 DrawHandler 的 quitFlag 本来就是 true，
+     * 拿它当"坏掉"判据会导致每次暂停后切回都白白重拉一遍全部弹幕分段（耗流量、发热）。
+     */
+    private fun isDanmakuLayerHealthy(): Boolean {
+        val view = mDanmakuView ?: return false
+        return view.getHandler() != null
     }
 
     override fun onStop() {
         super.onStop()
         Logu.v("onStop")
+        // #6：记录"曾经切到后台"。回到前台时据此做一次弹幕层健康检查——
+        // 弱网下弹幕绘制线程可能卡在内核读取里不再推进（不回调、不报错），
+        // 表现就是"切回来弹幕卡死"。这里只记录事件，检查放在 onResume。
+        wentToBackground = true
     }
 
     @JvmField

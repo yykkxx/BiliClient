@@ -54,6 +54,15 @@ class ImageViewerActivity : BaseActivity() {
 
         for (i in imageList!!.indices) {
             val photoView = PhotoView(this)
+            // 双指缩放体验优化（#5）：
+            // 1) 倍率分三档（1x / 2.5x / 8x），捏合到中档附近会自然吸附，
+            //    避免原实现只有 min/max 两档时"要么太小要么糊"；
+            // 2) 允许父容器在图片滑到边缘时接管手势：1x 下左右滑动正常翻页，
+            //    放大后则优先拖动图片，拖到边界再继续滑才翻页；
+            // 3) 双击缩放动画缩短，手感更跟手。
+            photoView.setScaleLevels(1f, 2.5f, 8f)
+            photoView.setAllowParentInterceptOnEdge(true)
+            photoView.setZoomTransitionDuration(200)
             try {
                 Glide.with(this).asDrawable()
                         .load(GlideUtil.url_hq(imageList[i]))  //让b站自己压缩一下以加速获取
@@ -61,7 +70,6 @@ class ImageViewerActivity : BaseActivity() {
                         .override(Target.SIZE_ORIGINAL)//override这一项一定要加，这样才会显示原图，不然一放大就糊成使
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
                         .into(photoView)
-                photoView.maximumScale = 6.25f
             } catch (e: OutOfMemoryError) {
                 MsgUtil.showMsg("超出内存，加载失败")
             } catch (e: Exception) {
