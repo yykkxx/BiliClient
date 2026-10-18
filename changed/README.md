@@ -39,6 +39,19 @@ releases/com.tencent.qqmusicwatchs_20260606_hidden.apk
 | `FLAVOR_WORK_ROOT` | `/tmp/biliflavorsrc` | 临时副本目录 |
 | `FLAVOR_RELEASE_DIR` | `<repo>/releases` | 产物输出目录 |
 | `FLAVOR_PACKAGE` | `com.tencent.qqmusicwatchs` | 渠道包包名 |
+| `FLAVOR_ENV` | 空 | 构建环境脚本，如 `/data/dsh/env/env.sh`（设置 `JAVA_HOME` / SDK / `GRADLE_USER_HOME`） |
+| `FLAVOR_WORKERS` | `1` | Gradle 并行 worker 数 |
+| `FLAVOR_XMX` | `1280m` | 构建 JVM 最大堆 |
+| `FLAVOR_DAEMON` | `0` | `1` = 常驻 Gradle daemon（更快，但更吃内存） |
+
+> **内存提示**：本机常驻应用会占用大量内存，`gradle` 默认的 2G 堆 + 独立 Kotlin
+> daemon 很容易把设备打爆重启。脚本默认采用保守配置（1 个 worker、1280m 堆、
+> `--no-daemon`、Kotlin 进程内编译）；确认内存充裕时可用
+> `FLAVOR_WORKERS=2 FLAVOR_XMX=2048m FLAVOR_DAEMON=1` 加速。
+>
+> 若构建被中断（例如设备重启），Gradle 的 build-script 缓存可能损坏并报
+> `Could not load compiled classes for build file` —— 删除
+> `$GRADLE_USER_HOME/caches/jars-9` 与 `caches/<版本>/scripts` 后重试即可。
 
 ## 实现方式
 

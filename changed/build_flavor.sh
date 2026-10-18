@@ -195,10 +195,25 @@ pushd "$WORK_ROOT" >/dev/null
 # FLAVOR_OFFLINE=1 时走 --offline（依赖已缓存的老机器）；新环境默认联网解析
 OFFLINE_FLAG=""
 [ "${FLAVOR_OFFLINE:-0}" = "1" ] && OFFLINE_FLAG="--offline"
-# 用显式 JAVA_HOME 启动 daemon，避免被系统其它 Java 抢占
+
+# 资源占用可调（本机常驻应用已吃掉大半内存，gradle 默认 2G 堆 + 两个 daemon
+# 很容易把设备打爆重启）。默认走保守配置，需要更快时再用环境变量放宽：
+#   FLAVOR_WORKERS   并行 worker 数，默认 1
+#   FLAVOR_XMX       构建 JVM 最大堆，默认 1280m
+#   FLAVOR_DAEMON    1=常驻 daemon（快，但占内存），默认 0=用完即退
+WORKERS="${FLAVOR_WORKERS:-1}"
+XMX="${FLAVOR_XMX:-1280m}"
+DAEMON_FLAG="--no-daemon"
+[ "${FLAVOR_DAEMON:-0}" = "1" ] && DAEMON_FLAG=""
+
+# 用显式 JAVA_HOME 启动，避免被系统其它 Java 抢占；
+# kotlin 编译放进程内，避免额外再起一个 Kotlin daemon。
 export JAVA_HOME
 set +e
-sh ./gradlew :app:assembleRelease $OFFLINE_FLAG --max-workers=2
+sh ./gradlew :app:assembleRelease $OFFLINE_FLAG $DAEMON_FLAG \
+    --max-workers="$WORKERS" \
+    -Dorg.gradle.jvmargs="-Xmx$XMX -XX:MaxMetaspaceSize=320m -XX:+UseSerialGC" \
+    -Pkotlin.compiler.execution.strategy=in-process
 BUILD_STATUS=$?
 set -e
 popd >/dev/null
