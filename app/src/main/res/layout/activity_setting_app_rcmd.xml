@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".activity.settings.SettingAppRcmdActivity">
+
+    <RelativeLayout
+        android:id="@+id/top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
+
+        <TextView
+            android:id="@+id/pageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentLeft="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginStart="8dp"
+            android:layout_toStartOf="@id/timeText"
+            android:layout_toLeftOf="@id/timeText"
+            android:lines="1"
+            android:text="移动端推荐逻辑"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/arrow_back" />
+
+        <com.RobinNotBad.BiliClient.ui.widget.TextClock
+            android:id="@+id/timeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_marginVertical="3dp"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentEnd="true" />
+    </RelativeLayout>
+
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/activity_padding_horizontal"
+            android:paddingVertical="2dp">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <TextView
+                    android:id="@+id/appRcmdTip"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="8dp"
+                    android:alpha="0.9"
+                    android:text="实验性功能：开启后仅推荐页改用移动端（APP端）推荐逻辑，软件其他功能不受影响。"
+                    android:textSize="11sp" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/appRcmdLogin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <TextView
+                    android:id="@+id/appRcmdLoginText"
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="扫码登录（移动端方式）"
+                    android:textAlignment="textStart"
+                    android:textSize="13sp"
+                    app:drawableEndCompat="@drawable/arrow_forward"
+                    tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="3dp">
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/appRcmdSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#00000000"
+                        android:text="使用移动端推荐逻辑" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="6dp"
+                        android:layout_marginTop="1dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.9"
+                        android:text="开启后推荐页从web端推荐切换为移动端推荐，关闭即恢复原web端推荐"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/appRcmdLogout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="35sp"
+                    android:layout_marginHorizontal="8dp"
+                    android:gravity="center_vertical"
+                    android:text="退出移动端登录"
+                    android:textAlignment="textStart"
+                    android:textSize="13sp"
+                    android:visibility="visible"
+                    app:drawableEndCompat="@drawable/arrow_forward"
+                    tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+</RelativeLayout>

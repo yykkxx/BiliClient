@@ -8,6 +8,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
+import android.content.Intent
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -25,6 +26,14 @@ class SettingLaboratoryActivity : RefreshListActivity() {
         val debugBuild = BiliTerminal.isDebugBuild()
 
         val sectionList = ArrayList<SettingSection>()
+
+        //移动端推荐逻辑（实验性，独立登录 + 只影响推荐页）
+        sectionList.add(SettingSection("title", "实验性功能", "", "", ""))
+        sectionList.add(SettingSection("click", "移动端推荐逻辑", "",
+                "使用移动端（APP端）推荐接口替换推荐页内容，需要在进入的页面里扫码登录后开启", "false",
+                Runnable {
+                    startActivity(Intent(this, SettingAppRcmdActivity::class.java))
+                }))
 
         sectionList.add(SettingSection("title", "可用性", "", "", ""))
         sectionList.add(SettingSection("switch", "新版弹幕获取方式", "new_danmaku_api",

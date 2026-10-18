@@ -45,7 +45,7 @@ class RecommendActivity : RefreshMainActivity() {
         Log.e("debug", "进入推荐页")
 
         setOnRefreshListener { refreshRecommend() }
-        setOnLoadMoreListener { addRecommend() }
+        setOnLoadMoreListener { addRecommend(false) }
 
         setPageName("推荐")
 
@@ -141,15 +141,15 @@ class RecommendActivity : RefreshMainActivity() {
             videoCardAdapter.notifyItemRangeRemoved(0, last)
         }
 
-        addRecommend()
+        addRecommend(true)
     }
 
-    private fun addRecommend() {
+    private fun addRecommend(isRefresh: Boolean) {
         Log.e("debug", "加载下一页")
         CenterThreadPool.run(Runnable {
             try {
                 val list: MutableList<VideoCard> = ArrayList()
-                RecommendApi.getRecommend(list)
+                RecommendApi.getRecommend(list, isRefresh)
                 setRefreshing(false)
 
                 runOnUiThread {

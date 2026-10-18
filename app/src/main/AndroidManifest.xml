@@ -219,6 +219,16 @@
             android:label="实验性功能"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.SettingAppRcmdActivity"
+            android:exported="false"
+            android:label="移动端推荐逻辑"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.settings.login.AppRcmdLoginActivity"
+            android:exported="false"
+            android:label="移动端登录"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.SettingTerminalPlayerActivity"
             android:exported="false"
             android:label="内置播放器设置"

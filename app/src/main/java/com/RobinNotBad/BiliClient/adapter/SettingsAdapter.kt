@@ -39,7 +39,8 @@ class SettingsAdapter(
         "input_int" to 2,
         "input_float" to 3,
         "input_string" to 4,
-        "multi_choose" to 5
+        "multi_choose" to 5,
+        "click" to 6
     )
 
     override fun getItemViewType(position: Int): Int {
@@ -55,6 +56,8 @@ class SettingsAdapter(
                 LayoutInflater.from(this.context).inflate(R.layout.cell_setting_input, parent, false))
             5 -> MultiChooseHolder(
                 LayoutInflater.from(this.context).inflate(R.layout.cell_setting_multi_choose, parent, false))
+            6 -> ClickHolder(
+                LayoutInflater.from(this.context).inflate(R.layout.cell_setting_click, parent, false))
             -1 -> DividerHolder(
                 LayoutInflater.from(this.context).inflate(R.layout.cell_divider, parent, false))
             -2 -> TitleHolder(
@@ -90,6 +93,10 @@ class SettingsAdapter(
             5 -> {
                 val multiChooseHolder = holder as MultiChooseHolder
                 multiChooseHolder.bind(settingSection)
+            }
+            6 -> {
+                val clickHolder = holder as ClickHolder
+                clickHolder.bind(settingSection)
             }
             else -> {
                 val switchHolder = holder as SwitchHolder
@@ -295,6 +302,30 @@ class SettingsAdapter(
                     (chipGroup.tag as? Runnable)?.run() ?: bind(settingSection)
                 }
                 chipGroup.addView(chip)
+            }
+        }
+    }
+
+    /**
+     * 点击类设置项：extra 放 Runnable 作为点击回调（纯增量类型，不影响既有设置页）。
+     */
+    class ClickHolder(@NonNull itemView: View) : RecyclerView.ViewHolder(itemView) {
+        @JvmField
+        val name: TextView = itemView.findViewById(R.id.setting_click_name)
+
+        @JvmField
+        val desc: TextView = itemView.findViewById(R.id.setting_click_desc)
+
+        fun bind(settingSection: SettingSection) {
+            if (settingSection.desc == null || settingSection.desc.isEmpty())
+                desc.setVisibility(View.GONE)
+            else {
+                desc.setText(settingSection.desc)
+                desc.setVisibility(View.VISIBLE)
+            }
+            name.setText(settingSection.name)
+            itemView.setOnClickListener {
+                (settingSection.extra as? Runnable)?.run()
             }
         }
     }

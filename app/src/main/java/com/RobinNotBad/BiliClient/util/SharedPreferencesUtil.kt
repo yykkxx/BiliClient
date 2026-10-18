@@ -17,6 +17,25 @@ object SharedPreferencesUtil {
     @JvmField
     val RCMD_API_NEW_PARAM = "rcmd_api_new_param"
 
+    // 移动端推荐逻辑（实验性）：全部使用独立前缀 app_rcmd_，与 web 登录互不影响
+    @JvmField
+    val APP_RCMD_ENABLED = "app_rcmd_enabled"
+
+    @JvmField
+    val APP_RCMD_BUVID = "app_rcmd_buvid"
+
+    @JvmField
+    val APP_RCMD_ACCESS_TOKEN = "app_rcmd_access_token"
+
+    @JvmField
+    val APP_RCMD_REFRESH_TOKEN = "app_rcmd_refresh_token"
+
+    @JvmField
+    val APP_RCMD_MID = "app_rcmd_mid"
+
+    @JvmField
+    val APP_RCMD_COOKIES = "app_rcmd_cookies"
+
     @JvmField
     val MENU_SORT = "menu_sort"
 
