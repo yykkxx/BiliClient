@@ -348,6 +348,11 @@
             android:label="收藏夹列表"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.user.favorite.FavoriteBatchDownloadActivity"
+            android:exported="false"
+            android:label="收藏夹多选缓存"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.user.favorite.FavoriteFolderEditActivity"
             android:exported="false"
             android:label="编辑收藏夹"

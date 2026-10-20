@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
 
+import com.RobinNotBad.BiliClient.R
+
 import androidx.annotation.Nullable
 
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
@@ -14,6 +16,7 @@ import com.RobinNotBad.BiliClient.listener.OnItemClickListener
 import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener
 import com.RobinNotBad.BiliClient.model.DownloadSection
 import com.RobinNotBad.BiliClient.service.DownloadService
+import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteBatchDownloadActivity
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
@@ -48,6 +51,15 @@ class DownloadListActivity : RefreshListActivity() {
         setPageName("下载列表")
         setRefreshing(false)
         weakRef = WeakReference(this)
+
+        // #7：长按顶栏进入「收藏夹多选缓存」；空列表时点提示也能进
+        findViewById<android.view.View>(R.id.top)?.setOnLongClickListener {
+            startActivity(Intent(this, FavoriteBatchDownloadActivity::class.java))
+            true
+        }
+        emptyView?.setOnClickListener {
+            startActivity(Intent(this, FavoriteBatchDownloadActivity::class.java))
+        }
 
         CenterThreadPool.run(Runnable {
             created = true
@@ -109,7 +121,8 @@ class DownloadListActivity : RefreshListActivity() {
         if (sections == null || sections.isEmpty()) {
             if (!emptyTipShown) {
                 runOnUiThread(Runnable {
-                    MsgUtil.showMsg("下载列表为空")
+                    MsgUtil.showMsg("下载列表为空，可长按顶栏从收藏夹批量缓存")
+                    emptyView?.text = "下载列表为空\n点此从收藏夹批量缓存"
                     showEmptyView()
                 })
                 emptyTipShown = true

@@ -37,6 +37,10 @@ class BiliTerminal : Application() {
             Logu.LOGD_ENABLED = SharedPreferencesUtil.getBoolean("dev_logd", debugBuild)
             Logu.LOGI_ENABLED = SharedPreferencesUtil.getBoolean("dev_logi", debugBuild)
 
+            // v5.0.0 登录体系重构：老版本单 token 迁移到对应身份的独立槽位
+            // （AppRcmdApi.ensureMigrated，幂等；读任何 app_rcmd 槽位前也会自动触发）
+            CenterThreadPool.run(Runnable { com.RobinNotBad.BiliClient.api.AppRcmdApi.touchMigration() })
+
             if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE, true) && SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) != 0L) {
                 CenterThreadPool.run(Runnable {
                     try {

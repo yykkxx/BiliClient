@@ -43,9 +43,9 @@ class SpecialLoginActivity : BaseActivity() {
 
         if (intent.getBooleanExtra("login", true)) {
             refuse.setOnClickListener { v ->
-                if (getIntent().getBooleanExtra("from_setup", false))
-                    startActivity(Intent(this, RecommendActivity::class.java))
-                else finish()
+                //「但是我拒绝」：无论从哪个入口进来都进主界面（#2，与扫码页保持一致）
+                startActivity(Intent(this, RecommendActivity::class.java))
+                finish()
             }
 
             confirm.setOnClickListener { view ->

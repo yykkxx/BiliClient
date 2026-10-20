@@ -21,17 +21,19 @@ object SharedPreferencesUtil {
     @JvmField
     val APP_RCMD_ENABLED = "app_rcmd_enabled"
 
-    // 移动端推荐客户端身份：hd（默认，旧版本唯一身份）/ tv
+    // 移动端推荐客户端身份（当前激活的一派）：hd（默认）/ tv / phone
     @JvmField
     val APP_RCMD_IDENTITY = "app_rcmd_identity"
 
-    // 已存 token 属于哪个身份（切换身份后需重新扫码登录，旧 token 保留可切回）
-    @JvmField
-    val APP_RCMD_TOKEN_IDENTITY = "app_rcmd_token_identity"
+    // ==================== 三端独立登录（v5.0.0 重构） ====================
+    // 每个身份（hd / tv / phone）各有一套独立 token，可同时登录、互不干扰；
+    // 禁止跨端转移：web Cookie 不再能转换成任何端 token，三端之间也不共用。
+    // 槽位键由 AppRcmdApi.keyOf(identity, suffix) 动态生成：app_rcmd_{hd|tv|phone}_*
 
     @JvmField
     val APP_RCMD_BUVID = "app_rcmd_buvid"
 
+    // ==================== 旧版本（v5.0.0-alpha 时代）单 token 键，仅用于迁移 ====================
     @JvmField
     val APP_RCMD_ACCESS_TOKEN = "app_rcmd_access_token"
 
@@ -43,6 +45,10 @@ object SharedPreferencesUtil {
 
     @JvmField
     val APP_RCMD_COOKIES = "app_rcmd_cookies"
+
+    // 旧版本已存 token 属于哪个身份（迁移用；迁移完成后不再读写）
+    @JvmField
+    val APP_RCMD_TOKEN_IDENTITY = "app_rcmd_token_identity"
 
     @JvmField
     val MENU_SORT = "menu_sort"

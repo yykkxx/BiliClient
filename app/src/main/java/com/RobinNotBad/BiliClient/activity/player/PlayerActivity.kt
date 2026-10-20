@@ -81,6 +81,7 @@ import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
+import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 import com.google.android.material.snackbar.Snackbar
 
 import org.greenrobot.eventbus.EventBus
@@ -824,8 +825,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      * 输入格式见 [parseTimeInput]：纯秒数、`分:秒`、`时:分:秒`，
      * 分隔符可用空格 / 中文冒号 / 英文冒号（#4）。
      *
-     * 注意：这个方法只应由**左侧进度时间**（控制栏展开时）与**右侧收缩栏的时间按钮**
-     * 触发；底部收起状态下的时间文本不再作为入口（#3）。
+     * 注意：这个方法只应由**左侧进度时间**与**右侧收缩栏的时间按钮**触发；
+     * 底部收起状态下的时间文本现在也可以点击呼出时间跳转卡片（#3 新口径）。
      */
     private fun showTimeJumpDialog() {
         if (!isPrepared || isLiveMode) return
@@ -1158,10 +1159,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             runOnUiThread { loading_text0!!.text = "载入视频中" }
         try {
             if (isOnlineVideo) {
+                // 实验室功能（#5）：WiFi 预加载命中时改走本地代理（前段本地秒开，
+                // 超出预加载范围由代理继续向源站透传）。未命中/开关关闭返回 null，行为不变。
+                val playUrl = WifiPreloadManager.proxyUrlFor(aid, cid, nowurl) ?: nowurl
                 val headers = HashMap<String, String>()
                 headers["Referer"] = "https://www.bilibili.com/"
                 headers["Cookie"] = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!
-                ijkPlayer!!.setDataSource(nowurl, headers)
+                ijkPlayer!!.setDataSource(playUrl, headers)
             } else
                 ijkPlayer!!.setDataSource(nowurl)
         } catch (e: IOException) {
@@ -1449,12 +1453,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             text_speed!!.visibility = View.GONE
         text_speed!!.setOnClickListener { view -> layout_speed!!.visibility = View.VISIBLE }
         // 点击进度时间打开"跳转时间"小窗（#3）。
-        // 关键：只有控制栏展开（即左侧显示进度条+时间）时这个入口才生效；
-        // 收起状态下屏幕下方那行时间只是一行普通文字，点了不应该弹出任何东西。
+        // 更新：收起状态下屏幕下方的时间区域同样可以点击呼出进度条（时间跳转）界面，
+        // 不再要求控制栏处于展开状态；直播/未就绪仍然忽略。
         text_progress!!.setOnClickListener { view ->
             if (!isPrepared || isLiveMode) return@setOnClickListener
-            val controlsShown = bottom_buttons!!.getVisibility() == View.VISIBLE
-            if (!controlsShown) return@setOnClickListener
             layout_card_bg!!.visibility = View.VISIBLE
             card_time_jump!!.visibility = View.VISIBLE
             showcon()
@@ -2350,6 +2352,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             eventBusInit = false
         }
         destroyed = true
+
+        // 实验室功能（#5）：退出播放页时停掉本地预加载代理（预加载文件保留复用）
+        WifiPreloadManager.stopProxy()
 
         cancelAllTimers()
 

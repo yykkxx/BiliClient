@@ -21,11 +21,13 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 /**
  * 移动端推荐逻辑（实验性）设置页。
  *
- * 从实验室进入。页面提供：
- * - 客户端身份选择（HD版 / TV版 / 手机版）
- * - 移动端登录：手机版支持「web账号一键转换」（无需扫码），HD/TV 走扫码；手机版转换失败也可扫码保底
- * - 「使用移动端推荐逻辑」开关（只影响推荐页）
- * - 退出移动端登录（只清独立键，不动 web 登录）
+ * v5.0.0 登录体系重构后：
+ * - 客户端身份选择（HD版 / TV版 / 手机版）= 选择“当前用哪一派”，
+ *   三端登录状态各自独立保留，可同时登录、随时切换，切换不要求重新登录；
+ * - 登录一律走各端自己的扫码（原「手机版 web 账号一键转换」已移除——
+ *   禁止 web 与外部端之间、以及三端互相之间的任何转移）；
+ * - 「使用移动端推荐逻辑」开关（只影响推荐页，用的是当前身份的登录态）；
+ * - 退出登录只清当前身份的登录，不影响其他端和 web 登录。
  */
 class SettingAppRcmdActivity : BaseActivity() {
 
@@ -49,16 +51,10 @@ class SettingAppRcmdActivity : BaseActivity() {
         //客户端身份选择（HD / TV / 手机）
         findViewById<MaterialCardView>(R.id.appRcmdIdentity).setOnClickListener { showIdentityDialog() }
 
-        //扫码登录（移动端方式）
+        //扫码登录（每端只能用自己的扫码协议登录，禁止任何跨端转移）
         val loginCard = findViewById<MaterialCardView>(R.id.appRcmdLogin)
         loginCard.setOnClickListener {
-            val identity = AppRcmdApi.getIdentity()
-            if (identity.supportCookieConvert) {
-                //手机版：优先 web 账号一键转换，失败再扫码保底
-                showPhoneLoginDialog()
-            } else {
-                startActivity(Intent(this, AppRcmdLoginActivity::class.java))
-            }
+            startActivity(Intent(this, AppRcmdLoginActivity::class.java))
         }
 
         //开启/关闭移动端推荐逻辑（只影响推荐页）
@@ -105,13 +101,13 @@ class SettingAppRcmdActivity : BaseActivity() {
                 val (newId, _) = identities[which]
                 if (newId != currentId) {
                     SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_IDENTITY, newId)
-                    val wasLogin = AppRcmdApi.isLogin()
                     refreshStatus()
-                    if (wasLogin && !AppRcmdApi.isLogin()) {
-                        //token 换了身份：旧 token 是其他身份签发的，需要重新登录
-                        MsgUtil.showMsgLong("已切换为${AppRcmdApi.getIdentity().displayName}；当前登录令牌不适用，请重新登录")
+                    // v5.0.0 重构：三端登录态独立保留，切换身份只是换“当前用哪一派”，
+                    // 已登录的端切回来还在，不要求重新登录
+                    if (AppRcmdApi.isLogin()) {
+                        MsgUtil.showMsg("已切换为${AppRcmdApi.getIdentity().displayName}（已登录），刷新推荐页生效")
                     } else {
-                        MsgUtil.showMsg("已切换为${AppRcmdApi.getIdentity().displayName}，刷新推荐页生效")
+                        MsgUtil.showMsg("已切换为${AppRcmdApi.getIdentity().displayName}（该端未登录），刷新推荐页生效")
                     }
                 }
                 dialog.dismiss()
@@ -120,52 +116,25 @@ class SettingAppRcmdActivity : BaseActivity() {
             .show()
     }
 
-    /** 手机版登录：web 账号一键转换 / 扫码登录 双路径 */
-    @SuppressLint("SetTextI18n")
-    private fun showPhoneLoginDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("手机版登录")
-            .setMessage("优先使用软件已登录的web账号直接转换（无需扫码）；\n如转换失败（未登录/风控），再扫码登录。")
-            .setPositiveButton("web账号转换") { _, _ -> convertWebLogin() }
-            .setNegativeButton("扫码登录") { _, _ ->
-                startActivity(Intent(this, AppRcmdLoginActivity::class.java))
-            }
-            .show()
-    }
-
-    /** web 账号静默转换（后台执行） */
-    @SuppressLint("SetTextI18n")
-    private fun convertWebLogin() {
-        MsgUtil.showMsg("正在转换…")
-        CenterThreadPool.run(Runnable {
-            try {
-                val mid = AppRcmdApi.convertWebLogin()
-                runOnUiThread {
-                    refreshStatus()
-                    MsgUtil.showMsg("转换成功，已登录手机端（uid：$mid）")
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    MsgUtil.err(e)
-                    MsgUtil.showMsgLong("转换失败，可改用扫码登录")
-                }
-            }
-        })
-    }
-
     @SuppressLint("SetTextI18n")
     private fun refreshStatus() {
         val identity = AppRcmdApi.getIdentity()
         val logged = AppRcmdApi.isLogin()
-        val mid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.APP_RCMD_MID, 0L)
+        val mid = AppRcmdApi.getIdentityMid(identity.id)
 
-        identityText!!.text = "客户端身份：${identity.displayName}"
-
-        if (identity.supportCookieConvert) {
-            loginText!!.text = if (logged) "登录（手机版）\n已登录：$mid" else "登录（手机版）\nweb账号一键转换 / 扫码登录"
-        } else {
-            loginText!!.text = if (logged) "扫码登录（移动端方式）\n已登录：$mid" else "扫码登录（移动端方式）"
+        // 三端独立登录状态总览（可同时登录）
+        fun stateLine(name: String, id: String): String {
+            return if (AppRcmdApi.isIdentityLogin(id)) "$name 已登录" else "$name 未登录"
         }
+        identityText!!.text = "当前身份：${identity.displayName}\n" +
+                stateLine("HD", AppRcmdApi.IDENTITY_HD) + "\n" +
+                stateLine("TV", AppRcmdApi.IDENTITY_TV) + "\n" +
+                stateLine("手机", AppRcmdApi.IDENTITY_PHONE)
+
+        loginText!!.text = if (logged)
+            "扫码登录（${identity.displayName}）\n已登录：$mid\n（三端可同时登录）"
+        else
+            "扫码登录（${identity.displayName}）\n每端只能自己扫码登录\n（三端可同时登录）"
         logoutCard!!.visibility = if (logged) View.VISIBLE else View.GONE
 
         //避免程序化置位触发 OnCheckedChangeListener，先摘掉监听再恢复

@@ -65,6 +65,7 @@ import com.RobinNotBad.BiliClient.util.StringUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.RobinNotBad.BiliClient.util.ToolsUtil
+import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
@@ -273,6 +274,8 @@ class VideoInfoFragment : BaseFragment() {
                 val pd = playerData
                 if (pd == null) return@Runnable
                 HistoryApi.reportHistory(videoInfo.aid, pd.cidHistory, (pd.progress / 1000).toLong())
+                // 实验室功能（#5）：WiFi 下进入详情页即预加载视频流前几 MB
+                WifiPreloadManager.preload(videoInfo.aid, pd.cid, pd.videoUrl)
             } catch (e: Exception) {
                 MsgUtil.err(e)
             }

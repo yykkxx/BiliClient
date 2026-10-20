@@ -20,16 +20,22 @@ import java.util.TreeMap
 /**
  * 移动端推荐逻辑（实验性功能）的账号与请求工具。
  *
- * 支持 HD / TV / 手机 三种客户端身份（可在设置页切换）：
- * - HD（默认）：android_hd 密钥扫码登录；推荐请求沿用 PiliPlus 的 android_i 参数组合；
- * - TV：android_tv 密钥（云视听小电视）扫码登录 + 推荐；
- * - 手机：推荐请求用 android 密钥签名（与官方手机客户端一致）；
- *   登录优先「web Cookie 静默转换」（软件已 web 登录时一键转 access_token，无需扫码），
- *   转换失败（风控等）保底走 TV 密钥扫码登录。
+ * v5.0.0 账号登录体系重构后的规则：
+ * - **四派完全独立**：Web（软件本体的 Cookie 登录）与 HD / TV / 手机三端各自成一派；
+ * - **禁止一切跨端转移**：web Cookie 不能转换成任何端 token（原「手机版 web 账号一键
+ *   转换」已按需求移除），三端之间也不共用 / 不转移 token；
+ * - **三端可同时登录**：每个身份有独立 token 槽位（app_rcmd_{hd|tv|phone}_*），
+ *   可以同时扫码登录 HD、TV、手机三端，切换身份只是切换“当前用哪一派”，
+ *   不再要求重新登录（各槽位的登录状态各自保留）；
+ * - 每端只能用自己这一端的扫码协议登录（HD=android_hd 密钥，TV=android_tv 密钥，
+ *   手机端扫码借 TV 密钥签发——android appkey 不被扫码接口接受，但 token 存在
+ *   手机端独立槽位，不与 TV 共用）。
  *
- * 扫码统一走 passport-tv-login 协议（APP 端通用扫码通道，身份由密钥决定）；
- * cookie 静默转换参照 PiliPala：auth_code + h5/qrcode/confirm(csrf) + poll。
+ * 老版本（v5.0.0-alpha2 及以前）升级：旧版只有一个共享 token（app_rcmd_access_token）
+ * 加一个身份标记（app_rcmd_token_identity）——升级后自动迁移到对应身份的独立槽位
+ * （无标记按 HD 处理），迁移完成后清掉旧键，用户体验无缝衔接。
  *
+ * 扫码统一走 passport-tv-login 协议（APP 端通用扫码通道，身份由密钥决定）。
  * 登录信息与软件的 web 登录完全独立：只读写 app_rcmd_ 前缀独立键。
  */
 object AppRcmdApi {
@@ -41,7 +47,6 @@ object AppRcmdApi {
     private const val AUTH_CODE_URL = "https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code"
     private const val AUTH_CODE_URL_BAK = "https://passport.snm0516.aisee.tv/x/passport-tv-login/qrcode/auth_code"
     private const val POLL_URL = "https://passport.bilibili.com/x/passport-tv-login/qrcode/poll"
-    private const val CONFIRM_URL = "https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/confirm"
 
     private val buvidRandom = Random()
 
@@ -72,9 +77,7 @@ object AppRcmdApi {
         @JvmField val feedColumn: Int,
         @JvmField val feedDeviceName: String,
         @JvmField val feedDevice: String,
-        @JvmField val feedFlush: Int,
-        /** 是否支持 web cookie 静默转换（手机端） */
-        @JvmField val supportCookieConvert: Boolean
+        @JvmField val feedFlush: Int
     )
 
     //HD版（android_hd）：本功能自 v5.0.0-alpha 以来的默认身份
@@ -85,7 +88,7 @@ object AppRcmdApi {
         "android_hd",
         "android_hd",
         "Mozilla/5.0 BiliDroid/2.0.1 (bbcallen@gmail.com) os/android model/android_hd mobi_app/android_hd build/2001100 channel/master innerVer/2001100 osVer/15 network/2",
-        "android_i", 8430300, 2, "android", "phone", 8, false)
+        "android_i", 8430300, 2, "android", "phone", 8)
 
     //TV版（android_tv / 云视听小电视）
     private val TV_IDENTITY = RcmdIdentity(
@@ -95,10 +98,11 @@ object AppRcmdApi {
         "android_tv",
         "android_tv",
         "Mozilla/5.0 BiliDroid/1.9.4 (bbcallen@gmail.com) os/android model/android_tv mobi_app/android_tv build/102801 channel/master innerVer/102801 osVer/15 network/2",
-        "android_tv", 102801, 2, "android_tv", "phone", 8, false)
+        "android_tv", 102801, 2, "android_tv", "phone", 8)
 
     //手机版（android）：推荐请求用 android 密钥（与官方手机客户端一致）；
-    //扫码登录借 TV 密钥（android appkey 不被扫码接口接受），并支持 web cookie 静默转换
+    //扫码登录借 TV 密钥签发（android appkey 不被扫码接口接受），
+    //但 token 存进手机端独立槽位，不与 TV 端共用（禁止跨端转移）
     private val PHONE_IDENTITY = RcmdIdentity(
         IDENTITY_PHONE, "手机版",
         "4409e2ce8ffd12b8", "59b43e04ad6965f34319062b478f83dd",
@@ -106,7 +110,7 @@ object AppRcmdApi {
         "android",
         "android_tv",
         "Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2",
-        "android", 8430300, 2, "android", "phone", 8, true)
+        "android", 8430300, 2, "android", "phone", 8)
 
     /** 当前选中的客户端身份（默认 HD，与旧版本行为一致） */
     @JvmStatic
@@ -125,27 +129,102 @@ object AppRcmdApi {
     }
 
     /**
-     * 是否已完成当前身份的移动端登录。
-     * access_token 由 TV 密钥签发（HD/TV/手机共用 TV 扫码协议），跨身份通用，
-     * 但为避免歧义仍按身份隔离记录；旧版本（仅 HD）升级上来按 HD 处理。
+     * 是否已完成当前身份的移动端登录（v5.0.0 起：各身份独立槽位，互不影响）。
      */
     @JvmStatic
     fun isLogin(): Boolean {
-        if (getAccessToken().isEmpty()) return false
-        val tokenIdentity = (SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_TOKEN_IDENTITY, "") ?: "")
-            .ifEmpty { IDENTITY_HD }
-        return getIdentity().id == tokenIdentity
+        return getAccessToken().isNotEmpty()
     }
 
     /** 是否存有任意 token（判断要不要提示） */
     @JvmStatic
     fun hasAnyToken(): Boolean {
-        return getAccessToken().isNotEmpty()
+        return getAccessToken(IDENTITY_HD).isNotEmpty()
+                || getAccessToken(IDENTITY_TV).isNotEmpty()
+                || getAccessToken(IDENTITY_PHONE).isNotEmpty()
     }
 
+    /** 当前身份的 access_token */
     @JvmStatic
     fun getAccessToken(): String {
-        return SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_ACCESS_TOKEN, "") ?: ""
+        return getAccessToken(getIdentity().id)
+    }
+
+    /** 指定身份的 access_token（身份槽位独立，三端可同时登录） */
+    @JvmStatic
+    fun getAccessToken(identityId: String): String {
+        ensureMigrated()
+        return SharedPreferencesUtil.getString(keyOf(identityId, "access_token"), "") ?: ""
+    }
+
+    /** 指定身份是否已登录（不切换当前身份） */
+    @JvmStatic
+    fun isIdentityLogin(identityId: String): Boolean {
+        return getAccessToken(identityId).isNotEmpty()
+    }
+
+    /** 指定身份的登录 mid（未登录返回 0） */
+    @JvmStatic
+    fun getIdentityMid(identityId: String): Long {
+        ensureMigrated()
+        return SharedPreferencesUtil.getLong(keyOf(identityId, "mid"), 0L)
+    }
+
+    /** 槽位键名：app_rcmd_{identity}_{suffix} */
+    private fun keyOf(identityId: String, suffix: String): String {
+        return "app_rcmd_" + identityId + "_" + suffix
+    }
+
+    /**
+     * 老版本迁移（只做一次）：
+     * 旧版只有一个共享 token（app_rcmd_access_token 等）+ 身份标记
+     * （app_rcmd_token_identity，无标记视为 HD）。迁移 = 把旧值搬进对应身份的
+     * 独立槽位，然后清空旧键。新装用户旧键本来就是空的，等价于无事发生。
+     */
+    @Volatile
+    private var migrated = false
+
+    /** 供启动时主动触发迁移用（幂等） */
+    @JvmStatic
+    fun touchMigration() {
+        ensureMigrated()
+    }
+
+    private fun ensureMigrated() {
+        if (migrated) return
+        synchronized(this) {
+            if (migrated) return
+            try {
+                val oldToken = SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_ACCESS_TOKEN, "") ?: ""
+                if (oldToken.isNotEmpty()) {
+                    val identityId = (SharedPreferencesUtil.getString(
+                            SharedPreferencesUtil.APP_RCMD_TOKEN_IDENTITY, "") ?: "")
+                        .ifEmpty { IDENTITY_HD }
+                    // 只认可三种身份，其余按 HD
+                    val target = if (identityId == IDENTITY_TV || identityId == IDENTITY_PHONE) identityId else IDENTITY_HD
+
+                    SharedPreferencesUtil.putString(keyOf(target, "access_token"), oldToken)
+                    SharedPreferencesUtil.putString(keyOf(target, "refresh_token"),
+                            SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_REFRESH_TOKEN, "") ?: "")
+                    SharedPreferencesUtil.putLong(keyOf(target, "mid"),
+                            SharedPreferencesUtil.getLong(SharedPreferencesUtil.APP_RCMD_MID, 0L))
+                    SharedPreferencesUtil.putString(keyOf(target, "cookies"),
+                            SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_COOKIES, "") ?: "")
+
+                    // 清掉旧键，标记迁移完成（用旧 token_identity 键存 "migrated" 哨兵）
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_ACCESS_TOKEN, "")
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_REFRESH_TOKEN, "")
+                    SharedPreferencesUtil.putLong(SharedPreferencesUtil.APP_RCMD_MID, 0L)
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_COOKIES, "")
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_TOKEN_IDENTITY, "migrated")
+                } else {
+                    SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_TOKEN_IDENTITY, "migrated")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            migrated = true
+        }
     }
 
     /** 移动端推荐专用 buvid：首次生成后持久化（三种身份共用） */
@@ -264,62 +343,13 @@ object AppRcmdApi {
         return JSONObject(result)
     }
 
-    /**
-     * 手机端：用软件已有的 web 登录（Cookie + csrf）静默换 access_token，无需扫码。
-     * 参照 PiliPala 的 cookieToKey：auth_code → h5/qrcode/confirm(csrf) → poll。
-     * 只读 web 登录信息做转换，不写任何 web 键。
-     * @return mid；未 web 登录/转换失败抛 IOException
-     */
-    @Throws(JSONException::class, IOException::class)
-    @JvmStatic
-    fun convertWebLogin(): Long {
-        //需要软件本身已 web 登录
-        val cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
-        val csrf = SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "") ?: ""
-        if (cookies.isEmpty() || csrf.isEmpty()) {
-            throw IOException("软件尚未登录web账号，无法转换；请先用扫码登录")
-        }
+    // v5.0.0 重构：原「手机版 web 账号一键转换」（convertWebLogin）已按需求移除——
+    // 登录体系重构后禁止任何跨端转移：web Cookie 不能转换成任何外部端 token，
+    // 三端之间也不能互转。每端只能用自己这一端的扫码协议登录。
 
-        val identity = getIdentity()
-
-        //1. 用扫码密钥申请 auth_code（未确认状态）
-        val formData = signWith(NetWorkUtil.FormData()
-            .put("local_id", "0")
-            .put("mobi_app", identity.loginMobiApp)
-            .put("platform", "android"), identity.scanAppKey, identity.scanAppSec)
-        val authResult = NetWorkUtil.post(AUTH_CODE_URL, formData.toString(), appHeaders()).body!!.string()
-        val authJson = JSONObject(authResult)
-        if (authJson.optInt("code", -1) != 0) {
-            throw IOException("申请授权码失败：" + authJson.optString("message", "未知错误"))
-        }
-        val authCodeStr = authJson.getJSONObject("data").getString("auth_code")
-
-        //2. web cookie + csrf 自动确认授权码（这一步把 web 登录态授给该 auth_code）
-        val confirmData = NetWorkUtil.FormData()
-            .put("auth_code", authCodeStr)
-            .put("build", 708200)
-            .put("csrf", csrf)
-        val webHeaders = NetWorkUtil.webHeaders
-        val confirmResult = NetWorkUtil.post(CONFIRM_URL, confirmData.toString(), webHeaders).body!!.string()
-        val confirmJson = JSONObject(confirmResult)
-        if (confirmJson.optInt("code", -1) != 0) {
-            throw IOException("授权确认失败：" + confirmJson.optString("message", "未知错误"))
-        }
-
-        //3. poll 拿 access_token（与扫码登录同一条收尾路径）
-        val pollForm = signWith(NetWorkUtil.FormData()
-            .put("auth_code", authCodeStr)
-            .put("local_id", "0"), identity.scanAppKey, identity.scanAppSec)
-        val pollResult = NetWorkUtil.post(POLL_URL, pollForm.toString(), appHeaders()).body!!.string()
-        val pollJson = JSONObject(pollResult)
-        if (pollJson.optInt("code", -1) != 0 || pollJson.optJSONObject("data") == null) {
-            throw IOException("获取令牌失败：" + pollJson.optString("message", "未知错误"))
-        }
-        return saveLogin(pollJson.getJSONObject("data"))
-    }
 
     /**
-     * 登录成功后保存移动端登录信息（只写独立键），并记录 token 归属的身份。
+     * 登录成功后保存移动端登录信息（写入**当前身份**的独立槽位，不碰其他端）。
      * 响应结构：token_info{access_token,refresh_token,mid} + cookie_info{cookies[]}。
      * @return 登录用户 mid；被风控（token_info 为空）时抛出 JSONException
      */
@@ -348,21 +378,26 @@ object AppRcmdApi {
             }
         }
 
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_ACCESS_TOKEN, accessToken)
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_REFRESH_TOKEN, refreshToken)
-        SharedPreferencesUtil.putLong(SharedPreferencesUtil.APP_RCMD_MID, mid)
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_COOKIES, cookieSb.toString())
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_TOKEN_IDENTITY, getIdentity().id)
+        val identityId = getIdentity().id
+        SharedPreferencesUtil.putString(keyOf(identityId, "access_token"), accessToken)
+        SharedPreferencesUtil.putString(keyOf(identityId, "refresh_token"), refreshToken)
+        SharedPreferencesUtil.putLong(keyOf(identityId, "mid"), mid)
+        SharedPreferencesUtil.putString(keyOf(identityId, "cookies"), cookieSb.toString())
         return mid
     }
 
-    /** 退出移动端登录：只清独立键，不动 web 登录与功能开关 */
+    /** 退出移动端登录：只清**当前身份**槽位，其他端登录态与 web 登录、功能开关都不动 */
     @JvmStatic
     fun logout() {
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_ACCESS_TOKEN, "")
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_REFRESH_TOKEN, "")
-        SharedPreferencesUtil.putLong(SharedPreferencesUtil.APP_RCMD_MID, 0L)
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_COOKIES, "")
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_TOKEN_IDENTITY, "")
+        logoutIdentity(getIdentity().id)
+    }
+
+    /** 退出指定身份的登录（不影响其他端） */
+    @JvmStatic
+    fun logoutIdentity(identityId: String) {
+        SharedPreferencesUtil.putString(keyOf(identityId, "access_token"), "")
+        SharedPreferencesUtil.putString(keyOf(identityId, "refresh_token"), "")
+        SharedPreferencesUtil.putLong(keyOf(identityId, "mid"), 0L)
+        SharedPreferencesUtil.putString(keyOf(identityId, "cookies"), "")
     }
 }

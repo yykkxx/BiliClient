@@ -582,6 +582,26 @@ class DownloadService : Service() {
             return output
         }
 
+        /**
+         * 当前下载队列条目数（#7 收藏夹多选缓存用来区分「新入队」与「已在队列」）。
+         */
+        @JvmStatic
+        fun queueCount(): Int {
+            var cursor: Cursor? = null
+            var database: SQLiteDatabase? = null
+            return try {
+                val helper = DownloadSqlHelper(BiliTerminal.context)
+                database = helper.readableDatabase
+                cursor = database.rawQuery("select count(*) from download", null)
+                if (cursor != null && cursor.moveToFirst()) cursor.getInt(0) else 0
+            } catch (e: Exception) {
+                0
+            } finally {
+                cursor?.close()
+                database?.close()
+            }
+        }
+
         @JvmStatic
         fun getFirst(): DownloadSection? {
             var cursor: Cursor? = null

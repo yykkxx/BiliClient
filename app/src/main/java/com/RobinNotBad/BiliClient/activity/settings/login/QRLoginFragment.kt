@@ -77,7 +77,10 @@ class QRLoginFragment : Fragment() {
     override fun onViewCreated(@NonNull view: View, @Nullable savedInstanceState: Bundle?) {
         val jump = view.findViewById<MaterialCardView>(R.id.jump)
         jump.setOnClickListener { v ->
-            if (from_setup) startActivity(Intent(requireContext(), RecommendActivity::class.java))
+            //「但是我拒绝」：无论从哪个入口进来，都直接进主界面（#2）。
+            //旧逻辑只有 from_setup=true 才跳推荐页，否则直接 finish，
+            //启动器路径（已完成设置但未登录）点了这个按钮就变成“点了没反应/退出应用”。
+            startActivity(Intent(requireContext(), RecommendActivity::class.java))
             if (timer != null) timer!!.cancel()
             if (isAdded()) requireActivity().finish()
         }

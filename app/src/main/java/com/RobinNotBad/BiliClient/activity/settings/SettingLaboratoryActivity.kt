@@ -13,6 +13,7 @@ import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
+import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 
 import java.util.ArrayList
 
@@ -61,6 +62,9 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 "1", Pair(arrayOf("慢速持续", "脉冲式"), intArrayOf(StreamPolicyManager.POLICY_CONTINUOUS, StreamPolicyManager.POLICY_PULSE))))
 
         sectionList.add(SettingSection("title", "播放器", "", "", ""))
+        // WiFi 预加载（#5）：进详情页即预取视频流前几 MB，点播放秒开
+        sectionList.add(SettingSection("switch", "WiFi视频预加载", WifiPreloadManager.PREF_WIFI_PRELOAD,
+                "连接WiFi时，进入视频详情页就开始预加载视频数据（约4MB），点播放时秒开。仅在WiFi下生效。", "false"))
         sectionList.add(SettingSection("switch", "播放器旋屏兼容方案", "dev_player_rotate_software",
                 "在极少数手表上（如小米手表），系统旋屏存在显示不全的问题。打开此开关，播放器将会使用软件旋屏方法。", "false"))
         sectionList.add(SettingSection("switch", "显示视频分段", "player_show_viewpoints",
