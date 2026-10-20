@@ -261,6 +261,25 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var loop_enabled = false
     private var auto_next_enabled = false
 
+    // ==================== 短视频模式（shortvideo 分支，实验性） ====================
+    /** 短视频模式开关（实验室设置 short_video_mode，默认关闭） */
+    private var short_video_mode = false
+
+    /** 短视频流的候选视频列表（进入播放时取相关推荐，看完/上滑自动接续） */
+    private var shortVideoList: ArrayList<com.RobinNotBad.BiliClient.model.VideoCard>? = null
+
+    /** 短视频流当前索引（-1 表示当前播放的还不是流里的视频） */
+    private var shortVideoIndex = -1
+
+    /** 正在切换短视频（防止连滑触发多次切换） */
+    @Volatile
+    private var shortVideoSwitching = false
+
+    /** 滑动手势起点（用于 ACTION_UP 时判定上滑/下滑切换） */
+    private var flingStartX = 0f
+    private var flingStartY = 0f
+    private var flingStartTime = 0L
+
     private var batteryView: BatteryView? = null
     private var batteryManager: BatteryManager? = null
 
@@ -653,6 +672,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         if (singleTouch) { // 如果是单指按下，设置起始位置为当前手指位置
                             previousX = event.getX(0)
                             previousY = event.getY(0)
+                            // 短视频模式：记录滑动起点（ACTION_UP 时判定上滑切下一个）
+                            flingStartX = event.getX(0)
+                            flingStartY = event.getY(0)
+                            flingStartTime = android.os.SystemClock.elapsedRealtime()
                             // Logu.v("gesture", "touch_start:" + previousX + "," + previousY);
                         }
                     }
@@ -675,6 +698,20 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     }
 
                     MotionEvent.ACTION_UP -> {
+                        // 短视频模式：上滑切下一个、下滑回上一个（抖音式）。
+                        // 判定条件：竖直位移超过阈值、水平位移明显小于竖直、时长足够短（快扫）。
+                        if (short_video_mode && singleTouch && !gesture_scaled && !shortVideoSwitching) {
+                            val dx = event.getX(0) - flingStartX
+                            val dy = event.getY(0) - flingStartY
+                            val dt = android.os.SystemClock.elapsedRealtime() - flingStartTime
+                            val minDy = ToolsUtil.dp2px(60f)
+                            if (Math.abs(dy) > minDy && Math.abs(dy) > Math.abs(dx) * 2f && dt in 40..600) {
+                                // 快扫结束后把画面归位（拖动可能移动过画面）
+                                try { videoMoveReset() } catch (ignored: Exception) {}
+                                if (dy < 0) switchShortVideo(1)
+                                else switchShortVideo(-1)
+                            }
+                        }
                         if (onLongClick) {
                             onLongClick = false
                             val normalSpeed = speed_values[seekbar_speed!!.getProgress()]
@@ -1198,6 +1235,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     danmakuController!!.seekTo(0L)
                 }
                 ijkPlayer!!.start()
+            } else if (short_video_mode && shortVideoList != null && shortVideoList!!.isNotEmpty()) {
+                // 短视频模式：看完自动切下一个（抖音式无限流）
+                switchShortVideo(1)
             } else if (auto_next_enabled && hasMultiplePages() && currentPageIndex < pagenames!!.size - 1) {
                 switchToPage(currentPageIndex + 1)
             } else {
@@ -1298,6 +1338,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         isPrepared = true
         video_all = ijkPlayer!!.getDuration().toInt()
+
+        // 短视频模式（shortvideo 分支）：就绪后拉相关推荐流（只在每次新视频就绪时做一次）
+        initShortVideoMode()
         // #1：DASH 流刚 prepare 完 getDuration 可能返回 0/负值，
         // 会把进度条 max 设成 0（进度显示全乱、总时长 00:00 不动）。
         // 晚些再取一次；仍取不到就等缓冲回调里补设。
@@ -2200,6 +2243,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 }
             }
         changeVideoSize()
+    }
+
+    /** 把画面位置还原到初始（短视频模式快扫结束时用） */
+    private fun videoMoveReset() {
+        layout_video!!.x = video_origX
+        layout_video!!.y = video_origY
     }
 
     private fun videoMoveBy(dx: Float, dy: Float) {
@@ -3275,6 +3324,205 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     MsgUtil.err(e)
                     MsgUtil.showMsg("切换失败")
                 }
+            }
+        })
+    }
+
+    // ==================== 短视频模式（shortvideo 分支，实验性） ====================
+
+    /**
+     * 播放就绪后初始化短视频模式：
+     * 读取实验室开关；开启时拉取当前视频的相关推荐作为“短视频流”，
+     * 之后上滑/看完自动切到下一个（抖音式）。
+     */
+    private fun initShortVideoMode() {
+        short_video_mode = SharedPreferencesUtil.getBoolean("short_video_mode", false)
+                && isOnlineVideo && !isLiveMode
+        if (!short_video_mode) return
+
+        shortVideoList = null
+        shortVideoIndex = -1
+        CenterThreadPool.run(Runnable {
+            try {
+                val related = com.RobinNotBad.BiliClient.api.RecommendApi.getRelated(aid)
+                // 过滤掉自己，避免“下一个”切回自己
+                val list = ArrayList<com.RobinNotBad.BiliClient.model.VideoCard>()
+                for (card in related) {
+                    if (card.aid != aid) list.add(card)
+                }
+                if (list.isNotEmpty()) {
+                    shortVideoList = list
+                    runOnUiThread {
+                        if (!destroyed) MsgUtil.showMsg("短视频模式：上滑下一个")
+                    }
+                }
+            } catch (e: Exception) {
+                // 相关推荐拉不到也不影响正常播放
+                e.printStackTrace()
+            }
+        })
+    }
+
+    /**
+     * 短视频模式切换：direction=1 下一个，-1 上一个。
+     * 实际动作 = 换 aid/cid/title → 重取播放地址 → 重建播放器（复用 switchToPage 的
+     * 重建流程语义，但目标是“另一个视频”而不是“另一个分P”）。
+     */
+    private fun switchShortVideo(direction: Int) {
+        if (shortVideoSwitching || destroyed) return
+        val list = shortVideoList
+        if (list == null || list.isEmpty()) {
+            MsgUtil.showMsg("短视频流还没准备好")
+            return
+        }
+
+        var nextIndex = shortVideoIndex + direction
+        if (direction > 0) {
+            // 播放中上滑：当前若不在流里（首次），从流头开始
+            if (shortVideoIndex < 0) nextIndex = 0
+            if (nextIndex >= list.size) {
+                MsgUtil.showMsg("没有更多了")
+                return
+            }
+        } else {
+            if (shortVideoIndex <= 0) {
+                MsgUtil.showMsg("已经是第一个了")
+                return
+            }
+        }
+        val target = list[nextIndex]
+        if (target.aid <= 0) return
+
+        shortVideoSwitching = true
+        MsgUtil.showMsg(if (direction > 0) "下一个：" + (target.title ?: "")
+                        else "上一个：" + (target.title ?: ""))
+
+        CenterThreadPool.run(Runnable {
+            try {
+                // 取目标视频信息（cid 等）
+                val info = com.RobinNotBad.BiliClient.api.VideoInfoApi.getVideoInfo(target.aid)
+                if (info == null || info.cids == null || info.cids!!.isEmpty()) {
+                    throw Exception("获取视频信息失败")
+                }
+
+                val playerData = com.RobinNotBad.BiliClient.model.PlayerData()
+                playerData.aid = target.aid
+                playerData.cid = info.cids!![0]
+                playerData.title = info.title
+                playerData.mid = mid
+                playerData.qn = SharedPreferencesUtil.getInt("play_qn", 16)
+                com.RobinNotBad.BiliClient.api.PlayerApi.getVideo(playerData, false)
+
+                runOnUiThread {
+                    if (destroyed) {
+                        shortVideoSwitching = false
+                        return@runOnUiThread
+                    }
+
+                    try {
+                        if (ijkPlayer != null) {
+                            try {
+                                ijkPlayer!!.stop()
+                            } catch (ignored: IllegalStateException) {
+                            }
+                            ijkPlayer!!.release()
+                        }
+                        releaseDanmakuLayer()
+
+                        aid = target.aid
+                        cid = playerData.cid
+                        video_url = playerData.videoUrl
+                        danmaku_url = playerData.danmakuUrl
+                        videoTitle = info.title ?: ""
+                        text_title!!.text = videoTitle
+
+                        if (playerData.qnStrList != null && playerData.qnValueList != null) {
+                            qnStrList = playerData.qnStrList
+                            qnValueList = playerData.qnValueList
+                            currentQuality = playerData.qn
+                        }
+
+                        loading_info!!.visibility = View.VISIBLE
+                        anim_loading!!.stop()
+                        anim_loading!!.start()
+                        loading_text0!!.text = "切换短视频"
+                        loading_text1!!.text = "(≧∇≦)"
+                        isPrepared = false
+                        isPlaying = false
+                        finishWatching = false
+                        progress_history = 0
+                        subtitles = null
+                        subtitleLinks = null
+                        subtitle_selected = -1
+                        viewPoints = null
+                        viewPointAdapter = null
+                        if (btn_viewpoint != null) btn_viewpoint!!.visibility = View.GONE
+
+                        interactionData = null
+                        currentEdgeId = 0
+                        currentQuestion = null
+                        questionShown = false
+                        if (interactionChoiceLayout != null) {
+                            interactionChoiceLayout!!.visibility = View.GONE
+                            interactionChoiceLayout!!.removeAllViews()
+                        }
+
+                        ijkPlayer = IjkMediaPlayer()
+                        mDanmakuView = findViewById<View>(R.id.sv_danmaku) as IDanmakuView
+
+                        setDisplay()
+
+                        layout_control!!.postDelayed(Runnable {
+                            CenterThreadPool.run(Runnable {
+                                if (destroyed) return@Runnable
+                                runOnUiThread {
+                                    if (!destroyed) {
+                                        loading_text0!!.text = "装填弹幕中"
+                                        loading_text1!!.text = "(≧∇≦)"
+                                    }
+                                }
+                                if (isOnlineVideo) {
+                                    danmakuFile = File(cacheDir, "danmaku.xml")
+                                    if (danmakuFile!!.exists()) danmakuFile!!.delete()
+                                    downdanmu()
+                                }
+                                if (!destroyed && SharedPreferencesUtil.getBoolean("player_subtitle_autoshow", true)) {
+                                    downSubtitle(false)
+                                }
+                            })
+                        }, 60)
+
+                        // 记录当前位置；加载成功后从下一个视频继续拉新的相关推荐（流式滚动）
+                        shortVideoIndex = nextIndex
+                        shortVideoSwitching = false
+                        refreshShortVideoStream(target.aid)
+                    } catch (e: Exception) {
+                        shortVideoSwitching = false
+                        MsgUtil.err(e)
+                    }
+                }
+            } catch (e: Exception) {
+                shortVideoSwitching = false
+                runOnUiThread { MsgUtil.showMsg("切换失败：" + (e.message ?: "未知错误")) }
+            }
+        })
+    }
+
+    /** 切到新视频后重拉相关推荐（保持“流”滚动；把当前视频从候选里排除） */
+    private fun refreshShortVideoStream(currentAid: Long) {
+        CenterThreadPool.run(Runnable {
+            try {
+                val related = com.RobinNotBad.BiliClient.api.RecommendApi.getRelated(currentAid)
+                val list = ArrayList<com.RobinNotBad.BiliClient.model.VideoCard>()
+                for (card in related) {
+                    if (card.aid != currentAid) list.add(card)
+                }
+                if (list.isNotEmpty()) {
+                    shortVideoList = list
+                    shortVideoIndex = -1  //新流从“当前位置不在流里”开始，上滑=新流第一个
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         })
     }

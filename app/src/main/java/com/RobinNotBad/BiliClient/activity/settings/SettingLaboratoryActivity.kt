@@ -62,6 +62,9 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 "1", Pair(arrayOf("慢速持续", "脉冲式"), intArrayOf(StreamPolicyManager.POLICY_CONTINUOUS, StreamPolicyManager.POLICY_PULSE))))
 
         sectionList.add(SettingSection("title", "播放器", "", "", ""))
+        // 短视频模式（shortvideo 分支专属）：上滑切下一个、看完自动连播（抖音式）
+        sectionList.add(SettingSection("switch", "短视频模式", "short_video_mode",
+                "播放视频时上滑切换到下一个推荐视频，看完自动连播（抖音式刷视频）。播放普通视频时也可开启。", "false"))
         // WiFi 预加载（#5）：进详情页即预取视频流前几 MB，点播放秒开
         sectionList.add(SettingSection("switch", "WiFi视频预加载", WifiPreloadManager.PREF_WIFI_PRELOAD,
                 "连接WiFi时，进入视频详情页就开始预加载视频数据（约4MB），点播放时秒开。仅在WiFi下生效。", "false"))
