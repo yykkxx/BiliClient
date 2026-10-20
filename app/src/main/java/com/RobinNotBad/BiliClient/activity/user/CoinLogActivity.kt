@@ -14,6 +14,7 @@ import com.RobinNotBad.BiliClient.api.CoinLogApi
 import com.RobinNotBad.BiliClient.model.CoinLog
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 
 class CoinLogActivity : BaseActivity() {
@@ -35,7 +36,7 @@ class CoinLogActivity : BaseActivity() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
 
-        recyclerView!!.layoutManager = LinearLayoutManager(this)
+        recyclerView!!.layoutManager = CustomLinearManager(this)
 
         logList = ArrayList()
 

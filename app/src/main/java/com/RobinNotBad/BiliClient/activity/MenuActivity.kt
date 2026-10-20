@@ -92,6 +92,7 @@ class MenuActivity : BaseActivity() {
             btnList.remove("myspace")
         }
 
+        if (!SharedPreferencesUtil.getBoolean("menu_story", true)) btnList.remove("story")
         if (!SharedPreferencesUtil.getBoolean("menu_popular", true)) btnList.remove("popular")
         if (!SharedPreferencesUtil.getBoolean("menu_precious", false)) btnList.remove("precious")
         if (!SharedPreferencesUtil.getBoolean("menu_ranking", false)) btnList.remove("ranking")
@@ -194,6 +195,7 @@ class MenuActivity : BaseActivity() {
     private val defaultSortList: MutableList<String>
         get() = arrayListOf(
             "recommend",
+            "story",
             "popular",
             "precious",
             "ranking",
@@ -219,9 +221,10 @@ class MenuActivity : BaseActivity() {
          * 请不要让它的顺序被打乱（
          */
         @JvmField
-        val btnNames: MutableMap<String, Pair<String, Class<out InstanceActivity>>> =
-            linkedMapOf<String, Pair<String, Class<out InstanceActivity>>>().apply {
+        val btnNames: MutableMap<String, Pair<String, Class<out android.app.Activity>>> =
+            linkedMapOf<String, Pair<String, Class<out android.app.Activity>>>().apply {
                 put("recommend", Pair("推荐", RecommendActivity::class.java))
+                put("story", Pair("短视频", com.RobinNotBad.BiliClient.activity.video.story.StoryPlayerActivity::class.java))
                 put("popular", Pair("热门", PopularActivity::class.java))
                 put("precious", Pair("入站必刷", PreciousActivity::class.java))
                 put("ranking", Pair("全站排行榜", RankingActivity::class.java))

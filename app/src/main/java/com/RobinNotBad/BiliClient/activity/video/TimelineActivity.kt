@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 
 import java.util.ArrayList
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 class TimelineActivity : InstanceActivity() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
@@ -37,7 +38,7 @@ class TimelineActivity : InstanceActivity() {
         swipeRefreshLayout.isEnabled = true
         swipeRefreshLayout.isRefreshing = true
         recyclerView = findViewById(R.id.recyclerView)
-        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.layoutManager = CustomLinearManager(this)
 
         dayInfoList = ArrayList()
 

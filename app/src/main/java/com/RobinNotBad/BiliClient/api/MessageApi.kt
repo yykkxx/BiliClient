@@ -414,25 +414,51 @@ object MessageApi {
             return ArrayList()
     }
 
+    /**
+     * 读取消息设置（#1 卡死修复重写）。
+     *
+     * 旧实现走 NetWorkUtil.post + 全局共享的 webHeaders 列表 —— 与 refreshHeaders()
+     * 并发时存在结构性竞争（遍历时列表被改，headers[i+1] 可能越界，即用户遇到的
+     * IndexOutOfBoundsException 报错来源之一），且全局 CookieSaveInterceptor
+     * 会在每个响应上做 SharedPreferences 读写，连续切换开关时请求风暴放大为卡死。
+     *
+     * 新实现：
+     * - 用 GET 语义发到同一端点（实测该端点支持 GET，无 Set-Cookie）；
+     * - headers 用**独立快照**（不碰全局 webHeaders，也不受 refreshHeaders 影响）；
+     * - 不走共享 OkHttp 的 CookieSaveInterceptor 链之外的额外副作用。
+     */
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
     fun getMsgSettings(): JSONObject {
         val csrf = NetWorkUtil.getInfoFromCookie("bili_jct",
                 SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!)
-        val url = "https://api.vc.bilibili.com/link_setting/v1/link_setting/get"
-        val formData = NetWorkUtil.FormData()
-                .put("msg_notify", 1)
-                .put("show_unfollowed_msg", 1)
-                .put("build", 0)
-                .put("mobi_app", "web")
-                .put("csrf_token", csrf)
-                .put("csrf", csrf)
-
-        val response = NetWorkUtil.post(url, formData.toString(), NetWorkUtil.webHeaders)
+        val url = "https://api.vc.bilibili.com/link_setting/v1/link_setting/get" +
+                "?msg_notify=1&show_unfollowed_msg=1&build=0&mobi_app=web" +
+                "&csrf_token=" + java.net.URLEncoder.encode(csrf, "UTF-8") +
+                "&csrf=" + java.net.URLEncoder.encode(csrf, "UTF-8")
+        val response = NetWorkUtil.get(url, msgSettingHeaders())
         val result = response.body!!.string()
         return JSONObject(result)
     }
 
+    /** 消息设置专用请求头快照（#1）：独立构造，避免与全局 webHeaders 的并发竞争 */
+    private fun msgSettingHeaders(): ArrayList<String> {
+        val headers = ArrayList<String>()
+        headers.add("Cookie")
+        headers.add(SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: "")
+        headers.add("Origin")
+        headers.add("https://www.bilibili.com")
+        headers.add("Referer")
+        headers.add("https://www.bilibili.com/")
+        headers.add("User-Agent")
+        headers.add(NetWorkUtil.USER_AGENT_WEB)
+        return headers
+    }
+
+    /**
+     * 保存消息设置（#1 卡死修复重写，同 getMsgSettings 的理由）。
+     * POST 表单体本身不变（服务端语义一致），但 headers 用独立快照。
+     */
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
     fun setMsgSettings(settings: JSONObject): JSONObject {
@@ -458,7 +484,7 @@ object MessageApi {
         if (settings.has("ai_intercept"))
             formData.put("ai_intercept", settings.getInt("ai_intercept"))
 
-        val response = NetWorkUtil.post(url, formData.toString(), NetWorkUtil.webHeaders)
+        val response = NetWorkUtil.post(url, formData.toString(), msgSettingHeaders())
         val result = response.body!!.string()
         return JSONObject(result)
     }

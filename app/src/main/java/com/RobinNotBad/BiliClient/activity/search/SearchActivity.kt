@@ -198,7 +198,12 @@ class SearchActivity : InstanceActivity() {
                 searchHistory = ArrayList()
             }
             searchHistoryAdapter = SearchHistoryAdapter(this, searchHistory!!)
-            searchHistoryAdapter!!.setOnClickListener { position -> keywordInput!!.setText(searchHistory!![position]) }
+            searchHistoryAdapter!!.setOnClickListener { position ->
+                // #4：越界防护——历史列表可能在点击瞬间被异步刷新清空
+                val history = searchHistory
+                if (position < 0 || history == null || position >= history.size) return@setOnClickListener
+                keywordInput!!.setText(history[position])
+            }
             searchHistoryAdapter!!.setOnLongClickListener { position ->
                 MsgUtil.showMsg("删除成功")
                 searchHistory!!.removeAt(position)
@@ -219,7 +224,10 @@ class SearchActivity : InstanceActivity() {
             searchSuggestions = ArrayList()
             searchSuggestionsAdapter = SearchSuggestionsAdapter(this, searchSuggestions!!)
             searchSuggestionsAdapter!!.setOnClickListener { position ->
-                val suggestion = searchSuggestions!![position]
+                // #4：越界防护——建议列表在输入变化时会被异步整体替换
+                val suggestions = searchSuggestions
+                if (position < 0 || suggestions == null || position >= suggestions.size) return@setOnClickListener
+                val suggestion = suggestions[position]
                 keywordInput!!.setText(suggestion)
                 keywordInput!!.setSelection(suggestion.length)
                 searchKeyword(suggestion)

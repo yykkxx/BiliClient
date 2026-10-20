@@ -25,6 +25,7 @@ import java.util.ArrayList
 import java.util.Collections
 import java.util.HashMap
 import java.util.Objects
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 class SortSettingActivity : BaseActivity() {
 
@@ -72,7 +73,7 @@ class SortSettingActivity : BaseActivity() {
         }
 
         val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
-        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.layoutManager = CustomLinearManager(this)
         val dragAdapter = DragAdapter(this, data)
         recyclerView.adapter = dragAdapter
 

@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.model.LoginRecord
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 
 class LoginRecordActivity : BaseActivity() {
@@ -36,7 +37,7 @@ class LoginRecordActivity : BaseActivity() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
 
-        recyclerView!!.layoutManager = LinearLayoutManager(this)
+        recyclerView!!.layoutManager = CustomLinearManager(this)
 
         recordList = ArrayList()
 

@@ -12,7 +12,10 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
+import com.RobinNotBad.BiliClient.api.WatchLaterApi
 import com.RobinNotBad.BiliClient.model.VideoCard
+import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
@@ -34,6 +37,12 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     var cover: ImageView? = null
     private var lastCoverUrl: String? = null
 
+    /** 当前绑定的视频卡片（长按稍后再看用） */
+    private var boundCard: VideoCard? = null
+
+    /** 该卡片是否已知在稍后再看列表里（避免每次长按都全量拉列表） */
+    private var watchLaterKnown = false
+
     init {
         title = itemView.findViewById(R.id.text_title)
         upName = itemView.findViewById(R.id.text_upname)
@@ -43,6 +52,7 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
     @SuppressLint("SetTextI18n")
     fun showVideoCard(videoCard: VideoCard, context: Context) {
+        boundCard = videoCard
         val str_upName = videoCard.upName
         if (str_upName == null || str_upName.isEmpty() || str_upName == "null") {
             upName!!.visibility = View.GONE
@@ -89,5 +99,58 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             else -> title!!.text = StringUtil.htmlToString(videoCard.title ?: "")
         }
 
+    }
+    /**
+     * 长按切换「稍后再看」（#3/#6）。
+     *
+     * 所有视频列表（推荐/详情第三页/搜索/热门等）行为统一：
+     * 长按一次加入稍后再看（Toast 提示），再次长按移出。
+     * 已知状态缓存到 watchLaterKnown，只有第一次长按才全量拉列表判断，
+     * 之后直接按记录的状态切换，避免每次长按都请求。
+     */
+    fun toggleWatchLater() {
+        val card = boundCard ?: return
+        if (card.type != null && card.type != "video") {
+            MsgUtil.showMsg("此类卡片不支持稍后再看")
+            return
+        }
+        if (card.aid <= 0) return
+
+        val willAdd = !watchLaterKnown
+        MsgUtil.showMsg(if (willAdd) "正在加入稍后再看…" else "正在移出稍后再看…")
+        CenterThreadPool.run(Runnable {
+            try {
+                if (!watchLaterKnown) {
+                    // 第一次长按：先确认是否已在列表里（用户可能在别处加过）
+                    val inList = try {
+                        WatchLaterApi.getWatchLaterList().any { it.aid == card.aid }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        MsgUtil.showMsg("操作失败，请稍后再试")
+                        return@Runnable
+                    }
+                    if (inList) {
+                        // 已在列表里 → 这次长按是移出
+                        val result = WatchLaterApi.delete(card.aid)
+                        if (result == 0) {
+                            watchLaterKnown = false
+                            MsgUtil.showMsg("已移出稍后再看")
+                        } else MsgUtil.showMsg("操作失败，错误码：" + result)
+                        return@Runnable
+                    }
+                }
+                val result = if (willAdd) WatchLaterApi.add(card.aid)
+                else WatchLaterApi.delete(card.aid)
+                if (result == 0) {
+                    watchLaterKnown = willAdd
+                    MsgUtil.showMsg(if (willAdd) "已加入稍后再看" else "已移出稍后再看")
+                } else {
+                    MsgUtil.showMsg("操作失败，错误码：" + result)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                MsgUtil.showMsg("操作失败，请稍后再试")
+            }
+        })
     }
 }

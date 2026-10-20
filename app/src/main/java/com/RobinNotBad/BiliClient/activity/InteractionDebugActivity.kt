@@ -8,6 +8,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.adapter.InteractionDebugAdapter
 import com.RobinNotBad.BiliClient.model.InteractionVideoData
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 class InteractionDebugActivity : BaseActivity() {
 
@@ -33,7 +34,7 @@ class InteractionDebugActivity : BaseActivity() {
         }
 
         val recyclerView = findViewById<RecyclerView>(R.id.debug_var_list)
-        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.layoutManager = CustomLinearManager(this)
         val adapter = InteractionDebugAdapter(staticInteractionData!!.hiddenVars)
         recyclerView.adapter = adapter
     }

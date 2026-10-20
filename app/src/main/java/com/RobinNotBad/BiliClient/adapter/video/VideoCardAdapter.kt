@@ -6,11 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.RobinNotBad.BiliClient.R
-import com.RobinNotBad.BiliClient.api.WatchLaterApi
 import com.RobinNotBad.BiliClient.listener.OnItemLongClickListener
 import com.RobinNotBad.BiliClient.model.VideoCard
-import com.RobinNotBad.BiliClient.util.CenterThreadPool
-import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 
 //视频卡片Adapter 适用于各种场景（迫真
@@ -55,45 +52,12 @@ class VideoCardAdapter(val context: Context, val videoCardList: List<VideoCard>)
                 longClickListener!!.onItemLongClick(position)
                 true
             } else {
-                //默认行为（#6）：任意视频长按加入稍后再看并弹 Toast，再次长按移出。
-                //显式设置了长按监听的页面（稍后再看页/收藏夹页等）仍走自己的逻辑。
-                toggleWatchLater(videoCard)
+                // 默认行为（#3/#6）：长按加入/移出稍后再看（由 VideoCardHolder 统一实现，
+                // 推荐/详情第三页/搜索等所有视频列表行为一致）
+                holder.toggleWatchLater()
                 true
             }
         }
-    }
-
-    /**
-     * 长按切换「稍后再看」（#6）。
-     *
-     * 先拉一次稍后再看列表判断该视频是否已在里面：
-     * 在 → delete + Toast「已移出稍后再看」；不在 → add + Toast「已加入稍后再看」。
-     * 弱网下失败就 Toast 错误码，绝不阻塞主线程。
-     */
-    private fun toggleWatchLater(videoCard: VideoCard) {
-        if (videoCard.type != null && videoCard.type != "video") return  //番剧等特殊卡片不支持
-        if (videoCard.aid <= 0) return
-        CenterThreadPool.run(Runnable {
-            try {
-                val inList = try {
-                    WatchLaterApi.getWatchLaterList().any { it.aid == videoCard.aid }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    MsgUtil.showMsg("操作失败，请稍后再试")
-                    return@Runnable
-                }
-                val result = if (inList) WatchLaterApi.delete(videoCard.aid)
-                else WatchLaterApi.add(videoCard.aid)
-                if (result == 0) {
-                    MsgUtil.showMsg(if (inList) "已移出稍后再看" else "已加入稍后再看")
-                } else {
-                    MsgUtil.showMsg("操作失败，错误码：" + result)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                MsgUtil.showMsg("操作失败，请稍后再试")
-            }
-        })
     }
 
     override fun getItemCount(): Int {

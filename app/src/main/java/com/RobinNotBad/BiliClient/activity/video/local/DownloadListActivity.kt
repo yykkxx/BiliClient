@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.activity.video.local
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import androidx.appcompat.app.AlertDialog
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -44,6 +45,7 @@ class DownloadListActivity : RefreshListActivity() {
     private var lastPercent = -1f
     private var lastState: String? = null
     private var lastDownloadingId: Long = -1
+    private var lastTopClickTime: Long = 0
 
     override fun onCreate(@Nullable savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +61,16 @@ class DownloadListActivity : RefreshListActivity() {
         }
         emptyView?.setOnClickListener {
             startActivity(Intent(this, FavoriteBatchDownloadActivity::class.java))
+        }
+        // #5：双击顶栏呼出「清空」菜单（清空待缓存+下载中 / 清空已缓存，均带确认弹窗）
+        findViewById<android.view.View>(R.id.top)?.setOnClickListener {
+            val now = System.currentTimeMillis()
+            if (now - lastTopClickTime < 500) {
+                lastTopClickTime = 0
+                showClearMenu()
+            } else {
+                lastTopClickTime = now
+            }
         }
 
         CenterThreadPool.run(Runnable {
@@ -97,6 +109,99 @@ class DownloadListActivity : RefreshListActivity() {
             }, 300L, 500L)
         })
 
+    }
+
+    /** #5：清空菜单（双击顶栏呼出） */
+    private fun showClearMenu() {
+        val options = arrayOf(
+                "清空待缓存与下载中（保留已缓存视频）",
+                "清空已缓存视频（保留下载队列）",
+                "全部清空")
+        AlertDialog.Builder(this)
+                .setTitle("清空")
+                .setItems(options) { dialog, which ->
+                    when (which) {
+                        0 -> confirmClearQueue()
+                        1 -> confirmClearLocal()
+                        2 -> confirmClearAll()
+                    }
+                    dialog.dismiss()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+    }
+
+    /** 清空待缓存 + 下载中（下载队列数据库），带确认弹窗 */
+    private fun confirmClearQueue() {
+        val sections = this.sections
+        val count = sections?.size ?: 0
+        if (count == 0) {
+            MsgUtil.showMsg("下载队列为空")
+            return
+        }
+        AlertDialog.Builder(this)
+                .setTitle("清空下载队列")
+                .setMessage("将清空 $count 个待缓存/下载中任务（已缓存完成的视频不受影响）。\n确定继续吗？")
+                .setPositiveButton("清空") { _, _ ->
+                    // 正在下载的先停服务
+                    try { stopService(Intent(this, DownloadService::class.java)) } catch (e: Exception) { e.printStackTrace() }
+                    CenterThreadPool.run(Runnable {
+                        try {
+                            DownloadService.clear()
+                            runOnUiThread {
+                                MsgUtil.showMsg("下载队列已清空")
+                                refreshList(false)
+                            }
+                        } catch (e: Exception) {
+                            MsgUtil.err(e)
+                        }
+                    })
+                }
+                .setNegativeButton("取消", null)
+                .show()
+    }
+
+    /** 清空已缓存视频（删除下载目录内容），带确认弹窗 */
+    private fun confirmClearLocal() {
+        AlertDialog.Builder(this)
+                .setTitle("清空已缓存视频")
+                .setMessage("将删除所有已缓存完成的视频文件（下载队列不受影响）。\n确定继续吗？")
+                .setPositiveButton("清空") { _, _ ->
+                    CenterThreadPool.run(Runnable {
+                        try {
+                            FileUtil.deleteFolder(FileUtil.getVideoDownloadPath())
+                            runOnUiThread { MsgUtil.showMsg("已缓存视频已清空") }
+                        } catch (e: Exception) {
+                            MsgUtil.err(e)
+                        }
+                    })
+                }
+                .setNegativeButton("取消", null)
+                .show()
+    }
+
+    /** 全部清空（队列 + 已缓存），带确认弹窗 */
+    private fun confirmClearAll() {
+        AlertDialog.Builder(this)
+                .setTitle("全部清空")
+                .setMessage("将清空下载队列并删除所有已缓存视频文件。\n确定继续吗？")
+                .setPositiveButton("全部清空") { _, _ ->
+                    try { stopService(Intent(this, DownloadService::class.java)) } catch (e: Exception) { e.printStackTrace() }
+                    CenterThreadPool.run(Runnable {
+                        try {
+                            DownloadService.clear()
+                            FileUtil.deleteFolder(FileUtil.getVideoDownloadPath())
+                            runOnUiThread {
+                                MsgUtil.showMsg("已全部清空")
+                                refreshList(false)
+                            }
+                        } catch (e: Exception) {
+                            MsgUtil.err(e)
+                        }
+                    })
+                }
+                .setNegativeButton("取消", null)
+                .show()
     }
 
     private fun findDownloadingPosition(): Int {
@@ -161,30 +266,20 @@ class DownloadListActivity : RefreshListActivity() {
                 })
 
                 adapter!!.setOnLongClickListener(OnItemLongClickListener { position ->
+                    // #5：长按打开视频详情页（原"长按删除"改由双击顶栏的清空菜单承担）
                     CenterThreadPool.run(Runnable {
                         try {
                             val sections = this@DownloadListActivity.sections
                             if (sections == null || position < 0 || position >= sections.size) return@Runnable
-
-                            val delete = sections.get(position)
-
-                            if (delete.state == "downloading" && DownloadService.started) {
-                                stopService(Intent(this@DownloadListActivity, DownloadService::class.java))
-                                try {
-                                    Thread.sleep(500)
-                                } catch (ignored: InterruptedException) {
-                                }
+                            val section = sections.get(position)
+                            if (section.aid <= 0) {
+                                runOnUiThread { MsgUtil.showMsg("该任务没有视频信息，无法打开详情") }
+                                return@Runnable
                             }
-
-                            val folder = delete.getPath()
-                            if (folder != null && folder.exists()) {
-                                FileUtil.deleteFolder(folder)
+                            runOnUiThread {
+                                com.RobinNotBad.BiliClient.util.TerminalContext.getInstance()
+                                        .enterVideoDetailPage(this@DownloadListActivity, section.aid)
                             }
-
-                            DownloadService.deleteSection(delete.id)
-
-                            refreshList(false)
-                            MsgUtil.showMsg("删除成功")
                         } catch (e: Exception) {
                             MsgUtil.err(e)
                         }

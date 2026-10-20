@@ -14,6 +14,7 @@ import com.RobinNotBad.BiliClient.api.ExpLogApi
 import com.RobinNotBad.BiliClient.model.ExpLog
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 
 class ExpLogActivity : BaseActivity() {
@@ -35,7 +36,7 @@ class ExpLogActivity : BaseActivity() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
 
-        recyclerView!!.layoutManager = LinearLayoutManager(this)
+        recyclerView!!.layoutManager = CustomLinearManager(this)
 
         logList = ArrayList()
 

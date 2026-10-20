@@ -5,7 +5,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 
-import androidx.recyclerview.widget.LinearLayoutManager
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
@@ -54,6 +54,13 @@ class MessageSettingsActivity : BaseActivity() {
     /** 正在提交的设置项 key，防止同一开关被连点出请求风暴 */
     private val pendingKeys = HashSet<String>()
 
+    /** 是否有保存请求在途（#1：全局串行，同一时间最多一个保存请求） */
+    @Volatile
+    private var saveInFlight = false
+
+    /** 排队的保存动作（在途请求结束后立即执行；超过一个直接丢弃） */
+    private val queuedSave = ArrayDeque<Pair<String, Boolean>>()
+
     /** 最近一次从服务端拿到的原始值，保存失败时用它回滚开关 */
     private val serverValues = HashMap<String, Int>()
 
@@ -69,7 +76,9 @@ class MessageSettingsActivity : BaseActivity() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
         recyclerView = findViewById(R.id.recyclerView)
-        recyclerView!!.layoutManager = LinearLayoutManager(this)
+        // #4：用带兜底的 LayoutManager（onLayoutChildren 捕获列表越界错误，
+        // 旧实现裸 LinearLayoutManager 在数据并发变化时直接 IndexOutOfBoundsException）
+        recyclerView!!.layoutManager = CustomLinearManager(this)
 
         //Adapter 只创建一次，后续刷新只改数据，不再整页换 Adapter
         adapter = MessageSettingsAdapter(this, settingsList, object : MessageSettingsAdapter.OnSettingChangedListener {
@@ -142,7 +151,7 @@ class MessageSettingsActivity : BaseActivity() {
                         emptyView!!.text = "加载失败，请重试"
                         emptyView!!.visibility = View.VISIBLE
                     }
-                    MsgUtil.showMsg("获取设置失败: " + (errMsg ?: "未知错误"))
+                    MsgUtil.toast("获取设置失败: " + (errMsg ?: "未知错误"))
                 }
             })
         })
@@ -171,10 +180,26 @@ class MessageSettingsActivity : BaseActivity() {
         //同一项有请求在途：忽略这次点击并回弹，避免弱网下连点堆请求
         if (!pendingKeys.add(key)) {
             revertItem(key)
-            MsgUtil.showMsg("上一项设置还在保存中…")
+            MsgUtil.toast("上一项设置还在保存中…")
             return
         }
 
+        // #1：全局串行——同一时间只允许一个保存请求在途；
+        // 已有在途时这次点击进排队（只保留最后一个），再多的直接忽略回弹。
+        if (saveInFlight) {
+            if (queuedSave.isEmpty()) queuedSave.addLast(key to value)
+            else {
+                queuedSave.clear()
+                queuedSave.addLast(key to value)
+            }
+            return
+        }
+        dispatchSave(key, value)
+    }
+
+    /** 真正发保存请求（一次只跑一个，结束后消化队列） */
+    private fun dispatchSave(key: String, value: Boolean) {
+        saveInFlight = true
         val serverValue = serverValueOf(key, value)
         CenterThreadPool.run(Runnable {
             var ok = false
@@ -191,15 +216,28 @@ class MessageSettingsActivity : BaseActivity() {
 
             CenterThreadPool.runOnUiThread(Runnable {
                 pendingKeys.remove(key)
-                if (isDestroyed) return@Runnable
+                if (isDestroyed) {
+                    saveInFlight = false
+                    queuedSave.clear()
+                    return@Runnable
+                }
                 if (ok) {
                     //成功：记录为已知服务端状态
                     serverValues[key] = serverValue
-                    MsgUtil.showMsg("设置已保存")
+                    MsgUtil.toast("设置已保存")
                 } else {
                     //失败：只回滚这一项，绝不整页重载（旧版卡死根源）
                     revertItem(key)
-                    MsgUtil.showMsg("保存失败: " + (errMsg ?: "未知错误"))
+                    MsgUtil.toast("保存失败: " + (errMsg ?: "未知错误"))
+                }
+
+                //消化队列里的下一个保存（如果有）
+                saveInFlight = false
+                val next = queuedSave.removeFirstOrNull()
+                if (next != null && !pendingKeys.contains(next.first)) {
+                    if (pendingKeys.add(next.first)) dispatchSave(next.first, next.second)
+                } else if (next != null) {
+                    revertItem(next.first)
                 }
             })
         })

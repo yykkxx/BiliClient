@@ -40,6 +40,8 @@ class CatchActivity : BaseActivity() {
             // 仅保留本地的“可能原因”提示；不再提供上传堆栈到服务器的功能
             if (stack.contains("java.lang.NumberFormatException"))
                 reason_str = SpannableString("可能的崩溃原因：\n数值转换出错")
+            else if (stack.contains("IndexOutOfBoundsException"))
+                reason_str = SpannableString("可能的崩溃原因：\n列表数据与界面不同步（越界）\n通常在快速滚动/切换时偶发")
             else if (stack.contains("java.lang.UnsatisfiedLinkError"))
                 reason_str = SpannableString("可能的崩溃原因：\n外部库加载出错，可能设备太老或修改了安装包")
             else if (stack.contains("org.json.JSONException"))

@@ -9,6 +9,8 @@ import androidx.annotation.NonNull
 import androidx.recyclerview.widget.LinearLayoutManager
 
 import com.RobinNotBad.BiliClient.R
+import androidx.appcompat.app.AlertDialog
+
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.adapter.video.VideoCheckAdapter
 import com.RobinNotBad.BiliClient.api.FavoriteApi
@@ -22,6 +24,7 @@ import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.google.android.material.button.MaterialButton
 
 import java.util.ArrayList
+import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 /**
  * 收藏夹多选缓存（#7）。
@@ -68,7 +71,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout)
         swipeRefreshLayout!!.isEnabled = false
         recyclerView = findViewById(R.id.recyclerView)
-        recyclerView!!.layoutManager = LinearLayoutManager(this)
+        recyclerView!!.layoutManager = CustomLinearManager(this)
 
         selectAllBtn = findViewById(R.id.btn_select_all)
         downloadBtn = findViewById(R.id.btn_download)
@@ -103,7 +106,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
             })
 
             selectAllBtn!!.setOnClickListener { toggleSelectAll() }
-            downloadBtn!!.setOnClickListener { downloadChecked() }
+            downloadBtn!!.setOnClickListener { showQualityDialog() }
             updateDownloadBtnText()
 
             loadVideos()
@@ -238,7 +241,83 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
         downloadBtn!!.text = "缓存所选(" + checkedAids.size + ")"
     }
 
-    private fun downloadChecked() {
+    /**
+     * #5：缓存清晰度选择弹窗。
+     * 先取第一个勾选视频的可用清晰度列表（getVideo 会顺带解析 qnStrList/qnValueList），
+     * 失败则退回通用档位。默认选中"跟随播放器设置"。
+     */
+    private fun showQualityDialog() {
+        if (checkedAids.isEmpty()) {
+            MsgUtil.showMsg("还没有勾选任何视频")
+            return
+        }
+        val firstAid = checkedAids.first()
+        MsgUtil.showMsg("正在获取可用清晰度…")
+        CenterThreadPool.run(Runnable {
+            var qnStrs: List<String> = emptyList()
+            var qnVals: IntArray? = null
+            try {
+                val info = VideoInfoApi.getVideoInfo(firstAid)
+                if (info != null && info.cids != null && info.cids!!.isNotEmpty()) {
+                    val pd = com.RobinNotBad.BiliClient.model.PlayerData()
+                    pd.aid = firstAid
+                    pd.cid = info.cids!![0]
+                    pd.qn = 16
+                    com.RobinNotBad.BiliClient.api.PlayerApi.getVideo(pd, true)
+                    if (pd.qnStrList != null && pd.qnValueList != null && pd.qnStrList!!.isNotEmpty()) {
+                        qnStrs = pd.qnStrList!!.filterNotNull()
+                        qnVals = pd.qnValueList
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 通用兜底档位（接口失败时用）
+            val labels: Array<String>
+            val values: IntArray
+            val playerQn = SharedPreferencesUtil.getInt("play_qn", 16)
+            if (qnVals != null && qnStrs.size == qnVals.size && qnStrs.isNotEmpty()) {
+                labels = Array(qnStrs.size + 1) { i ->
+                    if (i == 0) "跟随播放器设置（当前 ${qnName(playerQn)}）" else qnStrs[i - 1]
+                }
+                values = IntArray(qnVals.size + 1)
+                values[0] = -1  // -1 = 跟随播放器
+                System.arraycopy(qnVals, 0, values, 1, qnVals.size)
+            } else {
+                val defaults = arrayOf(
+                        "4K 超清" to 120, "1080P 高码率" to 112, "1080P 高清" to 80,
+                        "720P 高清" to 64, "480P 清晰" to 32, "360P 流畅" to 16)
+                labels = Array(defaults.size + 1) { i ->
+                    if (i == 0) "跟随播放器设置（当前 ${qnName(playerQn)}）" else defaults[i - 1].first
+                }
+                values = IntArray(defaults.size + 1)
+                values[0] = -1
+                for (i in defaults.indices) values[i + 1] = defaults[i].second
+            }
+
+            CenterThreadPool.runOnUiThread(Runnable {
+                if (isDestroyed) return@Runnable
+                AlertDialog.Builder(this)
+                        .setTitle("选择缓存清晰度")
+                        .setSingleChoiceItems(labels, 0) { dialog, which ->
+                            dialog.dismiss()
+                            val qn = values[which]
+                            val realQn = if (qn == -1) SharedPreferencesUtil.getInt("play_qn", 16) else qn
+                            downloadChecked(realQn)
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+            })
+        })
+    }
+
+    private fun qnName(qn: Int): String = when (qn) {
+        120 -> "4K"; 112 -> "1080P高码率"; 80 -> "1080P"; 74 -> "720P60"; 64 -> "720P"
+        32 -> "480P"; 16 -> "360P"; else -> "qn$qn"
+    }
+
+    private fun downloadChecked(quality: Int) {
         if (checkedAids.isEmpty()) {
             MsgUtil.showMsg("还没有勾选任何视频")
             return
@@ -261,7 +340,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
                     val cid = info.cids!![0]
                     val before = DownloadService.queueCount()
                     DownloadService.startDownload(info.title ?: aid.toString(), aid, cid,
-                            info.cover, SharedPreferencesUtil.getInt("play_qn", 16), "video", "")
+                            info.cover, quality, "video", "")
                     // startDownload 是异步插库，等它真正进表再数（简单起见轮询一次短暂等待）
                     var wait = 0
                     while (DownloadService.queueCount() == before && wait < 20) {

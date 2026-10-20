@@ -471,6 +471,11 @@
             android:label="全站排行榜"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.video.story.StoryPlayerActivity"
+            android:exported="false"
+            android:label="短视频"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.video.RecommendActivity"
             android:exported="true"
             android:label="推荐"
