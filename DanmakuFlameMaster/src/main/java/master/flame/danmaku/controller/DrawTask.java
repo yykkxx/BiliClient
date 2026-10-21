@@ -200,17 +200,32 @@ public class DrawTask implements IDrawTask {
     }
 
     @Override
-    public IDanmakus getVisibleDanmakusOnTime(long time) {
+    public synchronized IDanmakus getVisibleDanmakusOnTime(long time) {
         long beginMills = time - mContext.mDanmakuFactory.MAX_DANMAKU_DURATION - 100;
         long endMills = time + mContext.mDanmakuFactory.MAX_DANMAKU_DURATION;
-        IDanmakus subDanmakus = danmakuList.subnew(beginMills, endMills);
         IDanmakus visibleDanmakus = new Danmakus();
-        if (null != subDanmakus && !subDanmakus.isEmpty()) {
-            IDanmakuIterator iterator = subDanmakus.iterator();
-            while (iterator.hasNext()) {
-                BaseDanmaku danmaku = iterator.next();
-                if (danmaku.isShown() && !danmaku.isOutside()) {
-                    visibleDanmakus.addItem(danmaku);
+
+        final IDanmakus list = danmakuList;
+        if (list == null) {
+            return visibleDanmakus;
+        }
+
+        // 修复 ConcurrentModificationException（BiliClient 点击"弹幕时间戳"跳转时偶发崩溃）：
+        // subnew() 返回的是 TreeMap 的**活视图**，原实现直接遍历它，而绘制线程的
+        // draw()/removeUnusedLiveDanmakusIn() 与解析线程的 addDanmaku() 会同时修改
+        // 同一个 TreeMap —— 迭代期间结构被改就抛 CME（栈顶 TreeMap$NavigableSubMap$SubMapIterator）。
+        // 这里把整个"取子集+遍历"放进锁里：方法与 draw()/addDanmaku()/removeAllDanmakus()
+        // 同为 synchronized(this)，并与 synchronized(danmakuList) 保持完全一致的加锁顺序
+        // （先 this 后 danmakuList），既消除竞态又不会死锁。绘制一帧很快，UI 线程最多等一帧。
+        synchronized (list) {
+            IDanmakus subDanmakus = list.subnew(beginMills, endMills);
+            if (null != subDanmakus && !subDanmakus.isEmpty()) {
+                IDanmakuIterator iterator = subDanmakus.iterator();
+                while (iterator.hasNext()) {
+                    BaseDanmaku danmaku = iterator.next();
+                    if (danmaku.isShown() && !danmaku.isOutside()) {
+                        visibleDanmakus.addItem(danmaku);
+                    }
                 }
             }
         }

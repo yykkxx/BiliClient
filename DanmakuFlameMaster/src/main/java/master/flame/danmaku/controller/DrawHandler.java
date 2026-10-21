@@ -779,8 +779,12 @@ public class DrawHandler extends Handler {
     }
 
     public IDanmakus getCurrentVisibleDanmakus() {
-        if (drawTask != null) {
-            return drawTask.getVisibleDanmakusOnTime(getCurrentTime());
+        // 稳定读取 drawTask：quit()/prepare 过程中 drawTask 会被绘制线程置空并重建，
+        // TOCTOU 双读会拿到两个不同引用（或对已废弃 task 取时间）。
+        // 这里快照一次再调用，task 内部方法自带空判断与锁。
+        IDrawTask task = drawTask;
+        if (task != null) {
+            return task.getVisibleDanmakusOnTime(getCurrentTime());
         }
 
         return null;

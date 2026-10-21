@@ -45,9 +45,22 @@ class StoryPlayerActivity : BaseActivity() {
     private var hintView: TextView? = null
     private var playBtn: ImageView? = null
     private var likeBtn: ImageView? = null
+    private var progressView: android.widget.ProgressBar? = null
+    private var metaView: TextView? = null
 
     private var ijkPlayer: IjkMediaPlayer? = null
     private var textureView: TextureView? = null
+
+    /** 进度刷新定时器（500ms 一档，轻量） */
+    private var progressTimer: java.util.Timer? = null
+
+    /** 控制层（顶栏+右侧按钮）自动隐藏 */
+    private val controlsHideRunnable = Runnable { setControlsVisible(false) }
+    private var controlsVisible = true
+
+    /** 下一支视频的直链缓存（预加载用，切换秒开） */
+    @Volatile
+    private var nextUrl: String? = null
 
     /** 短视频流（StoryApi 专用接口，无限刷） */
     private val storyList = ArrayList<StoryApi.StoryCard>()
@@ -80,6 +93,8 @@ class StoryPlayerActivity : BaseActivity() {
         hintView = findViewById(R.id.story_hint)
         playBtn = findViewById(R.id.story_btn_play)
         likeBtn = findViewById(R.id.story_btn_like)
+        progressView = findViewById(R.id.story_progress)
+        metaView = findViewById(R.id.story_meta)
 
         findViewById<View>(R.id.story_back).setOnClickListener { finish() }
         playBtn!!.setOnClickListener { togglePlay() }
@@ -94,10 +109,14 @@ class StoryPlayerActivity : BaseActivity() {
                 runOnUiThread { switchTo(0) }
             }
         }
+
+        // 首次 4 秒后自动隐藏控制层（先让用户看清入口）
+        findViewById<View>(R.id.story_top).postDelayed({ setControlsVisible(false) }, 4000)
     }
 
     override fun onDestroy() {
         destroyed = true
+        progressTimer?.cancel()
         releasePlayer()
         super.onDestroy()
     }
@@ -118,6 +137,12 @@ class StoryPlayerActivity : BaseActivity() {
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                // 抖音式：单击切换控制层显隐（顶栏+右侧按钮）
+                setControlsVisible(!controlsVisible)
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
                 togglePlay()
                 return true
             }
@@ -126,6 +151,31 @@ class StoryPlayerActivity : BaseActivity() {
         findViewById<View>(R.id.story_root).setOnTouchListener { v, event ->
             gestureDetector?.onTouchEvent(event)
             true
+        }
+    }
+
+    /** 控制层显隐（3 秒无操作自动隐藏，播放时全屏沉浸） */
+    private fun setControlsVisible(visible: Boolean) {
+        controlsVisible = visible
+        val top = findViewById<View>(R.id.story_top)
+        val buttons = findViewById<View>(R.id.story_buttons)
+        top.visibility = if (visible) View.VISIBLE else View.GONE
+        buttons.visibility = if (visible) View.VISIBLE else View.GONE
+        if (visible) {
+            top.removeCallbacks(controlsHideRunnable)
+            top.postDelayed(controlsHideRunnable, 3000)
+        } else {
+            top.removeCallbacks(controlsHideRunnable)
+        }
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        // 任何交互都刷新控制层存活时间
+        if (controlsVisible && !destroyed) {
+            val top = findViewById<View>(R.id.story_top)
+            top.removeCallbacks(controlsHideRunnable)
+            top.postDelayed(controlsHideRunnable, 3000)
         }
     }
 
@@ -187,8 +237,14 @@ class StoryPlayerActivity : BaseActivity() {
 
         titleView!!.text = card.title ?: ""
         upnameView!!.text = "UP：" + (card.upName ?: "")
+        metaView!!.text = (card.view ?: "") + " · " + formatDuration(card.durationSec)
+        // 切换视频时控制层短暂可见（让用户看到标题），随后自动隐藏
+        setControlsVisible(true)
         setLoading(true, "加载中")
         likeBtn!!.setImageResource(R.drawable.icon_like_0)
+        liked = false
+        progressView!!.progress = 0
+        nextUrl = null
 
         // 流剩余不多时提前补拉（保持无限刷的顺滑）
         if (storyList.size - index <= 2) loadMore()
@@ -208,6 +264,9 @@ class StoryPlayerActivity : BaseActivity() {
                 PlayerApi.getVideo(pd, false)
                 val url = pd.videoUrl ?: throw Exception("取流失败")
 
+                // 预加载下一支的直链（后台顺手做，切换时秒开）
+                preloadNext(index + 1)
+
                 runOnUiThread {
                     if (destroyed) {
                         switching = false
@@ -221,14 +280,50 @@ class StoryPlayerActivity : BaseActivity() {
                     if (!destroyed) {
                         setLoading(false)
                         showHint("加载失败：" + (e.message ?: ""))
-                        // 失败自动跳下一个，别卡在坏视频上
-                        if (currentIndex + 1 < storyList.size) {
+                        // 失败自动跳下一个；连续失败 3 次就停下（避免接口整体故障时无限空转）
+                        failCount++
+                        if (currentIndex + 1 < storyList.size && failCount < 3) {
                             findViewById<View>(android.R.id.content).postDelayed({ switchTo(currentIndex + 1) }, 800)
+                        } else if (failCount >= 3) {
+                            showHint("连续加载失败，稍后再试")
                         }
                     }
                 }
             }
         })
+    }
+
+    /** 连续失败计数（成功 prepared 后清零） */
+    private var failCount = 0
+
+    /** 后台预取下一支视频的直链（不播放，只缓存 url） */
+    private fun preloadNext(nextIndex: Int) {
+        if (nextIndex < 0 || nextIndex >= storyList.size) return
+        val card = storyList[nextIndex]
+        CenterThreadPool.run(Runnable {
+            try {
+                val pd = PlayerData()
+                pd.aid = card.aid
+                pd.cid = card.cid
+                pd.title = card.title
+                pd.qn = 16
+                if (pd.cid <= 0) {
+                    val info = com.RobinNotBad.BiliClient.api.VideoInfoApi.getVideoInfo(card.aid)
+                    pd.cid = info?.cids?.firstOrNull() ?: 0L
+                }
+                PlayerApi.getVideo(pd, false)
+                if (!pd.videoUrl.isNullOrEmpty()) nextUrl = pd.videoUrl
+            } catch (e: Exception) {
+                // 预加载失败无所谓，切换时再正常取流
+            }
+        })
+    }
+
+    private fun formatDuration(sec: Int): String {
+        if (sec <= 0) return ""
+        val m = sec / 60
+        val s = sec % 60
+        return if (m > 0) "${m}分${s}秒" else "${s}秒"
     }
 
     // ---------------- 播放 ----------------
@@ -262,15 +357,26 @@ class StoryPlayerActivity : BaseActivity() {
             }
         }
 
-        ijkPlayer!!.setSurface(Surface(textureView!!.surfaceTexture))
+        // 修复：TextureView 首帧 attach 前 surfaceTexture 为 null，
+        // Surface(null) 会直接 NPE 崩溃（alpha3 "点开就崩/黑屏"的另一元凶）。
+        // surface 还没就绪时先不设，等 onSurfaceTextureAvailable 回调里补设。
+        val st = textureView!!.surfaceTexture
+        if (st != null) ijkPlayer!!.setSurface(Surface(st))
 
         ijkPlayer!!.setOnPreparedListener { mp ->
             prepared = true
             playing = true
             switching = false
+            failCount = 0
             setLoading(false)
             playBtn!!.setImageResource(R.drawable.btn_player_pause)
+            try {
+                val dur = mp.duration
+                if (dur > 0) progressView!!.max = 1000
+            } catch (ignored: Exception) {
+            }
             mp.start()
+            startProgressTimer()
         }
 
         ijkPlayer!!.setOnCompletionListener {
@@ -290,7 +396,8 @@ class StoryPlayerActivity : BaseActivity() {
         try {
             val headers = HashMap<String, String>()
             headers["Referer"] = "https://www.bilibili.com/"
-            headers["Cookie"] = NetWorkUtil.getCookies().toString()
+            headers["Cookie"] = com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+                    .getString(com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.cookies, "") ?: ""
             headers["User-Agent"] = NetWorkUtil.USER_AGENT_WEB
             ijkPlayer!!.setDataSource(url, headers)
             ijkPlayer!!.prepareAsync()
@@ -319,11 +426,44 @@ class StoryPlayerActivity : BaseActivity() {
     }
 
     private fun releasePlayer() {
+        stopProgressTimer()
         try { ijkPlayer?.stop() } catch (ignored: Exception) {}
         try { ijkPlayer?.release() } catch (ignored: Exception) {}
         ijkPlayer = null
         prepared = false
         playing = false
+    }
+
+    /** 进度条刷新（500ms 一档） */
+    private fun startProgressTimer() {
+        stopProgressTimer()
+        progressTimer = java.util.Timer()
+        progressTimer!!.schedule(object : java.util.TimerTask() {
+            override fun run() {
+                if (destroyed) {
+                    cancel()
+                    return
+                }
+                val p = ijkPlayer ?: run { cancel(); return }
+                try {
+                    val cur = p.currentPosition
+                    val dur = p.duration
+                    if (dur > 0) {
+                        val v = (cur * 1000L / dur).toInt()
+                        runOnUiThread { if (!destroyed) progressView?.progress = v }
+                    }
+                } catch (e: Exception) {
+                    // 播放器已释放等，安静退出
+                    cancel()
+                }
+            }
+        }, 200, 500)
+    }
+
+    private fun stopProgressTimer() {
+        progressTimer?.cancel()
+        progressTimer?.purge()
+        progressTimer = null
     }
 
     // ---------------- 交互入口 ----------------

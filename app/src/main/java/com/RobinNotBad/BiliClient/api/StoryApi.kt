@@ -58,6 +58,7 @@ object StoryApi {
     @JvmStatic
     fun getStoryFeed(out: MutableList<StoryCard>): Int {
         val form = NetWorkUtil.FormData()
+                .setUrlParam(true)   // 关键：toString() 以 "?" 开头，否则 URL 会拼成 ".../storyappkey=..." 导致接口 404（v5.0.1-alpha3 完全加载不出来的根因）
                 .put("appkey", APP_KEY)
                 .put("build", BUILD)
                 .put("mobi_app", "android")

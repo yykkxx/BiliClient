@@ -693,18 +693,32 @@ class PlayerDanmakuController(
      */
     fun findTimestampAt(x: Float, y: Float): Long {
         if (!timeJumpEnabled) return -1L
-        val visible = danmakuView?.currentVisibleDanmakus ?: return -1L
+        // ConcurrentModificationException 防御（用户上报：点击弹幕时间戳跳转时崩溃）：
+        // visible 是库内 TreeMap 的活视图，即便 DrawTask 已加锁，遍历过程仍可能被
+        // 绘制线程的迭代器并发触碰；把遍历整体 try-catch，失败就当没命中（轻点
+        // 本来就是尽力而为的命中检测，不该为它崩整个播放页）。
+        val visible = try {
+            danmakuView?.currentVisibleDanmakus ?: return -1L
+        } catch (e: ConcurrentModificationException) {
+            return -1L
+        }
         if (visible.isEmpty) return -1L
 
         var hitText: CharSequence? = null
-        val it = visible.iterator()
-        while (it.hasNext()) {
-            val danmaku = it.next() ?: continue
-            if (danmaku.isOutside) continue
-            if (x < danmaku.left - HIT_SLOP || x > danmaku.right + HIT_SLOP) continue
-            if (y < danmaku.top - HIT_SLOP || y > danmaku.bottom + HIT_SLOP) continue
-            // 后画的弹幕在更上层，命中更靠后的那条更符合直觉
-            hitText = danmaku.text
+        try {
+            val it = visible.iterator()
+            while (it.hasNext()) {
+                val danmaku = it.next() ?: continue
+                if (danmaku.isOutside) continue
+                if (x < danmaku.left - HIT_SLOP || x > danmaku.right + HIT_SLOP) continue
+                if (y < danmaku.top - HIT_SLOP || y > danmaku.bottom + HIT_SLOP) continue
+                // 后画的弹幕在更上层，命中更靠后的那条更符合直觉
+                hitText = danmaku.text
+            }
+        } catch (e: ConcurrentModificationException) {
+            // 遍历中途被改：用已拿到的部分结果继续
+        } catch (e: NullPointerException) {
+            return -1L
         }
         val text = hitText?.toString() ?: return -1L
         return parseTimestamp(text)
