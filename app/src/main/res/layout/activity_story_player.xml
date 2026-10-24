@@ -4,6 +4,7 @@
     android:id="@+id/story_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:keepScreenOn="true"
     android:background="#000000">
 
     <!-- 视频画面（SurfaceView：与主播放器同样的渲染路径，手表上比 TextureView 可靠） -->
@@ -17,6 +18,12 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
     </FrameLayout>
+
+    <!-- 弹幕层（在视频之上、控件之下） -->
+    <master.flame.danmaku.ui.widget.DanmakuView
+        android:id="@+id/story_danmaku"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <!-- 顶部：返回按钮（纯图标，不再显示「页面标题」文字，避免压住视频标题）+ 标题 + UP主
          整体贴顶，尽量把画面中间让出来 -->
@@ -110,6 +117,15 @@
             android:layout_marginTop="8dp"
             android:padding="7dp"
             android:src="@drawable/icon_info"
+            android:background="#4D000000" />
+
+        <ImageView
+            android:id="@+id/story_btn_danmaku"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginTop="8dp"
+            android:padding="7dp"
+            android:src="@drawable/icon_danmaku"
             android:background="#4D000000" />
 
         <TextView

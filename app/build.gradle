@@ -29,7 +29,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
         versionCode 20261024
-        versionName "5.0.2-alpha2"
+        versionName "5.0.2-alpha3"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

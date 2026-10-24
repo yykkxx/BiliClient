@@ -157,6 +157,9 @@ class StoryPlaybackController(
 
     fun isHardwareCodec(): Boolean = hardwareCodec
 
+    /** 是否已完成 prepare（弹幕控制器需要） */
+    fun isPrepared(): Boolean = prepared
+
     /** 目标倍速：prepare 之前设置也能生效（在 onPrepared 里补应用） */
     private var speed = 1.0f
 

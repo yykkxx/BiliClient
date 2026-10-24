@@ -21,12 +21,15 @@ import androidx.appcompat.app.AlertDialog
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
+import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.api.StoryApi
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
+
+import master.flame.danmaku.controller.IDanmakuView
 
 /**
  * 短视频播放器（shortvideo 分支，专用竖屏播放页）。
@@ -61,6 +64,13 @@ class StoryPlayerActivity : BaseActivity() {
     private var timeView: TextView? = null
     private var speedBtn: TextView? = null
     private var qualityBtn: TextView? = null
+    private var danmakuBtn: ImageView? = null
+    private var danmakuView: IDanmakuView? = null
+
+    private var danmakuController: PlayerDanmakuController? = null
+
+    /** 弹幕开关（设置项 player_danmaku，与主播放器共用） */
+    private var danmakuEnabled = true
 
     private var controller: StoryPlaybackController? = null
 
@@ -141,6 +151,8 @@ class StoryPlayerActivity : BaseActivity() {
         timeView = findViewById(R.id.story_time)
         speedBtn = findViewById(R.id.story_btn_speed)
         qualityBtn = findViewById(R.id.story_btn_quality)
+        danmakuBtn = findViewById(R.id.story_btn_danmaku)
+        danmakuView = findViewById<View>(R.id.story_danmaku) as IDanmakuView
 
         findViewById<View>(R.id.story_back).setOnClickListener { finish() }
         playBtn!!.setOnClickListener { togglePlay() }
@@ -154,6 +166,7 @@ class StoryPlayerActivity : BaseActivity() {
         likeBtn!!.setOnClickListener { likeCurrent() }
         findViewById<View>(R.id.story_btn_detail).setOnClickListener { openDetail() }
         speedBtn!!.setOnClickListener { showSpeedDialog() }
+        danmakuBtn!!.setOnClickListener { toggleDanmaku() }
         qualityBtn!!.setOnClickListener { showQualityDialog() }
         // 长按清晰度按钮 = 画面比例 / 旋转（不额外占按钮位置）
         qualityBtn!!.setOnLongClickListener {
@@ -176,6 +189,7 @@ class StoryPlayerActivity : BaseActivity() {
         initGesture()
 
         controller = StoryPlaybackController(surfaceView!!, playerListener)
+        initDanmaku()
 
         autoNext = SharedPreferencesUtil.getBoolean("story_auto_next", true)
         // 默认最低清晰度：手表屏幕小，省流、起播快
@@ -194,6 +208,62 @@ class StoryPlayerActivity : BaseActivity() {
         }
     }
 
+    // ==================== 弹幕 ====================
+
+    /** 初始化弹幕控制器（复用主播放器的 PlayerDanmakuController） */
+    private fun initDanmaku() {
+        val view = danmakuView ?: return
+        danmakuEnabled = SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true)
+        danmakuBtn?.alpha = if (danmakuEnabled) 1f else 0.35f
+        danmakuController = PlayerDanmakuController(
+            view,
+            { try { controller?.currentPosition() ?: 0L } catch (e: Exception) { 0L } },
+            { try { controller?.isPrepared() ?: false } catch (e: Exception) { false } },
+            { destroyed }
+        )
+        danmakuController?.buildContext()
+        if (!danmakuEnabled) danmakuController?.hideAndClear()
+    }
+
+    private fun toggleDanmaku() {
+        danmakuEnabled = !danmakuEnabled
+        SharedPreferencesUtil.putBoolean("pref_switch_danmaku", danmakuEnabled)
+        danmakuBtn?.alpha = if (danmakuEnabled) 1f else 0.35f
+        showHint(if (danmakuEnabled) "弹幕：开" else "弹幕：关")
+        val dc = danmakuController ?: return
+        if (!danmakuEnabled) {
+            dc.hideAndClear()
+        } else {
+            dc.show()
+            currentCard?.let { startDanmakuFor(it) }
+        }
+    }
+
+    /** 为当前视频重新拉取弹幕（切换视频时调用） */
+    private fun startDanmakuFor(card: StoryApi.StoryCard) {
+        val dc = danmakuController ?: return
+        if (!danmakuEnabled) {
+            dc.hideAndClear()
+            return
+        }
+        dc.hideAndClear()
+        if (card.cid <= 0) return
+        dc.oldApiUrl = "https://comment.bilibili.com/" + card.cid + ".xml"
+        dc.cacheFile = java.io.File(cacheDir, "story_danmaku_" + card.cid + ".xml")
+        // 短视频一般很短：时长未就绪时按 60 秒估，控制器会等播放器解析出真实时长
+        dc.startOnline(card.aid, card.cid, { controller?.currentDuration() ?: 0L }) { missing ->
+            if (missing > 0) Logu.d("story", "弹幕缺失分段：" + missing)
+        }
+        dc.setSpeed(if (longPressActive) LONG_PRESS_SPEED else normalSpeed)
+    }
+
+    /** 弹幕时间轴与播放状态同步 */
+    private fun syncDanmakuPlaying(playing: Boolean) {
+        val dc = danmakuController ?: return
+        if (!danmakuEnabled) return
+        if (playing) dc.resume() else dc.pause()
+    }
+
     override fun onDestroy() {
         destroyed = true
         try {
@@ -205,6 +275,11 @@ class StoryPlayerActivity : BaseActivity() {
         } catch (ignored: Exception) {
         }
         controller = null
+        try {
+            danmakuController?.release()
+        } catch (ignored: Exception) {
+        }
+        danmakuController = null
         super.onDestroy()
     }
 
@@ -212,6 +287,10 @@ class StoryPlayerActivity : BaseActivity() {
         super.onPause()
         try {
             controller?.pause()
+        } catch (ignored: Exception) {
+        }
+        try {
+            danmakuController?.pause()
         } catch (ignored: Exception) {
         }
     }
@@ -224,9 +303,31 @@ class StoryPlayerActivity : BaseActivity() {
             controller?.resume()
         } catch (ignored: Exception) {
         }
+        try {
+            if (firstFrameShown) danmakuController?.resume()
+        } catch (ignored: Exception) {
+        }
         if (currentCard != null && !firstFrameShown && !switching && currentInfo == null) {
             retryCurrent()
         }
+    }
+
+    // ==================== 表冠 / 滚轮切换 ====================
+
+    private var lastRotaryAt = 0L
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (!destroyed && event.actionMasked == MotionEvent.ACTION_SCROLL) {
+            val v = event.getAxisValue(MotionEvent.AXIS_SCROLL)
+            val now = System.currentTimeMillis()
+            if (Math.abs(v) > 0.1f && now - lastRotaryAt > 450) {
+                lastRotaryAt = now
+                // 表冠向上 = 下一个，向下 = 上一个（与上滑/下滑手势一致）
+                switchRelative(if (v > 0) 1 else -1)
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
     }
 
     // ==================== 音量键（与主播放器一致） ====================
@@ -280,6 +381,12 @@ class StoryPlayerActivity : BaseActivity() {
         statusView?.maxWidth = (w * 0.62f).toInt()
         speedHintView?.let { it.translationY = -h * 0.16f }
         timeView?.setPadding(0, 0, (w * 0.10f).toInt(), (h * 0.06f).toInt())
+
+        //弹幕不要跑到圆角外
+        val dv = danmakuView?.view
+        if (dv != null) {
+            dv.setPadding(0, (h * 0.10f).toInt(), 0, (h * 0.10f).toInt())
+        }
 
         val p = seekBar?.layoutParams
         if (p is FrameLayout.LayoutParams) {
@@ -362,7 +469,10 @@ class StoryPlayerActivity : BaseActivity() {
                 normalSpeed = SPEED_VALUES[which]
                 SharedPreferencesUtil.putInt("story_speed_idx", which)
                 speedBtn!!.text = SPEED_LABELS[which]
-                if (!longPressActive) controller?.setSpeed(normalSpeed)
+                if (!longPressActive) {
+                    controller?.setSpeed(normalSpeed)
+                    danmakuController?.setSpeed(normalSpeed)
+                }
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)
@@ -376,6 +486,7 @@ class StoryPlayerActivity : BaseActivity() {
         if (!c.isPlaying()) return
         longPressActive = true
         c.setSpeed(LONG_PRESS_SPEED)
+        danmakuController?.setSpeed(LONG_PRESS_SPEED)
         speedHintView?.text = "x " + LONG_PRESS_SPEED
         speedHintView?.visibility = View.VISIBLE
         hideControls()
@@ -386,6 +497,7 @@ class StoryPlayerActivity : BaseActivity() {
         longPressActive = false
         speedHintView?.visibility = View.GONE
         controller?.setSpeed(normalSpeed)
+        danmakuController?.setSpeed(normalSpeed)
     }
 
     // ==================== 清晰度 ====================
@@ -467,7 +579,11 @@ class StoryPlayerActivity : BaseActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 seeking = false
                 val dur = controller?.currentDuration() ?: 0L
-                if (dur > 0) controller?.seekTo(dur * (sb?.progress ?: 0) / 1000)
+                if (dur > 0) {
+                    val target = dur * (sb?.progress ?: 0) / 1000
+                    controller?.seekTo(target)
+                    danmakuController?.seekTo(target)
+                }
             }
         })
     }
@@ -485,9 +601,26 @@ class StoryPlayerActivity : BaseActivity() {
 
     // ==================== 状态显示 ====================
 
-    private fun setLoading(show: Boolean, text: String = "加载中") {
-        loadingView?.visibility = if (show) View.VISIBLE else View.GONE
-        if (show) loadingText?.text = text
+    private val showLoadingRunnable = Runnable {
+        if (!destroyed) {
+            loadingView?.visibility = View.VISIBLE
+            loadingText?.text = loadingTextStr
+        }
+    }
+    private var loadingTextStr = "加载中"
+
+    /**
+     * @param delayMs >0 时延迟显示（缓冲这种一闪而过的状态不要立刻弹遮罩，避免闪烁）
+     */
+    private fun setLoading(show: Boolean, text: String = "加载中", delayMs: Long = 0L) {
+        val v = loadingView ?: return
+        v.removeCallbacks(showLoadingRunnable)
+        loadingTextStr = text
+        if (!show) {
+            v.visibility = View.GONE
+            return
+        }
+        if (delayMs > 0) v.postDelayed(showLoadingRunnable, delayMs) else showLoadingRunnable.run()
     }
 
     private fun showStatus(text: String, autoHide: Boolean = false) {
@@ -665,6 +798,12 @@ class StoryPlayerActivity : BaseActivity() {
         endLongPressSpeed()
 
         hideStatus()
+        //切换视频：先清掉上一支的弹幕，再为这一支重新拉取
+        try {
+            startDanmakuFor(card)
+        } catch (e: Exception) {
+            Logu.e("story", "加载弹幕失败：" + e.message)
+        }
         titleView?.text = card.title ?: ""
         upnameView?.text = if (card.upName.isNullOrEmpty()) "" else "UP：" + card.upName
         metaView?.text = buildMeta(card)
@@ -857,9 +996,11 @@ class StoryPlayerActivity : BaseActivity() {
             if (c.isPlaying()) {
                 c.pause()
                 playBtn?.setImageResource(R.drawable.btn_player_play)
+                syncDanmakuPlaying(false)
             } else {
                 c.resume()
                 playBtn?.setImageResource(R.drawable.btn_player_pause)
+                syncDanmakuPlaying(true)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -871,6 +1012,14 @@ class StoryPlayerActivity : BaseActivity() {
             if (destroyed) return
             switching = false
             if (durationMs > 0) timeView?.text = timeText(0, durationMs)
+            if (danmakuEnabled) {
+                try {
+                    danmakuController?.start()
+                    danmakuController?.setSpeed(if (longPressActive) LONG_PRESS_SPEED else normalSpeed)
+                } catch (e: Exception) {
+                    Logu.e("story", "启动弹幕失败：" + e.message)
+                }
+            }
         }
 
         override fun onPlayerProgress(positionMs: Long, durationMs: Long) {
@@ -883,7 +1032,7 @@ class StoryPlayerActivity : BaseActivity() {
 
         override fun onPlayerBuffering(buffering: Boolean) {
             if (destroyed) return
-            if (buffering) setLoading(true, "缓冲中…")
+            if (buffering) setLoading(true, "缓冲中…", 350L)
             else if (firstFrameShown) setLoading(false)
         }
 
@@ -896,6 +1045,7 @@ class StoryPlayerActivity : BaseActivity() {
             playBtn?.setImageResource(R.drawable.btn_player_pause)
             setControlsVisible(true)
             scheduleHideControls(3000)
+            syncDanmakuPlaying(true)
         }
 
         override fun onPlayerCompletion() {
