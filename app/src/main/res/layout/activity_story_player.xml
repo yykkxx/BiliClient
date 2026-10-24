@@ -6,11 +6,17 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- 视频画面（竖屏撑满） -->
+    <!-- 视频画面（SurfaceView：与主播放器同样的渲染路径，手表上比 TextureView 可靠） -->
     <FrameLayout
         android:id="@+id/story_video_layout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent">
+
+        <SurfaceView
+            android:id="@+id/story_surface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
 
     <!-- 顶部：返回 + 标题 + UP主 -->
     <LinearLayout
@@ -21,6 +27,7 @@
         android:orientation="vertical"
         android:paddingHorizontal="8dp"
         android:paddingTop="4dp"
+        android:paddingBottom="2dp"
         android:background="#33000000">
 
         <LinearLayout
@@ -35,6 +42,7 @@
                 android:layout_height="wrap_content"
                 android:padding="6dp"
                 android:text="@string/pagename_default"
+                android:textColor="#FFFFFF"
                 android:textStyle="bold"
                 app:drawableStartCompat="@drawable/arrow_back" />
 
@@ -102,6 +110,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
+        android:translationY="-28dp"
         android:orientation="vertical"
         android:gravity="center">
 
@@ -119,6 +128,23 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- 状态/错误提示（常驻，可点击重试；不再像旧版那样 1.8 秒就消失，
+         这样「黑屏到底为什么」在手表上也能看见） -->
+    <TextView
+        android:id="@+id/story_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:maxWidth="240dp"
+        android:translationY="56dp"
+        android:padding="8dp"
+        android:background="#66000000"
+        android:lineSpacingExtra="2dp"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
     <!-- 播放量/时长（左下角） -->
     <TextView
         android:id="@+id/story_meta"
@@ -135,7 +161,7 @@
         android:shadowDx="1"
         android:shadowDy="1" />
 
-    <!-- 底部提示（切换方向提示） -->
+    <!-- 底部短提示（切换方向提示） -->
     <TextView
         android:id="@+id/story_hint"
         android:layout_width="wrap_content"

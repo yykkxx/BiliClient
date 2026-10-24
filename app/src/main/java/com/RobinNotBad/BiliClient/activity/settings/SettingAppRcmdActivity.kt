@@ -92,7 +92,10 @@ class SettingAppRcmdActivity : BaseActivity() {
             AppRcmdApi.IDENTITY_PHONE to "手机版（与官方手机客户端一致）"
         )
         val currentId = AppRcmdApi.getIdentity().id
-        val labels = identities.map { it.second }.toTypedArray()
+        // 每个身份后面直接标出登录状态，避免"选了哪端、哪端登没登录"看不出来
+        val labels = identities.map { (id, label) ->
+            label + if (AppRcmdApi.isIdentityLogin(id)) " · 已登录" else " · 未登录"
+        }.toTypedArray()
         val checked = identities.indexOfFirst { it.first == currentId }
 
         AlertDialog.Builder(this)
@@ -122,17 +125,34 @@ class SettingAppRcmdActivity : BaseActivity() {
         val logged = AppRcmdApi.isLogin()
         val mid = AppRcmdApi.getIdentityMid(identity.id)
 
-        // 三端独立登录状态总览（可同时登录）
-        fun stateLine(name: String, id: String): String {
-            return if (AppRcmdApi.isIdentityLogin(id)) "$name 已登录" else "$name 未登录"
+        // 三端独立登录状态总览（可同时登录）。
+        // 第一行固定是「当前身份 + 该端登录状态」，后面三行才是各端明细——
+        // 旧版布局高度写死 35sp，四行文字被裁得只剩「HD 已登录」，看起来像是
+        // 当前身份永远是 HD（本轮 bug 的根因之一）。
+        val sb = StringBuilder()
+        sb.append("当前身份：").append(identity.displayName)
+        sb.append(if (logged) "（已登录）" else "（未登录）")
+        val identities = listOf(
+            AppRcmdApi.IDENTITY_HD to "HD",
+            AppRcmdApi.IDENTITY_TV to "TV",
+            AppRcmdApi.IDENTITY_PHONE to "手机"
+        )
+        for ((id, name) in identities) {
+            sb.append('\n').append(name).append("：")
+            if (AppRcmdApi.isIdentityLogin(id)) {
+                sb.append("已登录")
+                val idMid = AppRcmdApi.getIdentityMid(id)
+                if (idMid > 0) sb.append("（uid ").append(idMid).append("）")
+            } else {
+                sb.append("未登录")
+            }
+            // 标出当前正在使用的一派，避免再看错行
+            if (id == identity.id) sb.append("（当前）")
         }
-        identityText!!.text = "当前身份：${identity.displayName}\n" +
-                stateLine("HD", AppRcmdApi.IDENTITY_HD) + "\n" +
-                stateLine("TV", AppRcmdApi.IDENTITY_TV) + "\n" +
-                stateLine("手机", AppRcmdApi.IDENTITY_PHONE)
+        identityText!!.text = sb.toString()
 
         loginText!!.text = if (logged)
-            "扫码登录（${identity.displayName}）\n已登录：$mid\n（三端可同时登录）"
+            "扫码登录（${identity.displayName}）\n已登录：uid $mid\n（三端可同时登录）"
         else
             "扫码登录（${identity.displayName}）\n每端只能自己扫码登录\n（三端可同时登录）"
         logoutCard!!.visibility = if (logged) View.VISIBLE else View.GONE

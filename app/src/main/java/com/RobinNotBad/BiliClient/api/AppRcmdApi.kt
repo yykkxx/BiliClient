@@ -112,10 +112,17 @@ object AppRcmdApi {
         "Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2",
         "android", 8430300, 2, "android", "phone", 8)
 
-    /** 当前选中的客户端身份（默认 HD，与旧版本行为一致） */
+    /**
+     * 当前选中的客户端身份（默认 HD，与旧版本行为一致）。
+     * 读取时做一次归一化（去空格/转小写），避免历史版本写入了大小写不一致的值后
+     * 永远回退成 HD——那会表现为「不管选哪端，当前身份都显示 HD」。
+     */
     @JvmStatic
     fun getIdentity(): RcmdIdentity {
-        return when (SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_IDENTITY, IDENTITY_HD)) {
+        val raw = (SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_IDENTITY, IDENTITY_HD) ?: "")
+                .trim()
+                .lowercase()
+        return when (raw) {
             IDENTITY_TV -> TV_IDENTITY
             IDENTITY_PHONE -> PHONE_IDENTITY
             else -> HD_IDENTITY

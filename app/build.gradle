@@ -28,20 +28,20 @@ android {
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
-        versionCode 20261029
-        versionName "5.0.1-alpha4"
+        versionCode 20261030
+        versionName "5.0.1-alpha5"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
         }
 
-        multiDexEnabled true
+        multiDexEnabled false
 
         ndk {
             // Android 11 已移除 mips 支持，且仓库里 mips 的 .so 一直是 0 字节的空占位，
             // 打包进去只会增加安装体积与校验开销，这里直接去掉（#21）。
             //noinspection ChromeOsAbiSupport
-            abiFilters 'armeabi-v7a','x86'
+            abiFilters 'armeabi-v7a'
         }
 
         resConfigs 'zh'
