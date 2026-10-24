@@ -41,8 +41,10 @@ class StoryPlaybackController(
         fun onPlayerError(what: Int, extra: Int)
         /** 解码方式自动切换（true=硬解 false=软解），页面可提示用户 */
         fun onPlayerCodecChanged(hardware: Boolean)
-        /** 视频宽高（圆屏适配用：把画面缩进圆形安全区） */
+        /** 视频宽高（画面按真实比例摆放，避免 ijk 拉伸变形） */
         fun onPlayerVideoSize(width: Int, height: Int)
+        /** 视频旋转角度（0/90/180/270，部分竖屏视频用旋转元数据表示） */
+        fun onPlayerRotation(degrees: Int)
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -89,8 +91,27 @@ class StoryPlaybackController(
         firstFrameRendered = false
         prepared = false
         prepareRetry = 0
-        releasePlayerInternal()
-        createPlayer()
+        //复用同一个播放器实例：每次重建 IjkMediaPlayer（native init）要几百毫秒，
+        //短视频连续切换时非常明显。reset() 后重新 setDataSource 还能保留上一帧画面，
+        //切换过程不会黑屏。
+        val existing = player
+        if (existing != null) {
+            stopTimers()
+            try {
+                existing.stop()
+            } catch (ignored: Exception) {
+            }
+            try {
+                existing.reset()
+            } catch (ignored: Exception) {
+            }
+            applyOptions(existing, hardwareCodec)
+            pendingPlay = true
+            tryStartPrepare()
+        } else {
+            releasePlayerInternal()
+            createPlayer()
+        }
         if (player != null) startPrepareWatchdog()
     }
 
@@ -136,6 +157,28 @@ class StoryPlaybackController(
 
     fun isHardwareCodec(): Boolean = hardwareCodec
 
+    /** 目标倍速：prepare 之前设置也能生效（在 onPrepared 里补应用） */
+    private var speed = 1.0f
+
+    /** 倍速（长按倍速 / 倍速菜单共用） */
+    fun setSpeed(newSpeed: Float) {
+        speed = newSpeed
+        try {
+            player?.setSpeed(newSpeed)
+        } catch (e: Exception) {
+            Logu.e("story", "设置倍速失败：" + e.message)
+        }
+    }
+
+    /** 拖动进度条跳转 */
+    fun seekTo(positionMs: Long) {
+        try {
+            player?.seekTo(positionMs)
+        } catch (e: Exception) {
+            Logu.e("story", "seek 失败：" + e.message)
+        }
+    }
+
     /** 释放播放器（保留 Surface 回调，页面退出时调用） */
     fun release() {
         released = true
@@ -179,6 +222,11 @@ class StoryPlaybackController(
                 } catch (ignored: Exception) {
                 }
             }
+            //prepare 前设置的倍速在这里补上（ijk 在未 prepare 时 setSpeed 可能不生效）
+            try {
+                player?.setSpeed(speed)
+            } catch (ignored: Exception) {
+            }
             if (wantPlay) {
                 try {
                     mp.start()
@@ -213,6 +261,7 @@ class StoryPlaybackController(
                 }
                 IMediaPlayer.MEDIA_INFO_BUFFERING_START -> listener.onPlayerBuffering(true)
                 IMediaPlayer.MEDIA_INFO_BUFFERING_END -> listener.onPlayerBuffering(false)
+                10001 /* MEDIA_INFO_VIDEO_ROTATION_CHANGED */ -> listener.onPlayerRotation(extra)
             }
             false
         }
@@ -302,6 +351,8 @@ class StoryPlaybackController(
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", NetWorkUtil.USER_AGENT_WEB)
         // 网络 IO 超时（微秒）：避免弱网时永远卡在 prepare
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "timeout", 15000000L)
+        // 降低探测开销：短视频时长很短，不需要很大的 probesize，首帧能更快出来
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 131072L)
     }
 
     private fun handlePlaybackFailure(what: Int, extra: Int) {

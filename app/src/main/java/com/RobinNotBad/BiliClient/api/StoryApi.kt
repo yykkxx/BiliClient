@@ -48,6 +48,11 @@ object StoryApi {
 
     private val uniqRandom = Random()
 
+    /** 一刷至少凑多少条视频 */
+    private const val MIN_ITEMS = 4
+    /** 最多连拉几刷（接口偶尔返回空批次时补拉） */
+    private const val MAX_STORY_ROUNDS = 2
+
     /** 短视频卡片：VideoCard 的字段平铺 + cid 与竖屏时长（VideoCard 不是 open，用组合） */
     class StoryCard {
         @JvmField var aid: Long = 0L
@@ -58,6 +63,9 @@ object StoryApi {
         @JvmField var view: String? = null
         @JvmField var cid: Long = 0L
         @JvmField var durationSec: Int = 0
+        /** 视频宽高（用于只保留竖屏视频；0 表示未知） */
+        @JvmField var width: Int = 0
+        @JvmField var height: Int = 0
     }
 
     /** 一次拉流的结果：是否降级 + 降级原因（给 UI 显示，便于用户反馈） */
@@ -85,9 +93,18 @@ object StoryApi {
     fun loadFeed(out: MutableList<StoryCard>): StoryFeedResult {
         val result = StoryFeedResult()
         var storyError = ""
+        //短视频接口（/x/v2/feed/index/story）本身就是官方短视频流；
+        //它混有竖屏与少量横屏视频，都保留（横屏在大屏设备上同样能看）。
         try {
-            val n = getStoryFeed(out)
-            if (n > 0) return result
+            var guard = 0
+            while (out.size < MIN_ITEMS && guard < MAX_STORY_ROUNDS) {
+                guard++
+                val batch = ArrayList<StoryCard>()
+                val n = getStoryFeed(batch)
+                if (n <= 0) break
+                out.addAll(batch)
+            }
+            if (out.isNotEmpty()) return result
             storyError = "短视频接口没有返回可播放内容"
         } catch (e: Exception) {
             storyError = e.message ?: e.javaClass.simpleName
@@ -98,7 +115,7 @@ object StoryApi {
         // 降级：推荐流（与推荐页同源，稳定性最高）
         try {
             val n = getFallbackFeed(out)
-            if (n > 0) {
+            if (n > 0 && out.isNotEmpty()) {
                 result.fromFallback = true
                 result.warning = "短视频接口不可用（" + storyError + "），已临时使用推荐流"
                 Logu.e("story", result.warning)
@@ -218,6 +235,19 @@ object StoryApi {
             card.view = if (view > 0) StringUtil.toWan(view) + "观看" else ""
             card.cid = playerArgs?.optLong("cid", 0L) ?: it.optLong("cid", 0L)
             card.durationSec = it.optInt("duration", 0)
+            val dim = it.optJSONObject("dimension")
+            if (dim != null) {
+                var w = dim.optInt("width", 0)
+                var h = dim.optInt("height", 0)
+                val rotate = dim.optInt("rotate", 0)
+                if (rotate == 90 || rotate == 270) {
+                    val t = w
+                    w = h
+                    h = t
+                }
+                card.width = w
+                card.height = h
+            }
             out.add(card)
             added++
         }
@@ -268,6 +298,19 @@ object StoryApi {
             card.view = if (view > 0) StringUtil.toWan(view) + "观看" else ""
             card.cid = it.optLong("cid", 0L)
             card.durationSec = it.optInt("duration", 0)
+            val dim = it.optJSONObject("dimension")
+            if (dim != null) {
+                var w = dim.optInt("width", 0)
+                var h = dim.optInt("height", 0)
+                val rotate = dim.optInt("rotate", 0)
+                if (rotate == 90 || rotate == 270) {
+                    val t = w
+                    w = h
+                    h = t
+                }
+                card.width = w
+                card.height = h
+            }
             out.add(card)
             added++
         }
@@ -375,7 +418,19 @@ object StoryApi {
                         best = v
                     }
                 }
-                if (best == null) best = videos.optJSONObject(0)
+                if (best == null) {
+                    //qn 比所有可选档位都低（如请求 6）：取**最小**的那一档，
+                    //而不是默认的第 0 个（第 0 个往往是最高清）
+                    var smallestQ = Int.MAX_VALUE
+                    for (i in 0 until videos.length()) {
+                        val v = videos.optJSONObject(i) ?: continue
+                        val id = v.optInt("id", 0)
+                        if (id in 1 until smallestQ) {
+                            smallestQ = id
+                            best = v
+                        }
+                    }
+                }
                 var u = best?.optString("baseUrl") ?: ""
                 if (u.isEmpty()) u = best?.optString("base_url") ?: ""
                 if (u.isNotEmpty()) {
@@ -388,6 +443,72 @@ object StoryApi {
         }
 
         throw IOException("未返回可播放地址")
+    }
+
+    /**
+     * 把下一支视频预下载到本地（真正的"预加载"，切过去时直接播本地文件，不卡）。
+     * 只预取前 [maxBytes] 字节；超过大小上限或下载失败都返回 false，调用方回退到直链。
+     */
+    @JvmStatic
+    fun prefetchToFile(url: String, dest: java.io.File, maxBytes: Long = 12L * 1024 * 1024): Boolean {
+        if (url.isEmpty()) return false
+        if (dest.exists() && dest.length() > 0) return true
+        val tmp = java.io.File(dest.absolutePath + ".part")
+        var ok = false
+        try {
+            dest.parentFile?.mkdirs()
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("Referer", "https://www.bilibili.com/")
+                .header("User-Agent", NetWorkUtil.USER_AGENT_WEB)
+                .header("Cookie", com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+                    .getString(com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.cookies, "") ?: "")
+                .build()
+            val response = NetWorkUtil.getOkHttpInstance().newCall(request).execute()
+            val body = response.body
+            if (response.code != 200 || body == null) {
+                Logu.e("story", "预下载失败 HTTP " + response.code)
+                response.close()
+                return false
+            }
+            val total = body.contentLength()
+            if (total > maxBytes) {
+                Logu.d("story", "预下载跳过：文件过大 " + total)
+                response.close()
+                return false
+            }
+            tmp.delete()
+            var written = 0L
+            try {
+                body.byteStream().use { input ->
+                    java.io.FileOutputStream(tmp).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            written += read
+                            if (written > maxBytes) break
+                            output.write(buffer, 0, read)
+                        }
+                        output.flush()
+                    }
+                }
+                //大小对得上才算完整（分块传输没有 Content-Length 时按已写完处理）
+                ok = tmp.length() > 0 && (total <= 0 || tmp.length() >= total)
+                if (ok) {
+                    dest.delete()
+                    ok = tmp.renameTo(dest)
+                }
+            } finally {
+                response.close()
+                if (!ok) tmp.delete()
+            }
+        } catch (e: Exception) {
+            Logu.d("story", "预下载异常：" + e.message)
+            tmp.delete()
+        }
+        if (ok) Logu.d("story", "已预下载：" + dest.name + " " + dest.length() / 1024 + "KB")
+        return ok
     }
 
     private fun webHeadersSnapshot(): ArrayList<String> {

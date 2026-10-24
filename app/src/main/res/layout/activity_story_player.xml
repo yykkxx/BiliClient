@@ -18,17 +18,16 @@
             android:layout_height="match_parent" />
     </FrameLayout>
 
-    <!-- 顶部：返回 + 标题 + UP主 -->
+    <!-- 顶部：返回按钮（纯图标，不再显示「页面标题」文字，避免压住视频标题）+ 标题 + UP主
+         整体贴顶，尽量把画面中间让出来 -->
     <LinearLayout
         android:id="@+id/story_top"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:orientation="vertical"
-        android:paddingHorizontal="8dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="2dp"
-        android:background="#33000000">
+        android:paddingHorizontal="2dp"
+        android:background="#00000000">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -36,72 +35,104 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <TextView
+            <ImageView
                 android:id="@+id/story_back"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="6dp"
-                android:text="@string/pagename_default"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                app:drawableStartCompat="@drawable/arrow_back" />
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:padding="8dp"
+                android:contentDescription="返回"
+                android:src="@drawable/arrow_back"
+                app:tint="#FFFFFF" />
 
             <TextView
                 android:id="@+id/story_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="#FFFFFF"
-                android:textSize="13sp" />
+                android:textSize="12sp"
+                android:shadowColor="#CC000000"
+                android:shadowRadius="3"
+                android:shadowDx="1"
+                android:shadowDy="1" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/story_upname"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="32dp"
             android:layout_marginBottom="2dp"
             android:alpha="0.85"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:textColor="#FFFFFF"
-            android:textSize="11sp" />
+            android:textSize="10sp"
+            android:shadowColor="#CC000000"
+            android:shadowRadius="3"
+            android:shadowDx="1"
+            android:shadowDy="1" />
     </LinearLayout>
 
-    <!-- 右侧按钮列 -->
+    <!-- 右侧按钮列：播放 / 点赞 / 详情 / 倍速 / 清晰度 -->
     <LinearLayout
         android:id="@+id/story_buttons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
         android:orientation="vertical"
-        android:paddingEnd="6dp">
+        android:gravity="center_horizontal"
+        android:paddingEnd="3dp">
 
         <ImageView
             android:id="@+id/story_btn_play"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:padding="8dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="7dp"
             android:src="@drawable/btn_player_pause"
             android:background="#4D000000" />
 
         <ImageView
             android:id="@+id/story_btn_like"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:layout_marginTop="10dp"
-            android:padding="8dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginTop="8dp"
+            android:padding="7dp"
             android:src="@drawable/icon_like_0"
             android:background="#4D000000" />
 
         <ImageView
             android:id="@+id/story_btn_detail"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:layout_marginTop="10dp"
-            android:padding="8dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginTop="8dp"
+            android:padding="7dp"
             android:src="@drawable/icon_info"
             android:background="#4D000000" />
+
+        <TextView
+            android:id="@+id/story_btn_speed"
+            android:layout_width="34dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="8dp"
+            android:background="#4D000000"
+            android:gravity="center"
+            android:text="1.0x"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp" />
+
+        <TextView
+            android:id="@+id/story_btn_quality"
+            android:layout_width="34dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="8dp"
+            android:background="#4D000000"
+            android:gravity="center"
+            android:text="360P"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp" />
     </LinearLayout>
 
     <!-- 加载中 -->
@@ -110,13 +141,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:translationY="-28dp"
+        android:translationY="-36dp"
         android:orientation="vertical"
         android:gravity="center">
 
         <ProgressBar
-            android:layout_width="40dp"
-            android:layout_height="40dp" />
+            android:layout_width="36dp"
+            android:layout_height="36dp" />
 
         <TextView
             android:id="@+id/story_loading_text"
@@ -125,11 +156,10 @@
             android:layout_marginTop="6dp"
             android:text="加载中"
             android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- 状态/错误提示（常驻，可点击重试；不再像旧版那样 1.8 秒就消失，
-         这样「黑屏到底为什么」在手表上也能看见） -->
+    <!-- 状态/错误提示（常驻，可点击重试） -->
     <TextView
         android:id="@+id/story_status"
         android:layout_width="wrap_content"
@@ -137,7 +167,7 @@
         android:layout_gravity="center"
         android:gravity="center"
         android:maxWidth="240dp"
-        android:translationY="56dp"
+        android:translationY="36dp"
         android:padding="8dp"
         android:background="#66000000"
         android:lineSpacingExtra="2dp"
@@ -145,43 +175,79 @@
         android:textSize="11sp"
         android:visibility="gone" />
 
-    <!-- 播放量/时长（左下角） -->
+    <!-- 长按倍速提示（与主播放器同款样式） -->
+    <TextView
+        android:id="@+id/story_speed_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:translationY="-84dp"
+        android:alpha="0.9"
+        android:background="@drawable/background_speed_hint"
+        android:gravity="center"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="5dp"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- 播放量/时长（左下，尽量靠边，不压画面中心） -->
     <TextView
         android:id="@+id/story_meta"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
-        android:layout_marginStart="10dp"
-        android:layout_marginBottom="14dp"
+        android:layout_marginStart="6dp"
+        android:layout_marginBottom="24dp"
         android:alpha="0.85"
         android:textColor="#FFFFFF"
-        android:textSize="11sp"
+        android:textSize="10sp"
         android:shadowColor="#99000000"
         android:shadowRadius="2"
         android:shadowDx="1"
         android:shadowDy="1" />
 
-    <!-- 底部短提示（切换方向提示） -->
+    <!-- 当前/总时长（右下） -->
+    <TextView
+        android:id="@+id/story_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="24dp"
+        android:alpha="0.85"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:shadowColor="#99000000"
+        android:shadowRadius="2"
+        android:shadowDx="1"
+        android:shadowDy="1" />
+
+    <!-- 底部短提示 -->
     <TextView
         android:id="@+id/story_hint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="18dp"
+        android:layout_marginBottom="44dp"
         android:alpha="0.85"
         android:textColor="#FFFFFF"
         android:textSize="11sp"
         android:visibility="gone" />
 
-    <!-- 底部播放进度条 -->
-    <ProgressBar
-        android:id="@+id/story_progress"
-        style="?android:attr/progressBarStyleHorizontal"
+    <!-- 底部进度条（可拖动 seek，与主播放器一样） -->
+    <SeekBar
+        android:id="@+id/story_seek"
         android:layout_width="match_parent"
-        android:layout_height="3dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="bottom"
+        android:layout_marginHorizontal="4dp"
+        android:layout_marginBottom="2dp"
         android:max="1000"
         android:progress="0"
         android:progressTint="#FB7299"
-        android:background="#33FFFFFF" />
+        android:thumbTint="#FB7299"
+        android:background="#00000000"
+        android:progressBackgroundTint="#33FFFFFF" />
 </FrameLayout>

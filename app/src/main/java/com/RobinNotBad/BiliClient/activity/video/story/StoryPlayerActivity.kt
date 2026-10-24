@@ -1,17 +1,23 @@
 package com.RobinNotBad.BiliClient.activity.video.story
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.GestureDetector
+import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
+
+import androidx.appcompat.app.AlertDialog
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
@@ -25,17 +31,19 @@ import com.RobinNotBad.BiliClient.util.ToolsUtil
 /**
  * 短视频播放器（shortvideo 分支，专用竖屏播放页）。
  *
- * v5.0.1-alpha5 重构（针对「黑屏 + 连视频详细信息都加载不出来」）：
- * - 数据源改为 StoryApi.loadFeed：专用接口失败自动降级推荐流，并把失败原因显示在页面上；
- * - 取流改为 StoryApi.resolvePlay：PC durl → HTML5 durl → DASH 三级回退；
- * - 播放内核换成 StoryPlaybackController（SurfaceView + 与主播放器一致的参数 +
- *   首帧看门狗 + 硬解失败自动软解）；
- * - 所有错误常驻显示、点按重试，不再「一闪而过」导致只能看到黑屏；
- * - 圆屏手表（player_ui_round）下给顶栏/按钮/底部信息留出圆形安全区。
+ * v5.0.2-alpha2：
+ * - 竖屏优先：画面默认按视频真实比例铺满屏幕高度（可在「画面比例」里切 填满/拉伸），
+ *   不会再把竖屏视频压成一个小方块；
+ * - 顶部去掉「页面标题」那行加粗白字（原来是返回按钮上的文字，会压住真正的视频标题），
+ *   标题/UP 贴顶、播放量/时长贴底，把画面中间让出来；
+ * - 补齐主播放器的常用功能：**长按倍速**、倍速菜单、清晰度切换、进度条拖动、
+ *   单击显隐控制层、双击暂停、音量键、上下滑切换、自动连播、点赞/详情；
+ * - 圆屏手表：顶栏/按钮/底部信息收进圆形安全区。
  */
 @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
 class StoryPlayerActivity : BaseActivity() {
 
+    private var videoLayout: FrameLayout? = null
     private var surfaceView: SurfaceView? = null
     private var topBar: LinearLayout? = null
     private var buttonsBar: LinearLayout? = null
@@ -45,10 +53,14 @@ class StoryPlayerActivity : BaseActivity() {
     private var loadingText: TextView? = null
     private var statusView: TextView? = null
     private var hintView: TextView? = null
+    private var speedHintView: TextView? = null
     private var playBtn: ImageView? = null
     private var likeBtn: ImageView? = null
-    private var progressView: ProgressBar? = null
+    private var seekBar: SeekBar? = null
     private var metaView: TextView? = null
+    private var timeView: TextView? = null
+    private var speedBtn: TextView? = null
+    private var qualityBtn: TextView? = null
 
     private var controller: StoryPlaybackController? = null
 
@@ -63,17 +75,10 @@ class StoryPlayerActivity : BaseActivity() {
     private var currentHeaders: HashMap<String, String> = HashMap()
     private var currentInfo: StoryApi.StoryPlayInfo? = null
 
-    /** 正在切换/加载（防连滑重入） */
     private var switching = false
     private var loadingMore = false
-
-    /** 是否已经尝试过备用线路（HTML5） */
     private var triedHtml5 = false
-
-    /** 是否已经出过画面（决定缓冲提示是否隐藏） */
     private var firstFrameShown = false
-
-    /** 连续失败计数（出画面后清零） */
     private var failCount = 0
 
     private var destroyed = false
@@ -84,12 +89,41 @@ class StoryPlayerActivity : BaseActivity() {
 
     private var gestureDetector: GestureDetector? = null
 
+    // ---------------- 播放参数（与主播放器对齐） ----------------
+
+    /** 当前清晰度（6=最低 16=360P 32=480P 64=720P 80=1080P） */
+    private var currentQn = 6
+
+    /** 常速（倍速菜单设置的值，长按倍速结束后恢复到这个值） */
+    private var normalSpeed = 1.0f
+
+    /** 画面比例：0=适应屏幕 1=填满屏幕 2=拉伸 */
+    private var fitMode = FIT_FIT
+
+    private var videoW = 0
+    private var videoH = 0
+
+    /** 手动旋转角度（0/90/180/270） */
+    private var userRotation = 0
+
+    private var seeking = false
+
+    /** 自动连播（长按播放按钮切换，默认开） */
+    private var autoNext = true
+
+    // 长按倍速
+    private var longPressActive = false
+    private var downX = 0f
+    private var downY = 0f
+    private val longPressRunnable = Runnable { startLongPressSpeed() }
+
     // ==================== 生命周期 ====================
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_story_player)
 
+        videoLayout = findViewById(R.id.story_video_layout)
         surfaceView = findViewById(R.id.story_surface)
         topBar = findViewById(R.id.story_top)
         buttonsBar = findViewById(R.id.story_buttons)
@@ -99,17 +133,34 @@ class StoryPlayerActivity : BaseActivity() {
         loadingText = findViewById(R.id.story_loading_text)
         statusView = findViewById(R.id.story_status)
         hintView = findViewById(R.id.story_hint)
+        speedHintView = findViewById(R.id.story_speed_hint)
         playBtn = findViewById(R.id.story_btn_play)
         likeBtn = findViewById(R.id.story_btn_like)
-        progressView = findViewById(R.id.story_progress)
+        seekBar = findViewById(R.id.story_seek)
         metaView = findViewById(R.id.story_meta)
+        timeView = findViewById(R.id.story_time)
+        speedBtn = findViewById(R.id.story_btn_speed)
+        qualityBtn = findViewById(R.id.story_btn_quality)
 
         findViewById<View>(R.id.story_back).setOnClickListener { finish() }
         playBtn!!.setOnClickListener { togglePlay() }
+        //长按播放按钮 = 开关自动连播（原播放器的 auto_next）
+        playBtn!!.setOnLongClickListener {
+            autoNext = !autoNext
+            SharedPreferencesUtil.putBoolean("story_auto_next", autoNext)
+            showHint(if (autoNext) "自动连播：开" else "自动连播：关")
+            true
+        }
         likeBtn!!.setOnClickListener { likeCurrent() }
         findViewById<View>(R.id.story_btn_detail).setOnClickListener { openDetail() }
+        speedBtn!!.setOnClickListener { showSpeedDialog() }
+        qualityBtn!!.setOnClickListener { showQualityDialog() }
+        // 长按清晰度按钮 = 画面比例 / 旋转（不额外占按钮位置）
+        qualityBtn!!.setOnLongClickListener {
+            showDisplayDialog()
+            true
+        }
 
-        // 状态文字：常驻错误提示，点按重试当前视频（列表为空时重新拉流）
         statusView!!.setOnClickListener {
             hideStatus()
             if (storyList.isEmpty()) {
@@ -120,12 +171,22 @@ class StoryPlayerActivity : BaseActivity() {
             }
         }
 
+        initSeekBar()
         applyRoundInsets()
         initGesture()
 
         controller = StoryPlaybackController(surfaceView!!, playerListener)
 
-        // 进入即拉第一刷
+        autoNext = SharedPreferencesUtil.getBoolean("story_auto_next", true)
+        // 默认最低清晰度：手表屏幕小，省流、起播快
+        currentQn = SharedPreferencesUtil.getInt("story_qn", 6)
+        qualityBtn!!.text = qualityLabel(currentQn)
+        normalSpeed = SharedPreferencesUtil.getInt("story_speed_idx", 2).let { idx ->
+            SPEED_VALUES.getOrElse(idx) { 1.0f }
+        }
+        speedBtn!!.text = speedLabel(normalSpeed)
+        fitMode = SharedPreferencesUtil.getInt("story_fit_mode", FIT_FIT)
+
         setLoading(true, "加载中…")
         loadMore {
             if (!destroyed && storyList.isNotEmpty()) switchTo(0)
@@ -136,6 +197,10 @@ class StoryPlayerActivity : BaseActivity() {
     override fun onDestroy() {
         destroyed = true
         try {
+            prefetchDir().listFiles()?.forEach { it.delete() }
+        } catch (ignored: Exception) {
+        }
+        try {
             controller?.release()
         } catch (ignored: Exception) {
         }
@@ -145,7 +210,6 @@ class StoryPlayerActivity : BaseActivity() {
 
     override fun onPause() {
         super.onPause()
-        // 切后台暂停，回来继续（避免后台耗电）
         try {
             controller?.pause()
         } catch (ignored: Exception) {
@@ -160,9 +224,37 @@ class StoryPlayerActivity : BaseActivity() {
             controller?.resume()
         } catch (ignored: Exception) {
         }
-        if (currentCard != null && !firstFrameShown && !switching) {
-            //回到前台但一直没有画面：给一次重试机会（比如后台时 Surface 被销毁）
-            if (currentInfo == null) retryCurrent()
+        if (currentCard != null && !firstFrameShown && !switching && currentInfo == null) {
+            retryCurrent()
+        }
+    }
+
+    // ==================== 音量键（与主播放器一致） ====================
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                changeVolume(true)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                changeVolume(false)
+                true
+            }
+            else -> super.onKeyDown(keyCode, event)
+        }
+    }
+
+    private fun changeVolume(up: Boolean) {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val now = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val target = (now + if (up) 1 else -1).coerceIn(0, max)
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+            showStatus("音量：" + (target * 100 / max) + "%", autoHide = true)
+        } catch (e: Exception) {
+            Logu.e("story", "音量调节失败：" + e.message)
         }
     }
 
@@ -170,7 +262,7 @@ class StoryPlayerActivity : BaseActivity() {
 
     /**
      * 圆屏手表：把顶栏/右侧按钮/底部信息收进圆形安全区。
-     * 与主播放器一致使用 player_ui_round 开关（设置-界面-圆屏适配）。
+     * 视频画面本身保持全屏（短视频要的就是整屏竖屏观感）。
      */
     @SuppressLint("RtlHardcoded")
     private fun applyRoundInsets() {
@@ -178,53 +270,217 @@ class StoryPlayerActivity : BaseActivity() {
         val dm = resources.displayMetrics
         val w = dm.widthPixels
         val h = dm.heightPixels
-        val side = (w * 0.16f).toInt()
-        val top = (h * 0.10f).toInt()
-        val bottom = (h * 0.12f).toInt()
+        val side = (w * 0.17f).toInt()
+        val topBottom = (h * 0.04f).toInt()
 
-        topBar?.setPadding(side, top, side, ToolsUtil.dp2px(2f))
+        topBar?.setPadding(side, topBottom, side, ToolsUtil.dp2px(1f))
         buttonsBar?.setPadding(0, 0, (w * 0.10f).toInt(), 0)
-        metaView?.setPadding(side, 0, side, bottom)
-        hintView?.setPadding(side, 0, side, bottom)
+        metaView?.setPadding(side, 0, side, (h * 0.06f).toInt())
+        hintView?.setPadding(side, 0, side, (h * 0.10f).toInt())
         statusView?.maxWidth = (w * 0.62f).toInt()
+        speedHintView?.let { it.translationY = -h * 0.16f }
+        timeView?.setPadding(0, 0, (w * 0.10f).toInt(), (h * 0.06f).toInt())
 
-        val p = progressView?.layoutParams
+        val p = seekBar?.layoutParams
         if (p is FrameLayout.LayoutParams) {
-            p.leftMargin = side
-            p.rightMargin = side
-            progressView?.layoutParams = p
+            p.leftMargin = (w * 0.12f).toInt()
+            p.rightMargin = (w * 0.12f).toInt()
+            seekBar?.layoutParams = p
         }
     }
 
-    /**
-     * 按视频真实宽高设置画面区域。
-     * @param round true=圆屏（缩进圆内接矩形），false=按屏幕等比缩放居中
-     */
-    private fun fitVideo(width: Int, height: Int, round: Boolean) {
-        try {
+    // ==================== 画面比例 ====================
+
+    private fun applyVideoLayout() {
+        if (videoW <= 0 || videoH <= 0) return
+        val container = videoLayout ?: return
+        var cw = container.width
+        var ch = container.height
+        if (cw <= 0 || ch <= 0) {
             val dm = resources.displayMetrics
-            val aspect = height.toFloat() / width.toFloat()
-            val videoW: Float
-            val videoH: Float
-            if (round) {
-                val screen = Math.min(dm.widthPixels, dm.heightPixels).toFloat()
-                videoW = (screen / Math.sqrt((aspect * aspect + 1).toDouble())).toFloat()
-                videoH = videoW * aspect
-            } else {
-                val screenW = dm.widthPixels.toFloat()
-                val screenH = dm.heightPixels.toFloat()
-                val scale = Math.min(screenW / width.toFloat(), screenH / height.toFloat())
-                videoW = width * scale
-                videoH = height * scale
-            }
-            val lp = surfaceView?.layoutParams as? FrameLayout.LayoutParams ?: return
-            lp.width = videoW.toInt()
-            lp.height = videoH.toInt()
-            lp.gravity = android.view.Gravity.CENTER
-            surfaceView?.layoutParams = lp
-        } catch (e: Exception) {
-            Logu.e("story", "视频尺寸适配失败：" + e.message)
+            cw = dm.widthPixels
+            ch = dm.heightPixels
         }
+        var vw = videoW.toFloat()
+        var vh = videoH.toFloat()
+        if (userRotation == 90 || userRotation == 270) {
+            val t = vw
+            vw = vh
+            vh = t
+        }
+        val lp = surfaceView?.layoutParams as? FrameLayout.LayoutParams ?: return
+        when (fitMode) {
+            FIT_FILL -> {
+                //填满屏幕（可能裁掉一部分），短视频最常用的观感
+                val scale = Math.max(cw / vw, ch / vh)
+                lp.width = (vw * scale).toInt()
+                lp.height = (vh * scale).toInt()
+            }
+            FIT_STRETCH -> {
+                lp.width = cw
+                lp.height = ch
+            }
+            else -> {
+                //适应屏幕：完整显示，多余部分留黑边（竖屏视频 = 满高 + 左右黑边）
+                val scale = Math.min(cw / vw, ch / vh)
+                lp.width = (vw * scale).toInt()
+                lp.height = (vh * scale).toInt()
+            }
+        }
+        lp.gravity = Gravity.CENTER
+        surfaceView?.layoutParams = lp
+        surfaceView?.rotation = userRotation.toFloat()
+    }
+
+    private fun showDisplayDialog() {
+        val modes = arrayOf("适应屏幕（完整显示）", "填满屏幕（可能裁切）", "拉伸铺满")
+        AlertDialog.Builder(this)
+            .setTitle("画面")
+            .setSingleChoiceItems(modes, fitMode) { dialog, which ->
+                fitMode = which
+                SharedPreferencesUtil.putInt("story_fit_mode", which)
+                applyVideoLayout()
+                dialog.dismiss()
+            }
+            .setNeutralButton("旋转 90°") { _, _ ->
+                userRotation = (userRotation + 90) % 360
+                applyVideoLayout()
+                showStatus("画面旋转 " + userRotation + "°", autoHide = true)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    // ==================== 倍速 ====================
+
+    private fun showSpeedDialog() {
+        val labels = SPEED_LABELS
+        val checked = SPEED_VALUES.indexOfFirst { Math.abs(it - normalSpeed) < 0.01f }
+        AlertDialog.Builder(this)
+            .setTitle("播放速度")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                normalSpeed = SPEED_VALUES[which]
+                SharedPreferencesUtil.putInt("story_speed_idx", which)
+                speedBtn!!.text = SPEED_LABELS[which]
+                if (!longPressActive) controller?.setSpeed(normalSpeed)
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun startLongPressSpeed() {
+        if (destroyed || longPressActive) return
+        if (!SharedPreferencesUtil.getBoolean("player_longclick", true)) return
+        val c = controller ?: return
+        if (!c.isPlaying()) return
+        longPressActive = true
+        c.setSpeed(LONG_PRESS_SPEED)
+        speedHintView?.text = "x " + LONG_PRESS_SPEED
+        speedHintView?.visibility = View.VISIBLE
+        hideControls()
+    }
+
+    private fun endLongPressSpeed() {
+        if (!longPressActive) return
+        longPressActive = false
+        speedHintView?.visibility = View.GONE
+        controller?.setSpeed(normalSpeed)
+    }
+
+    // ==================== 清晰度 ====================
+
+    private fun showQualityDialog() {
+        val labels = QUALITY_LABELS
+        val checked = QUALITY_VALUES.indexOfFirst { it == currentQn }
+        AlertDialog.Builder(this)
+            .setTitle("清晰度")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                dialog.dismiss()
+                val qn = QUALITY_VALUES[which]
+                if (qn != currentQn) switchQuality(qn)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun switchQuality(qn: Int) {
+        val card = currentCard ?: return
+        currentQn = qn
+        SharedPreferencesUtil.putInt("story_qn", qn)
+        qualityBtn!!.text = qualityLabel(qn)
+
+        val resume = controller?.currentPosition() ?: 0L
+        playCache.remove(currentIndex)
+        localFileFor(card).delete()
+        switching = true
+        firstFrameShown = false
+        setLoading(true, "切换清晰度…")
+
+        CenterThreadPool.run(Runnable {
+            var info: StoryApi.StoryPlayInfo? = null
+            var error = ""
+            try {
+                if (card.cid <= 0) throw Exception("缺少 cid")
+                info = StoryApi.resolvePlay(card.aid, card.cid, qn)
+            } catch (e: Exception) {
+                error = e.message ?: e.javaClass.simpleName
+            }
+            runOnUiThread {
+                if (destroyed) return@runOnUiThread
+                if (info != null && info.url.isNotEmpty()) {
+                    synchronized(playCache) { playCache[currentIndex] = info }
+                    startPlayback(info, resume)
+                } else {
+                    onPlayFailed(error)
+                }
+            }
+        })
+    }
+
+    private fun qualityLabel(qn: Int): String {
+        if (qn <= 6) return "最低"
+        val idx = QUALITY_VALUES.indexOfFirst { it == qn }
+        return if (idx >= 0) QUALITY_LABELS[idx] else "360P"
+    }
+
+    private fun speedLabel(speed: Float): String {
+        val idx = SPEED_VALUES.indexOfFirst { Math.abs(it - speed) < 0.01f }
+        return if (idx >= 0) SPEED_LABELS[idx] else String.format("%.1fx", speed)
+    }
+
+    // ==================== 进度条 ====================
+
+    private fun initSeekBar() {
+        seekBar!!.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val dur = controller?.currentDuration() ?: 0L
+                    if (dur > 0) timeView?.text = timeText(dur * progress / 1000, dur)
+                }
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                seeking = true
+            }
+
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                seeking = false
+                val dur = controller?.currentDuration() ?: 0L
+                if (dur > 0) controller?.seekTo(dur * (sb?.progress ?: 0) / 1000)
+            }
+        })
+    }
+
+    private fun timeText(posMs: Long, durMs: Long): String {
+        return formatTime(posMs) + " / " + formatTime(durMs)
+    }
+
+    private fun formatTime(ms: Long): String {
+        val total = (ms / 1000).coerceAtLeast(0)
+        val m = total / 60
+        val s = total % 60
+        return String.format("%02d:%02d", m, s)
     }
 
     // ==================== 状态显示 ====================
@@ -234,7 +490,6 @@ class StoryPlayerActivity : BaseActivity() {
         if (show) loadingText?.text = text
     }
 
-    /** 常驻状态/错误提示（autoHide=true 时 4 秒后自动消失） */
     private fun showStatus(text: String, autoHide: Boolean = false) {
         val v = statusView ?: return
         statusAutoHide?.let { v.removeCallbacks(it) }
@@ -246,7 +501,7 @@ class StoryPlayerActivity : BaseActivity() {
                 if (!destroyed) v.visibility = View.GONE
             }
             statusAutoHide = r
-            v.postDelayed(r, 4000)
+            v.postDelayed(r, 3000)
         }
     }
 
@@ -271,7 +526,6 @@ class StoryPlayerActivity : BaseActivity() {
     private fun initGesture() {
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onFling(e1: MotionEvent, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-                // 竖直快扫：上滑下一个、下滑上一个
                 val dy = e2.y - e1.y
                 val dx = e2.x - e1.x
                 if (Math.abs(dy) > 90f && Math.abs(dy) > Math.abs(dx) * 2f) {
@@ -282,7 +536,6 @@ class StoryPlayerActivity : BaseActivity() {
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                // 抖音式：单击切换控制层显隐（顶栏+右侧按钮）
                 setControlsVisible(!controlsVisible)
                 return true
             }
@@ -294,6 +547,24 @@ class StoryPlayerActivity : BaseActivity() {
         })
 
         findViewById<View>(R.id.story_root).setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
+                    findViewById<View>(R.id.story_root).postDelayed(longPressRunnable, 500)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (Math.abs(event.x - downX) > ToolsUtil.dp2px(12f) ||
+                            Math.abs(event.y - downY) > ToolsUtil.dp2px(12f)) {
+                        findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
+                    endLongPressSpeed()
+                }
+            }
             gestureDetector?.onTouchEvent(event)
             true
         }
@@ -304,6 +575,12 @@ class StoryPlayerActivity : BaseActivity() {
         topBar?.visibility = if (visible) View.VISIBLE else View.GONE
         buttonsBar?.visibility = if (visible) View.VISIBLE else View.GONE
         if (visible) scheduleHideControls(3000)
+    }
+
+    private fun hideControls() {
+        controlsVisible = false
+        topBar?.visibility = View.GONE
+        buttonsBar?.visibility = View.GONE
     }
 
     private fun scheduleHideControls(delay: Long) {
@@ -323,7 +600,6 @@ class StoryPlayerActivity : BaseActivity() {
 
     // ==================== 流管理 ====================
 
-    /** 拉一刷新短视频（追加到流尾部；失败自动降级推荐流，并显示原因） */
     private fun loadMore(onDone: () -> Unit = {}) {
         if (loadingMore) return
         loadingMore = true
@@ -355,7 +631,6 @@ class StoryPlayerActivity : BaseActivity() {
     }
 
     private fun switchRelative(delta: Int) {
-        //加载中也可以滑动切换：旧请求回来时按 currentIndex 丢弃，不会串台
         val next = currentIndex + delta
         if (next < 0) {
             showHint("已经是第一个了")
@@ -374,7 +649,6 @@ class StoryPlayerActivity : BaseActivity() {
         switchTo(next)
     }
 
-    /** 切到指定索引的短视频（加载流地址并播放） */
     private fun switchTo(index: Int) {
         if (destroyed) return
         if (index < 0 || index >= storyList.size) return
@@ -388,21 +662,21 @@ class StoryPlayerActivity : BaseActivity() {
         triedHtml5 = false
         failCount = 0
         firstFrameShown = false
+        endLongPressSpeed()
 
         hideStatus()
         titleView?.text = card.title ?: ""
         upnameView?.text = if (card.upName.isNullOrEmpty()) "" else "UP：" + card.upName
         metaView?.text = buildMeta(card)
-        progressView?.progress = 0
+        seekBar?.progress = 0
+        timeView?.text = ""
         liked = false
         likeBtn?.setImageResource(R.drawable.icon_like_0)
         playBtn?.setImageResource(R.drawable.btn_player_pause)
         setLoading(true, "加载中…")
-        // 切换时先把标题露出来（旧版一进来就自动隐藏，用户以为"信息没加载"）
         setControlsVisible(true)
         scheduleHideControls(4000)
 
-        // 流剩余不多时提前补拉（保持无限刷的顺滑）
         if (storyList.size - index <= 2) loadMore()
 
         val cached = synchronized(playCache) { playCache[index] }
@@ -410,12 +684,11 @@ class StoryPlayerActivity : BaseActivity() {
             startPlayback(cached)
             return
         }
+        //没有缓存直链时：先看看预下载文件在不在（在的话直接本地播放，秒开）
         resolveAndPlay(card, forceHtml5 = false)
     }
 
-    /** 后台取流 → 主线程开始播放 */
     private fun resolveAndPlay(card: StoryApi.StoryCard, forceHtml5: Boolean) {
-        // 记录目标索引：取流期间用户可能已经滑到别的视频，回来时要丢弃过期结果
         val targetIndex = currentIndex
         CenterThreadPool.run(Runnable {
             var info: StoryApi.StoryPlayInfo? = null
@@ -427,7 +700,7 @@ class StoryPlayerActivity : BaseActivity() {
                     if (cid > 0) card.cid = cid
                 }
                 if (card.cid <= 0) throw Exception("取不到 cid（aid=" + card.aid + "）")
-                info = StoryApi.resolvePlay(card.aid, card.cid, QN, forceHtml5)
+                info = StoryApi.resolvePlay(card.aid, card.cid, currentQn, forceHtml5)
             } catch (e: Exception) {
                 error = e.message ?: e.javaClass.simpleName
                 Logu.e("story", "取流失败 aid=" + card.aid + "：" + error)
@@ -446,7 +719,27 @@ class StoryPlayerActivity : BaseActivity() {
         })
     }
 
-    /** 后台预取下一支视频的直链（不播放） */
+    /** 预下载目录（仅缓存下一两支，退出时清理） */
+    private fun prefetchDir(): java.io.File = java.io.File(cacheDir, "story_preload")
+
+    private fun localFileFor(card: StoryApi.StoryCard): java.io.File =
+        java.io.File(prefetchDir(), (if (card.cid > 0) card.cid else card.aid).toString() + ".mp4")
+
+    /** 后台把下一支下载到本地，切换时直接播本地文件（消除起播卡顿） */
+    private fun prefetchMedia(index: Int, info: StoryApi.StoryPlayInfo) {
+        if (index < 0 || index >= storyList.size) return
+        val card = storyList[index]
+        val dest = localFileFor(card)
+        if (dest.exists() && dest.length() > 0) return
+        CenterThreadPool.run(Runnable {
+            try {
+                StoryApi.prefetchToFile(info.url, dest)
+            } catch (e: Exception) {
+                Logu.d("story", "预下载失败：" + e.message)
+            }
+        })
+    }
+
     private fun preloadNext(nextIndex: Int) {
         if (nextIndex < 0 || nextIndex >= storyList.size) return
         if (playCache.containsKey(nextIndex)) return
@@ -459,12 +752,13 @@ class StoryPlayerActivity : BaseActivity() {
                     if (cid > 0) card.cid = cid
                 }
                 if (card.cid <= 0) return@Runnable
-                val info = StoryApi.resolvePlay(card.aid, card.cid, QN, false)
+                val info = StoryApi.resolvePlay(card.aid, card.cid, currentQn, false)
                 if (info.url.isNotEmpty()) {
                     synchronized(playCache) {
-                        if (playCache.size > 4) playCache.clear()
+                        if (playCache.size > 6) playCache.clear()
                         playCache[nextIndex] = info
                     }
+                    prefetchMedia(nextIndex, info)
                 }
             } catch (e: Exception) {
                 Logu.d("story", "预取下一支失败：" + e.message)
@@ -491,9 +785,17 @@ class StoryPlayerActivity : BaseActivity() {
 
     // ==================== 播放 ====================
 
-    private fun startPlayback(info: StoryApi.StoryPlayInfo) {
+    private fun startPlayback(info: StoryApi.StoryPlayInfo, startPositionMs: Long = 0L) {
         currentInfo = info
         if (info.source == "html5") triedHtml5 = true
+
+        //预下载命中：直接播本地文件，不用再走网络（切换几乎瞬开）
+        val card = currentCard
+        var local: java.io.File? = null
+        if (card != null) {
+            val f = localFileFor(card)
+            if (f.exists() && f.length() > 1024) local = f
+        }
 
         val headers = HashMap<String, String>()
         headers["Referer"] = "https://www.bilibili.com/"
@@ -504,12 +806,19 @@ class StoryPlayerActivity : BaseActivity() {
         if (info.note.isNotEmpty()) showStatus(info.note, autoHide = true)
         setLoading(true, "缓冲中…")
 
-        // 跟随播放器设置里"使用硬解"的开关（默认开）
         val hardware = SharedPreferencesUtil.getBoolean("player_codec", true)
-        controller?.play(info.url, headers, 0L, hardware)
+        videoW = 0
+        videoH = 0
+        val playUrl = local?.absolutePath ?: info.url
+        Logu.d("story", "播放源：" + (if (local != null) "本地预下载 " else "直链 ") + playUrl.take(90))
+        controller?.play(playUrl, if (local != null) HashMap() else headers, startPositionMs, hardware)
+        // 播放器重建后恢复用户选择的倍速
+        controller?.setSpeed(if (longPressActive) LONG_PRESS_SPEED else normalSpeed)
+
+        //播起来之后立即预取下一支（直链 + 本地预下载）
+        if (currentIndex + 1 < storyList.size) preloadNext(currentIndex + 1)
     }
 
-    /** 播放失败：先换备用线路，再跳下一个 */
     private fun onPlayFailed(error: String) {
         if (destroyed) return
         switching = false
@@ -526,7 +835,6 @@ class StoryPlayerActivity : BaseActivity() {
         val failedIndex = currentIndex
         if (failCount < 3) {
             findViewById<View>(R.id.story_root).postDelayed({
-                //用户可能已经滑走了，别把新视频也跳过去
                 if (!destroyed && currentIndex == failedIndex) switchRelative(1)
             }, 1500)
         }
@@ -562,13 +870,14 @@ class StoryPlayerActivity : BaseActivity() {
         override fun onPlayerPrepared(durationMs: Long) {
             if (destroyed) return
             switching = false
+            if (durationMs > 0) timeView?.text = timeText(0, durationMs)
         }
 
         override fun onPlayerProgress(positionMs: Long, durationMs: Long) {
-            if (destroyed) return
+            if (destroyed || seeking) return
             if (durationMs > 0) {
-                val v = (positionMs * 1000L / durationMs).toInt().coerceIn(0, 1000)
-                progressView?.progress = v
+                seekBar?.progress = (positionMs * 1000L / durationMs).toInt().coerceIn(0, 1000)
+                timeView?.text = timeText(positionMs, durationMs)
             }
         }
 
@@ -590,7 +899,9 @@ class StoryPlayerActivity : BaseActivity() {
         }
 
         override fun onPlayerCompletion() {
-            if (!destroyed) switchRelative(1)
+            if (destroyed) return
+            if (autoNext) switchRelative(1)
+            else playBtn?.setImageResource(R.drawable.btn_player_play)
         }
 
         override fun onPlayerError(what: Int, extra: Int) {
@@ -604,11 +915,20 @@ class StoryPlayerActivity : BaseActivity() {
         }
 
         override fun onPlayerVideoSize(width: Int, height: Int) {
-            //按视频真实宽高设置画面区域：
-            //- 圆屏：缩进圆的内接矩形（与主播放器 changeVideoSize 一致），四角不会被圆屏裁掉；
-            //- 方屏/竖屏：等比缩放居中，避免 ijk 把画面拉变形。
             if (destroyed || width <= 0 || height <= 0) return
-            fitVideo(width, height, SharedPreferencesUtil.getBoolean("player_ui_round", false))
+            videoW = width
+            videoH = height
+            applyVideoLayout()
+        }
+
+        override fun onPlayerRotation(degrees: Int) {
+            //部分竖屏视频用旋转元数据表示；只在用户没有手动旋转时跟随
+            if (destroyed) return
+            if (userRotation == degrees) return
+            if ((degrees == 90 || degrees == 270) && videoW > videoH) {
+                userRotation = degrees
+                applyVideoLayout()
+            }
         }
     }
 
@@ -642,7 +962,6 @@ class StoryPlayerActivity : BaseActivity() {
         })
     }
 
-    /** 打开当前视频的详情页（评论/弹幕/收藏等完整功能在原详情页） */
     private fun openDetail() {
         val card = currentCard ?: return
         val intent = Intent(this, com.RobinNotBad.BiliClient.activity.video.info.VideoInfoActivity::class.java)
@@ -652,7 +971,15 @@ class StoryPlayerActivity : BaseActivity() {
     }
 
     companion object {
-        /** 短视频固定 360P：手表屏幕小、省流量（需要更高可自行调大） */
-        private const val QN = 16
+        private val SPEED_VALUES = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 3.0f)
+        private val SPEED_LABELS = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "1.75x", "2.0x", "3.0x")
+        // 6 = 最低（服务端会回落到该视频支持的最低档，手表上够用且最省流）
+        private val QUALITY_VALUES = intArrayOf(6, 16, 32, 64, 80)
+        private val QUALITY_LABELS = arrayOf("最低", "360P", "480P", "720P", "1080P")
+        private const val LONG_PRESS_SPEED = 2.0f
+
+        private const val FIT_FIT = 0
+        private const val FIT_FILL = 1
+        private const val FIT_STRETCH = 2
     }
 }
