@@ -7,6 +7,7 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.UnderlineSpan
 import com.RobinNotBad.BiliClient.api.DanmakuApi
+import com.RobinNotBad.BiliClient.model.DanmakuElem
 import com.RobinNotBad.BiliClient.model.DmSegMobileReply
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
@@ -64,6 +65,50 @@ class PlayerDanmakuController(
         /** 等待播放器解析时长的上限 */
         private const val DURATION_WAIT_MS = 4000L
         private const val DURATION_POLL_MS = 150L
+
+        /** 模型读取器是否已注入（全局一次） */
+        private var modelReaderInstalled = false
+
+        /**
+         * 给弹幕库注入「按编译期属性访问」的模型读取器。
+         *
+         * 背景（v5.0.2-alpha3 用户反馈「正常播放器弹幕消失」的根因）：
+         * 弹幕库 `BiliProtobufDanmakuParser` 原来用 `Class.getField("elems"/"content"/…)`
+         * 按**字段名**反射读取 `DmSegMobileReply` / `DanmakuElem`。为了减小体积开启 R8 混淆后，
+         * `elems` 被改名成 `a`，反射取不到字段 → 解析出的弹幕恒为 0 条 → 主播放器和短视频
+         * 都不显示弹幕（拉取接口本身是成功的，所以连"回退旧接口"都不会触发）。
+         *
+         * 注入读取器后，字段访问由 Kotlin 编译期绑定到 getter/字段，混淆改名也不受影响。
+         */
+        @JvmStatic
+        fun installModelReader() {
+            if (modelReaderInstalled) return
+            modelReaderInstalled = true
+            try {
+                BiliProtobufDanmakuParser.setElemReader(object : BiliProtobufDanmakuParser.ElemReader {
+                    override fun elems(segment: Any?): List<*>? =
+                        (segment as? DmSegMobileReply)?.elems
+
+                    override fun progress(elem: Any?): Int =
+                        (elem as? DanmakuElem)?.progress ?: 0
+
+                    override fun mode(elem: Any?): Int =
+                        (elem as? DanmakuElem)?.mode ?: 1
+
+                    override fun fontsize(elem: Any?): Int =
+                        (elem as? DanmakuElem)?.fontsize ?: 25
+
+                    override fun color(elem: Any?): Int =
+                        (elem as? DanmakuElem)?.color ?: Color.WHITE
+
+                    override fun content(elem: Any?): String? =
+                        (elem as? DanmakuElem)?.content
+                })
+                Logu.d("danmaku", "已注入弹幕模型读取器（免反射，兼容 R8 混淆）")
+            } catch (e: Throwable) {
+                Logu.e("danmaku", "注入弹幕模型读取器失败：" + e.message)
+            }
+        }
     }
 
     /** 视频时长提供者（毫秒）。播放器可能尚未解析出时长，此时返回 <=0。 */
@@ -128,6 +173,13 @@ class PlayerDanmakuController(
 
     /** 首次在线拉取的取消标志 */
     private var fetchCancelled: AtomicBoolean? = null
+
+    /**
+     * 拉取代次：切视频（resetForNewVideo）后旧拉取线程的迟到回调必须丢弃，
+     * 否则上一支的分段会渲染到新视频的弹幕层上（串幕）。
+     */
+    @Volatile
+    private var fetchGeneration = 0
 
     /** 弹幕层是否可见（用于 hide/show 切换后恢复） */
     @JvmField
@@ -350,6 +402,34 @@ class PlayerDanmakuController(
         danmakuView?.show()
     }
 
+    /**
+     * 切换到另一个视频前重置弹幕层（短视频连续切集用）。
+     *
+     * 只做「清数据」，不动弹幕层的生命周期：
+     * - 取消上一支还在进行的拉取/补拉，避免旧分段串到新视频里；
+     * - 清空暂存分段、解析器引用与屏幕上的旧弹幕；
+     * - **不调用 release()**：release 会 join 绘制线程，主线程调用会卡住，
+     *   而且重复 attach 并不会重建库内的 DrawTask（库只在首次 prepare 时创建）。
+     */
+    fun resetForNewVideo() {
+        fetchGeneration++
+        fetchCancelled?.set(true)
+        fetchCancelled = null
+        backfiller?.cancel()
+        backfiller = null
+        started = false
+        wantRunning = false
+        synchronized(pendingSegments) { pendingSegments.clear() }
+        parser = null
+        protobufParser = null
+        hasDanmaku = false
+        try {
+            // 清掉上一支已经渲染出去的弹幕（第二个参数 = 同时清屏）
+            (danmakuView as? DanmakuView)?.removeAllDanmakus(true)
+        } catch (ignored: Exception) {
+        }
+    }
+
     fun release() {
         fetchCancelled?.set(true)
         backfiller?.cancel()
@@ -429,12 +509,20 @@ class PlayerDanmakuController(
     ) {
         if (destroyedProvider()) return
 
-        // 先把弹幕层准备好（空层），这样分段一到就能立刻渲染
+        // 弹幕层已经就绪（短视频连续切集）：清掉上一支的弹幕与解析器后直接复用，
+        // 不重建弹幕层。重建需要 release()（会 join 绘制线程），主线程调用会卡顿，
+        // 而且库的 DrawTask 只在首次 prepare 时创建，重复 attach 并不会换掉旧数据。
+        if (layerPrepared && danmakuView != null) {
+            resetForNewVideo()
+        } else {
+            // 先把弹幕层准备好（空层），这样分段一到就能立刻渲染
+            attach(null, ArrayList())
+        }
         hasDanmaku = true
-        attach(null, ArrayList())
 
         val cancelled = AtomicBoolean(false)
         fetchCancelled = cancelled
+        val generation = ++fetchGeneration
 
         CenterThreadPool.run {
             try {
@@ -445,19 +533,21 @@ class PlayerDanmakuController(
                 val report = DanmakuApi.fetchAllSegments(
                     aid, cid, durationSec,
                     { index, reply ->
-                        // 每段到手立即渲染（回调在拉取线程，addSegment 内部会切主线程）
-                        addSegment(reply)
-                        Logu.d("弹幕", "分段 $index 已增量渲染")
+                        // 每段到手立即渲染；代次不匹配说明已经切到别的视频了，直接丢弃
+                        if (generation == fetchGeneration) {
+                            addSegment(reply)
+                            Logu.d("弹幕", "分段 $index 已增量渲染")
+                        }
                     },
                     cancelled
                 )
 
-                if (destroyedProvider() || cancelled.get()) return@run
+                if (destroyedProvider() || cancelled.get() || generation != fetchGeneration) return@run
 
                 if (report.fetchedCount == 0) {
                     // 一段都没拿到：回退到旧版 XML 接口再试一次
                     Logu.w("弹幕", "新版接口一段都没拿到，回退旧版接口")
-                    fallbackToOldApi()
+                    if (generation == fetchGeneration) fallbackToOldApi()
                     onLoadFinished?.onLoadFinished(report.totalSegments)
                     return@run
                 }
@@ -466,11 +556,11 @@ class PlayerDanmakuController(
 
                 // 缺失分段后台补拉
                 if (report.missing.isNotEmpty() && !destroyedProvider()) {
-                    startBackfill(aid, cid, report.missing)
+                    startBackfill(aid, cid, report.missing, generation)
                 }
             } catch (e: Exception) {
                 Logu.e("弹幕", "在线弹幕拉取异常: " + e.message)
-                if (!destroyedProvider()) {
+                if (!destroyedProvider() && generation == fetchGeneration) {
                     fallbackToOldApi()
                     onLoadFinished?.onLoadFinished(-1)
                 }
@@ -512,20 +602,20 @@ class PlayerDanmakuController(
         return 0L
     }
 
-    private fun startBackfill(aid: Long, cid: Long, missing: List<Int>) {
+    private fun startBackfill(aid: Long, cid: Long, missing: List<Int>, generation: Int) {
         backfiller?.cancel()
         val bf = DanmakuBackfiller(
             aid, cid, missing,
             object : DanmakuBackfiller.Listener {
                 override fun onSegmentFetched(index: Int, reply: DmSegMobileReply) {
-                    if (destroyedProvider()) return
+                    if (destroyedProvider() || generation != fetchGeneration) return
                     Logu.d("弹幕", "补拉分段 $index 增量渲染（${reply.elems.size} 条）")
                     // #7：不在回调线程直接解析。补拉回调可能多段集中到达，
                     // 每段几百条弹幕的 parseSegment + 逐条 addDanmaku 必须放在
                     // 后台线程执行（与首次拉取路径一致），否则主线程被卡，
                     // 表现为"弹幕太多时界面卡住"。
                     CenterThreadPool.run {
-                        if (destroyedProvider()) return@run
+                        if (destroyedProvider() || generation != fetchGeneration) return@run
                         addSegment(reply)
                     }
                 }
@@ -631,6 +721,7 @@ class PlayerDanmakuController(
      * 用于“已回退到旧版 XML 之后又收到新版分段”这种混合场景。
      */
     private fun createProtobufParser(): BiliProtobufDanmakuParser {
+        installModelReader()
         val ctx = context ?: buildContext()
         val p = BiliProtobufDanmakuParser()
         p.sharedPreferences = prefs()
@@ -777,6 +868,8 @@ class PlayerDanmakuController(
     // ------------------------------------------------------------------
 
     private fun createParser(danmakuFile: String?, segments: List<DmSegMobileReply>?): BaseDanmakuParser {
+        // 必须在解析器干活之前注入：否则 release 包里反射取不到被混淆的字段名，弹幕恒为空
+        installModelReader()
         if (segments != null) {
             // 空分段：仍使用 protobuf 解析器占位，后续可增量追加
             val p = BiliProtobufDanmakuParser()

@@ -80,6 +80,9 @@ object StoryApi {
         @JvmField var source: String = "pc"
         @JvmField var quality: Int = 0
         @JvmField var note: String = ""
+
+        /** 取流时间：B 站直链带时效（约 2 小时），缓存超过 20 分钟就重新解析 */
+        @JvmField var fetchedAt: Long = System.currentTimeMillis()
     }
 
     // ============================ 拉流 ============================

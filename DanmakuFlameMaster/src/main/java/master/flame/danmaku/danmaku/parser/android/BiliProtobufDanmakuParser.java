@@ -37,6 +37,43 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
     /** 反射字段缓存：Class -> (字段名 -> Field)，避免重复 getField 查找 */
     private static final Map<Class<?>, Map<String, Field>> FIELD_CACHE = new ConcurrentHashMap<>();
 
+    /**
+     * 弹幕模型字段读取器（由应用层注入）。
+     *
+     * 为什么必须要有它：本解析器原先完全依赖 `Class.getField("elems"/"content"/...)`
+     * 按**字段名**反射读取应用层模型（DmSegMobileReply / DanmakuElem）。开启 R8 混淆后
+     * 字段名会被改写成 a/b/c…，getField 直接返回 null，于是**全部 protobuf 弹幕被静默丢弃**
+     * ——v5.0.2-alpha3 用户反馈的「正常视频播放器弹幕不显示」就是这个原因。
+     *
+     * 注入读取器后字段访问在应用层是编译期解析的普通属性访问，与混淆无关；
+     * 未注入时仍保留原来的反射路径作兜底（debug 包/未混淆场景行为不变）。
+     */
+    public interface ElemReader {
+        /** 取一个分段里的弹幕列表 */
+        List<?> elems(Object segment);
+
+        int progress(Object elem);
+
+        int mode(Object elem);
+
+        int fontsize(Object elem);
+
+        int color(Object elem);
+
+        String content(Object elem);
+    }
+
+    private static volatile ElemReader sElemReader;
+
+    /** 由应用层注入字段读取器（全局一次即可，重复调用覆盖旧值） */
+    public static void setElemReader(ElemReader reader) {
+        sElemReader = reader;
+    }
+
+    public static ElemReader getElemReader() {
+        return sElemReader;
+    }
+
     private float mDispScaleX;
     private float mDispScaleY;
     private List<?> mDanmakuSegments; // 存储 DmSegMobileReply 列表
@@ -65,15 +102,10 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
             return result;
         }
         try {
-            Field elemsField = fieldOf(segment.getClass(), "elems");
-            if (elemsField == null) {
+            List<?> elems = elemsOf(segment);
+            if (elems == null) {
                 return result;
             }
-            Object value = elemsField.get(segment);
-            if (!(value instanceof List)) {
-                return result;
-            }
-            List<?> elems = (List<?>) value;
             int index = 0;
             for (Object elemObj : elems) {
                 BaseDanmaku danmaku = parseElem(elemObj, index++);
@@ -98,16 +130,12 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
         // 遍历所有分段
         for (Object segmentObj : mDanmakuSegments) {
             try {
-                Field elemsField = fieldOf(segmentObj.getClass(), "elems");
-                if (elemsField == null) {
-                    continue;
-                }
-                Object value = elemsField.get(segmentObj);
-                if (!(value instanceof List)) {
+                List<?> elems = elemsOf(segmentObj);
+                if (elems == null) {
                     continue;
                 }
                 // 遍历该分段中的所有弹幕
-                for (Object elemObj : (List<?>) value) {
+                for (Object elemObj : elems) {
                     BaseDanmaku danmaku = parseElem(elemObj, index++);
                     if (danmaku != null) {
                         result.addItem(danmaku);
@@ -135,12 +163,28 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
         try {
             Class<?> elemClass = elemObj.getClass();
 
-            int progress = getIntField(elemClass, elemObj, "progress", 0);
-            int mode = getIntField(elemClass, elemObj, "mode", 1);
-            int fontsize = getIntField(elemClass, elemObj, "fontsize", 25);
-            int color = getIntField(elemClass, elemObj, "color", Color.WHITE);
-            Object contentValue = getFieldValue(elemClass, elemObj, "content");
-            String content = contentValue == null ? null : String.valueOf(contentValue);
+            // 优先走应用层注入的编译期访问器；只有没注入时才退回按字段名反射
+            // （R8 混淆会改字段名，反射路径在 release 包里必然取不到值）
+            ElemReader reader = sElemReader;
+            int progress = reader != null
+                    ? reader.progress(elemObj)
+                    : getIntField(elemClass, elemObj, "progress", 0);
+            int mode = reader != null
+                    ? reader.mode(elemObj)
+                    : getIntField(elemClass, elemObj, "mode", 1);
+            int fontsize = reader != null
+                    ? reader.fontsize(elemObj)
+                    : getIntField(elemClass, elemObj, "fontsize", 25);
+            int color = reader != null
+                    ? reader.color(elemObj)
+                    : getIntField(elemClass, elemObj, "color", Color.WHITE);
+            String content;
+            if (reader != null) {
+                content = reader.content(elemObj);
+            } else {
+                Object contentValue = getFieldValue(elemClass, elemObj, "content");
+                content = contentValue == null ? null : String.valueOf(contentValue);
+            }
 
             if (content == null || content.isEmpty()) {
                 return null;
@@ -178,6 +222,33 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
             return item;
         } catch (Exception e) {
             e.printStackTrace();
+            return null;
+        }
+    }
+
+    /** 取分段里的弹幕列表：优先注入的读取器，其次按字段名反射兜底 */
+    private static List<?> elemsOf(Object segment) {
+        if (segment == null) {
+            return null;
+        }
+        ElemReader reader = sElemReader;
+        if (reader != null) {
+            try {
+                List<?> list = reader.elems(segment);
+                if (list != null) {
+                    return list;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        Field field = fieldOf(segment.getClass(), "elems");
+        if (field == null) {
+            return null;
+        }
+        try {
+            Object value = field.get(segment);
+            return value instanceof List ? (List<?>) value : null;
+        } catch (Exception e) {
             return null;
         }
     }

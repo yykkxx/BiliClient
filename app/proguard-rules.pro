@@ -21,9 +21,64 @@
 #-renamesourcefileattribute SourceFile
 
 -keeppackagenames org.jsoup.nodes
--keep class com.RobinNotBad.BiliClient.** {*;}
 -keep class tv.danmaku.ijk.media.** {*;}
 -keep class com.netease.hearttouch.brotlij.** {*;}
+
+# Android 组件保留
+-keep public class * extends android.app.Activity
+-keep public class * extends android.app.Application
+-keep public class * extends android.app.Service
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.content.ContentProvider
+-keep public class * extends android.app.backup.BackupAgentHelper
+-keep public class * extends android.preference.Preference
+
+# Parcelable 和 Serializable
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator *;
+}
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    !static !transient <fields>;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+
+# JNI 和 Native 方法
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# View 构造函数（用于 XML 布局）
+-keepclasseswithmembers class * {
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>(android.content.Context, android.util.AttributeSet, int);
+}
+
+# 枚举
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# R 文件中的资源 ID
+-keepclassmembers class **.R$* {
+    public static <fields>;
+}
+
+# 弹幕模型：弹幕库 BiliProtobufDanmakuParser 历史上按字段名反射读取
+# （elems / progress / mode / fontsize / color / content）。虽然现在应用层已注入
+# 编译期读取器（见 PlayerDanmakuController.installModelReader），这里仍保留字段名
+# 作为兜底 —— v5.0.2-alpha3 就是漏了这条，混淆后 elems 变成 a，弹幕整批丢失。
+-keepclassmembers class com.RobinNotBad.BiliClient.model.DanmakuElem {
+    public <fields>;
+}
+-keepclassmembers class com.RobinNotBad.BiliClient.model.DmSegMobileReply {
+    public <fields>;
+}
 
 -keepattributes *Annotation*
 -keepclassmembers class * {

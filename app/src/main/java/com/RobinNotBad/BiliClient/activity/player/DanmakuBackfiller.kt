@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.activity.player
 
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import com.RobinNotBad.BiliClient.api.DanmakuApi
 import com.RobinNotBad.BiliClient.model.DmSegMobileReply
@@ -46,7 +47,17 @@ class DanmakuBackfiller(
     /** 剩余待补分段 */
     private val pending = LinkedHashSet<Int>().apply { addAll(missingSegments) }
 
-    private val handler = Handler(Looper.getMainLooper())
+    /**
+     * 补拉调度放在**独立后台线程**。
+     *
+     * 原实现把 task 直接 post 到 main Looper，而 doRound() 里是同步网络请求
+     * （每段还可能重试 2 次），弱网时主线程会被整段请求卡住 —— 播放中表现为
+     * 明显卡顿/掉帧，甚至 ANR。补拉本来就是“后台补齐”，不该占用 UI 线程。
+     */
+    private val workerThread = HandlerThread("danmaku-backfill").apply { start() }
+    private val handler = Handler(workerThread.looper)
+    /** 回调统一切回主线程 */
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val cancelled = AtomicBoolean(false)
 
     /** 当前退避间隔 */
@@ -99,8 +110,17 @@ class DanmakuBackfiller(
         if (cancelled.getAndSet(true)) return
         running = false
         handler.removeCallbacks(task)
+        stopWorker()
         Logu.d("弹幕补拉", "已取消")
-        listener.onCancelled()
+        mainHandler.post { listener.onCancelled() }
+    }
+
+    /** 本实例结束后释放后台线程（不会被复用；下一次补拉会新建实例） */
+    private fun stopWorker() {
+        try {
+            workerThread.quitSafely()
+        } catch (ignored: Exception) {
+        }
     }
 
     /** 新增待补分段（例如切换清晰度后重新发现缺失） */
@@ -118,7 +138,12 @@ class DanmakuBackfiller(
         if (pending.isEmpty()) return
 
         // 优先补拉用户马上要看到的分段：按距离当前进度由近到远排序
-        val currentSeg = (positionProvider() / DanmakuApi.SEGMENT_SECONDS) + 1
+        // （positionProvider 读的是播放器状态，异常时按第 1 段处理，别让补拉线程崩掉）
+        val currentSeg = try {
+            (positionProvider() / DanmakuApi.SEGMENT_SECONDS) + 1
+        } catch (e: Exception) {
+            1
+        }
         val ordered = pending.sortedBy { kotlin.math.abs(it - currentSeg) }
 
         for (index in ordered) {
@@ -139,7 +164,7 @@ class DanmakuBackfiller(
             failedRounds = 0
             Logu.d("弹幕补拉", "分段 $index 补拉成功（${reply.elems.size} 条），剩余 ${pending.size} 段")
             // 回调切主线程，方便直接操作弹幕层
-            handler.post { listener.onSegmentFetched(index, reply) }
+            mainHandler.post { listener.onSegmentFetched(index, reply) }
 
             if (pending.isEmpty()) return
         }
@@ -155,7 +180,8 @@ class DanmakuBackfiller(
         if (remain == 0) {
             Logu.d("弹幕补拉", "全部补齐")
         }
-        listener.onFinished(remain)
+        mainHandler.post { listener.onFinished(remain) }
+        stopWorker()
     }
 
     private companion object {

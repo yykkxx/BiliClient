@@ -91,6 +91,12 @@ class StoryPlayerActivity : BaseActivity() {
     private var firstFrameShown = false
     private var failCount = 0
 
+    /** 当前已经为哪一支视频启动过弹幕拉取（aid=0 表示没有） */
+    private var danmakuAid = 0L
+
+    /** 用户主动暂停：切到别的页面再回来时不要自作主张继续播放 */
+    private var userPaused = false
+
     private var destroyed = false
     private var liked = false
 
@@ -235,19 +241,37 @@ class StoryPlayerActivity : BaseActivity() {
             dc.hideAndClear()
         } else {
             dc.show()
+            // 关掉期间可能已经切过视频：重新拉一次当前视频的弹幕
+            danmakuAid = 0L
             currentCard?.let { startDanmakuFor(it) }
+            if (controller?.isPrepared() == true) {
+                try {
+                    dc.start()
+                } catch (ignored: Exception) {
+                }
+            }
         }
     }
 
-    /** 为当前视频重新拉取弹幕（切换视频时调用） */
+    /**
+     * 为当前视频重新拉取弹幕（切换视频时调用）。
+     *
+     * 注意不要在这里 hideAndClear()：那会把弹幕层置于「隐藏」状态，
+     * 之后虽然分段照常拉取，但整层永远不显示 —— v5.0.2-alpha3 短视频
+     * 切集后没有弹幕就是这个原因。需要清屏时用 resetForNewVideo()（只清数据不隐藏）。
+     */
     private fun startDanmakuFor(card: StoryApi.StoryCard) {
         val dc = danmakuController ?: return
         if (!danmakuEnabled) {
             dc.hideAndClear()
             return
         }
-        dc.hideAndClear()
+        dc.show()
+        // cid 可能还没解析出来：等 prepare 完成后再补一次（见 onPlayerPrepared）
         if (card.cid <= 0) return
+        // 同一支视频重复进入（例如旋转/清晰度切换后重进）不重复拉取
+        if (danmakuAid == card.aid && dc.hasDanmaku) return
+        danmakuAid = card.aid
         dc.oldApiUrl = "https://comment.bilibili.com/" + card.cid + ".xml"
         dc.cacheFile = java.io.File(cacheDir, "story_danmaku_" + card.cid + ".xml")
         // 短视频一般很短：时长未就绪时按 60 秒估，控制器会等播放器解析出真实时长
@@ -297,15 +321,16 @@ class StoryPlayerActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        //无条件恢复：若离开时还在 prepare，回来时 firstFrameShown 仍是 false，
-        //只按 firstFrameShown 判断会导致"回来继续黑屏"
-        try {
-            controller?.resume()
-        } catch (ignored: Exception) {
-        }
-        try {
-            if (firstFrameShown) danmakuController?.resume()
-        } catch (ignored: Exception) {
+        //用户主动暂停时，回到前台不要自动续播
+        if (!userPaused) {
+            try {
+                controller?.resume()
+            } catch (ignored: Exception) {
+            }
+            try {
+                if (firstFrameShown) danmakuController?.resume()
+            } catch (ignored: Exception) {
+            }
         }
         if (currentCard != null && !firstFrameShown && !switching && currentInfo == null) {
             retryCurrent()
@@ -523,6 +548,7 @@ class StoryPlayerActivity : BaseActivity() {
         qualityBtn!!.text = qualityLabel(qn)
 
         val resume = controller?.currentPosition() ?: 0L
+        val wasPaused = userPaused
         playCache.remove(currentIndex)
         localFileFor(card).delete()
         switching = true
@@ -543,6 +569,12 @@ class StoryPlayerActivity : BaseActivity() {
                 if (info != null && info.url.isNotEmpty()) {
                     synchronized(playCache) { playCache[currentIndex] = info }
                     startPlayback(info, resume)
+                    // 用户本来是暂停的：切清晰度后保持暂停，不要自动播起来
+                    if (wasPaused) {
+                        controller?.pause()
+                        userPaused = true
+                        playBtn?.setImageResource(R.drawable.btn_player_play)
+                    }
                 } else {
                     onPlayFailed(error)
                 }
@@ -574,6 +606,7 @@ class StoryPlayerActivity : BaseActivity() {
 
             override fun onStartTrackingTouch(sb: SeekBar?) {
                 seeking = true
+                topBar?.removeCallbacks(hideControlsRunnable)
             }
 
             override fun onStopTrackingTouch(sb: SeekBar?) {
@@ -583,7 +616,9 @@ class StoryPlayerActivity : BaseActivity() {
                     val target = dur * (sb?.progress ?: 0) / 1000
                     controller?.seekTo(target)
                     danmakuController?.seekTo(target)
+                    timeView?.text = timeText(target, dur)
                 }
+                scheduleHideControls(2500)
             }
         })
     }
@@ -723,7 +758,15 @@ class StoryPlayerActivity : BaseActivity() {
     }
 
     private val hideControlsRunnable = Runnable {
-        if (!destroyed) setControlsVisible(false)
+        if (destroyed) return@Runnable
+        // 正在拖动进度条时不要把控制层收起来（否则拖到一半按钮/进度条消失）
+        if (seeking) {
+            scheduleHideControls(1500)
+            return@Runnable
+        }
+        // 暂停状态保留控制层（和主播放器一致），方便直接继续播放/拖进度
+        if (userPaused) return@Runnable
+        setControlsVisible(false)
     }
 
     override fun onUserInteraction() {
@@ -754,22 +797,43 @@ class StoryPlayerActivity : BaseActivity() {
                     setLoading(false)
                     showStatus("加载失败：" + error + "\n\n点按重试", autoHide = false)
                 } else {
-                    storyList.addAll(batch)
+                    // 去重：接口每次返回的批次之间会有重复稿件，直接 addAll 会造成
+                    // 「上滑好几次都是同一个视频」。按 aid 过滤后再入库。
+                    val known = HashSet<Long>(storyList.size * 2)
+                    for (c in storyList) known.add(c.aid)
+                    var added = 0
+                    for (c in batch) {
+                        if (c.aid <= 0 || !known.add(c.aid)) continue
+                        storyList.add(c)
+                        added++
+                    }
                     if (warning.isNotEmpty()) showStatus(warning, autoHide = true)
-                    if (batch.isEmpty()) showHint("没有更多了")
+                    if (added == 0) showHint("没有更多了")
                 }
                 onDone()
             }
         })
     }
 
+    /** 上一次切视频的时间：手势连发时防抖，避免一次快速连滑触发多次取流 */
+    private var lastSwitchAt = 0L
+
     private fun switchRelative(delta: Int) {
+        val now = System.currentTimeMillis()
+        if (now - lastSwitchAt < 300) return
+        lastSwitchAt = now
         val next = currentIndex + delta
         if (next < 0) {
             showHint("已经是第一个了")
             return
         }
         if (next >= storyList.size) {
+            // 已经在拉了：等这一批回来再滑（旧实现会直接 return，回调永远不执行，
+            // 提示一直停在“正在加载更多…”，用户以为卡死）
+            if (loadingMore) {
+                showHint("正在加载更多…")
+                return
+            }
             showHint("正在加载更多…")
             loadMore {
                 if (!destroyed) {
@@ -798,8 +862,10 @@ class StoryPlayerActivity : BaseActivity() {
         endLongPressSpeed()
 
         hideStatus()
-        //切换视频：先清掉上一支的弹幕，再为这一支重新拉取
+        //切换视频：先清掉上一支的弹幕（只清数据、不隐藏弹幕层），再为这一支重新拉取
         try {
+            danmakuAid = 0L
+            danmakuController?.resetForNewVideo()
             startDanmakuFor(card)
         } catch (e: Exception) {
             Logu.e("story", "加载弹幕失败：" + e.message)
@@ -810,16 +876,18 @@ class StoryPlayerActivity : BaseActivity() {
         seekBar?.progress = 0
         timeView?.text = ""
         liked = false
+        userPaused = false
         likeBtn?.setImageResource(R.drawable.icon_like_0)
         playBtn?.setImageResource(R.drawable.btn_player_pause)
-        setLoading(true, "加载中…")
+        // 延迟 400ms 再显示加载遮罩：命中预下载时首帧很快，避免闪一下黑底
+        setLoading(true, "加载中…", 400L)
         setControlsVisible(true)
         scheduleHideControls(4000)
 
         if (storyList.size - index <= 2) loadMore()
 
         val cached = synchronized(playCache) { playCache[index] }
-        if (cached != null && cached.url.isNotEmpty()) {
+        if (cached != null && cached.url.isNotEmpty() && isFresh(cached)) {
             startPlayback(cached)
             return
         }
@@ -879,9 +947,19 @@ class StoryPlayerActivity : BaseActivity() {
         })
     }
 
+    /** 直链是否还没过期（B 站播放地址带时效，过期后必须重新解析） */
+    private fun isFresh(info: StoryApi.StoryPlayInfo): Boolean =
+        System.currentTimeMillis() - info.fetchedAt < PLAY_URL_TTL_MS
+
     private fun preloadNext(nextIndex: Int) {
         if (nextIndex < 0 || nextIndex >= storyList.size) return
-        if (playCache.containsKey(nextIndex)) return
+        synchronized(playCache) {
+            val cached = playCache[nextIndex]
+            if (cached != null) {
+                if (isFresh(cached)) return
+                playCache.remove(nextIndex)
+            }
+        }
         val card = storyList[nextIndex]
         CenterThreadPool.run(Runnable {
             try {
@@ -943,7 +1021,8 @@ class StoryPlayerActivity : BaseActivity() {
         currentHeaders = headers
 
         if (info.note.isNotEmpty()) showStatus(info.note, autoHide = true)
-        setLoading(true, "缓冲中…")
+        // 预下载命中/直链很快时首帧会先到，延迟显示遮罩能避免「闪一下黑底再出画」
+        setLoading(true, "缓冲中…", 350L)
 
         val hardware = SharedPreferencesUtil.getBoolean("player_codec", true)
         videoW = 0
@@ -995,12 +1074,22 @@ class StoryPlayerActivity : BaseActivity() {
         try {
             if (c.isPlaying()) {
                 c.pause()
+                userPaused = true
                 playBtn?.setImageResource(R.drawable.btn_player_play)
                 syncDanmakuPlaying(false)
             } else {
+                // 播完以后再点播放：从头开始（否则 ijk 会停在最后一帧不动）
+                val dur = c.currentDuration()
+                val pos = c.currentPosition()
+                if (dur > 0 && pos >= dur - 500) {
+                    c.seekTo(0)
+                    danmakuController?.seekTo(0)
+                }
                 c.resume()
+                userPaused = false
                 playBtn?.setImageResource(R.drawable.btn_player_pause)
                 syncDanmakuPlaying(true)
+                scheduleHideControls(3000)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1012,6 +1101,16 @@ class StoryPlayerActivity : BaseActivity() {
             if (destroyed) return
             switching = false
             if (durationMs > 0) timeView?.text = timeText(0, durationMs)
+            // cid 是切集后才解析出来的（信息流卡片没带 cid）时，这里补一次弹幕
+            currentCard?.let { card ->
+                if (card.cid > 0 && danmakuAid != card.aid) {
+                    try {
+                        startDanmakuFor(card)
+                    } catch (e: Exception) {
+                        Logu.e("story", "补拉弹幕失败：" + e.message)
+                    }
+                }
+            }
             if (danmakuEnabled) {
                 try {
                     danmakuController?.start()
@@ -1042,16 +1141,24 @@ class StoryPlayerActivity : BaseActivity() {
             failCount = 0
             switching = false
             setLoading(false)
-            playBtn?.setImageResource(R.drawable.btn_player_pause)
+            playBtn?.setImageResource(
+                if (userPaused) R.drawable.btn_player_play else R.drawable.btn_player_pause
+            )
             setControlsVisible(true)
             scheduleHideControls(3000)
-            syncDanmakuPlaying(true)
+            if (!userPaused) syncDanmakuPlaying(true)
         }
 
         override fun onPlayerCompletion() {
             if (destroyed) return
-            if (autoNext) switchRelative(1)
-            else playBtn?.setImageResource(R.drawable.btn_player_play)
+            if (autoNext) {
+                switchRelative(1)
+            } else {
+                userPaused = true
+                playBtn?.setImageResource(R.drawable.btn_player_play)
+                syncDanmakuPlaying(false)
+                showHint("播放结束")
+            }
         }
 
         override fun onPlayerError(what: Int, extra: Int) {
@@ -1131,5 +1238,8 @@ class StoryPlayerActivity : BaseActivity() {
         private const val FIT_FIT = 0
         private const val FIT_FILL = 1
         private const val FIT_STRETCH = 2
+
+        /** 直链缓存有效期：超过就重新解析（B 站直链约 2 小时失效，留足余量） */
+        private const val PLAY_URL_TTL_MS = 20 * 60 * 1000L
     }
 }
