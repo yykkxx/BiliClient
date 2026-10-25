@@ -206,7 +206,7 @@ public class BiliProtobufDanmakuParser extends BaseDanmakuParser {
 
             BaseDanmaku item = mContext.mDanmakuFactory.createDanmaku(mode, mContext);
             if (item != null) {
-                item.time = progress;
+                item.setTime(progress);
 
                 DanmakuUtils.fillText(item, content);
                 item.index = index;

@@ -249,7 +249,8 @@ class LiveInfoActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        TerminalContext.getInstance().leaveDetailPage()
+        //精确释放本页缓存（Live_<roomId>），并同步摘掉 enterLiveDetailPage 压入的栈登记
+        TerminalContext.getInstance().leaveLiveDetailPage(room_id)
         super.onDestroy()
     }
 }

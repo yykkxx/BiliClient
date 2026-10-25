@@ -34,6 +34,9 @@ class DynamicInfoActivity : BaseActivity() {
     var rFragment: ReplyFragment? = null
     private var seek_reply: Long = 0
 
+    //本页要展示的动态 id，onDestroy 时按它精确释放 TerminalContext 里的动态缓存
+    private var dynamicId: Long = 0
+
     @SuppressLint("MissingInflatedId", "InflateParams")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +45,7 @@ class DynamicInfoActivity : BaseActivity() {
 
         val intent = getIntent()
         val id = intent.getLongExtra("id", 0)
+        dynamicId = id
 
         val pageName = findViewById<TextView>(R.id.pageName)
         pageName.text = "动态详情"
@@ -88,7 +92,9 @@ class DynamicInfoActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        TerminalContext.getInstance().leaveDetailPage()
+        //精确释放本页缓存（Dynamic_<id>）：老式动态页由 OpusInfoActivity 重定向进入，
+        //没有对应的 enterXxx 压栈登记，重复移除也是幂等的
+        TerminalContext.getInstance().leaveDynamicDetailPage(dynamicId)
         super.onDestroy()
     }
 }

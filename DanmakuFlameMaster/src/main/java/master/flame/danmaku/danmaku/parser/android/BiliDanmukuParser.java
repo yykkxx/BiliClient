@@ -35,19 +35,23 @@ import master.flame.danmaku.danmaku.model.AlphaValue;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.Duration;
 import master.flame.danmaku.danmaku.model.IDisplayer;
-import master.flame.danmaku.danmaku.model.android.DanmakuFactory;
+import master.flame.danmaku.danmaku.model.SpecialDanmaku;
 import master.flame.danmaku.danmaku.model.android.Danmakus;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
+import master.flame.danmaku.danmaku.model.android.DanmakuFactory;
+import master.flame.danmaku.danmaku.parser.android.AndroidFileSource;
 import master.flame.danmaku.danmaku.util.DanmakuUtils;
 
+import static master.flame.danmaku.danmaku.model.IDanmakus.ST_BY_TIME;
+
 public class BiliDanmukuParser extends BaseDanmakuParser {
-    
+
     static {
         System.setProperty("org.xml.sax.driver", "org.xmlpull.v1.sax2.Driver");
     }
 
-    private float mDispScaleX;
-    private float mDispScaleY;
+    protected float mDispScaleX;
+    protected float mDispScaleY;
 
     @Override
     public Danmakus parse() {
@@ -75,7 +79,7 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
 
         private static final String TRUE_STRING = "true";
 
-        public Danmakus result = null;
+        public Danmakus result;
 
         public BaseDanmaku item = null;
 
@@ -88,23 +92,24 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
         }
 
         @Override
-        public void startDocument() {
-            result = new Danmakus();
+        public void startDocument() throws SAXException {
+            result = new Danmakus(ST_BY_TIME, false, mContext.getBaseComparator());
         }
 
         @Override
-        public void endDocument() {
+        public void endDocument() throws SAXException {
             completed = true;
         }
 
         @Override
-        public void startElement(String uri, String localName, String qName, Attributes attributes) {
+        public void startElement(String uri, String localName, String qName, Attributes attributes)
+                throws SAXException {
             String tagName = localName.length() != 0 ? localName : qName;
             tagName = tagName.toLowerCase(Locale.getDefault()).trim();
             if (tagName.equals("d")) {
                 // <d p="23.826000213623,1,25,16777215,1422201084,0,057075e9,757076900">我从未见过如此厚颜无耻之猴</d>
                 // 0:时间(弹幕出现时间)
-                // 1:类型(1从左至右滚动弹幕|6从右至左滚动弹幕|5顶端固定弹幕|4底端固定弹幕|7高级弹幕|8脚本弹幕)
+                // 1:类型(1从右至左滚动弹幕|6从左至右滚动弹幕|5顶端固定弹幕|4底端固定弹幕|7高级弹幕|8脚本弹幕)
                 // 2:字号
                 // 3:颜色
                 // 4:时间戳 ?
@@ -115,17 +120,21 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
                 // parse p value to danmaku
                 String[] values = pValue.split(",");
                 if (values.length > 0) {
-                    long time = (long) (Float.parseFloat(values[0]) * 1000); // 出现时间
-                    int type = Integer.parseInt(values[1]); // 弹幕类型
-                    
-                    if(sharedPreferences != null && type != 7 && type != 8 && sharedPreferences.getBoolean("player_danmaku_forceR2L",false)) type = 1;
-                    
-                    float textSize = Float.parseFloat(values[2]); // 字体大小
-                    int color = Integer.parseInt(values[3]) | 0xFF000000; // 颜色
-                    // int poolType = Integer.parseInt(values[5]); // 弹幕池类型（忽略
+                    long time = (long) (parseFloat(values[0]) * 1000); // 出现时间
+                    int type = parseInteger(values[1]); // 弹幕类型
+
+                    // BiliClient 本地补丁（a5b7e737）：直播间游客模式/强制滚动开关
+                    if (sharedPreferences != null && type != 7 && type != 8
+                            && sharedPreferences.getBoolean("player_danmaku_forceR2L", false)) {
+                        type = 1;
+                    }
+
+                    float textSize = parseFloat(values[2]); // 字体大小
+                    int color = (int) ((0x00000000ff000000 | parseLong(values[3])) & 0x00000000ffffffff); // 颜色
+                    // int poolType = parseInteger(values[5]); // 弹幕池类型（忽略
                     item = mContext.mDanmakuFactory.createDanmaku(type, mContext);
                     if (item != null) {
-                        item.time = time;
+                        item.setTime(time);
                         item.textSize = textSize * (mDispDensity - 0.6f);
                         item.textColor = color;
                         item.textShadowColor = color <= Color.BLACK ? Color.WHITE : Color.BLACK;
@@ -135,13 +144,17 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
         }
 
         @Override
-        public void endElement(String uri, String localName, String qName) {
-            if (item != null) {
+        public void endElement(String uri, String localName, String qName) throws SAXException {
+            if (item != null && item.text != null) {
                 if (item.duration != null) {
                     String tagName = localName.length() != 0 ? localName : qName;
                     if (tagName.equalsIgnoreCase("d")) {
                         item.setTimer(mTimer);
-                        result.addItem(item);
+                        item.flags = mContext.mGlobalFlagValues;
+                        Object lock = result.obtainSynchronizer();
+                        synchronized (lock) {
+                            result.addItem(item);
+                        }
                     }
                 }
                 item = null;
@@ -149,7 +162,7 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
         }
 
         @Override
-        public void characters(char[] ch, int start, int length)  {
+        public void characters(char[] ch, int start, int length) {
             if (item != null) {
                 DanmakuUtils.fillText(item, decodeXmlString(new String(ch, start, length)));
                 item.index = index++;
@@ -163,56 +176,56 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
                     try {
                         JSONArray jsonArray = new JSONArray(text);
                         textArr = new String[jsonArray.length()];
-                        for(int i=0;i<textArr.length;i++){
+                        for (int i = 0; i < textArr.length; i++) {
                             textArr[i] = jsonArray.getString(i);
                         }
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
 
-                    if (textArr == null || textArr.length < 5) {
+                    if (textArr == null || textArr.length < 5 || TextUtils.isEmpty(textArr[4])) {
                         item = null;
                         return;
                     }
-                    item.text = textArr[4];
-                    float beginX = Float.parseFloat(textArr[0]);
-                    float beginY = Float.parseFloat(textArr[1]);
+                    DanmakuUtils.fillText(item, textArr[4]);
+                    float beginX = parseFloat(textArr[0]);
+                    float beginY = parseFloat(textArr[1]);
                     float endX = beginX;
                     float endY = beginY;
                     String[] alphaArr = textArr[2].split("-");
-                    int beginAlpha = (int) (AlphaValue.MAX * Float.parseFloat(alphaArr[0]));
+                    int beginAlpha = (int) (AlphaValue.MAX * parseFloat(alphaArr[0]));
                     int endAlpha = beginAlpha;
                     if (alphaArr.length > 1) {
-                        endAlpha = (int) (AlphaValue.MAX * Float.parseFloat(alphaArr[1]));
+                        endAlpha = (int) (AlphaValue.MAX * parseFloat(alphaArr[1]));
                     }
-                    long alphaDuraion = (long) (Float.parseFloat(textArr[3]) * 1000);
+                    long alphaDuraion = (long) (parseFloat(textArr[3]) * 1000);
                     long translationDuration = alphaDuraion;
                     long translationStartDelay = 0;
                     float rotateY = 0, rotateZ = 0;
-                    if (textArr.length >= 7 && !textArr[5].isEmpty()) {
-                        rotateZ = Float.parseFloat(textArr[5]);
-                        rotateY = Float.parseFloat(textArr[6]);
+                    if (textArr.length >= 7 && !TextUtils.isEmpty(textArr[5])) {
+                        rotateZ = parseFloat(textArr[5]);
+                        rotateY = parseFloat(textArr[6]);
                     }
-                    if (textArr.length >= 11 && !textArr[7].isEmpty()) {
-                        endX = Float.parseFloat(textArr[7]);
-                        endY = Float.parseFloat(textArr[8]);
-                        if(!"".equals(textArr[9])){
-                            translationDuration = Integer.parseInt(textArr[9]);
+                    if (textArr.length >= 11 && !TextUtils.isEmpty(textArr[7])) {
+                        endX = parseFloat(textArr[7]);
+                        endY = parseFloat(textArr[8]);
+                        if (!"".equals(textArr[9])) {
+                            translationDuration = parseInteger(textArr[9]);
                         }
-                        if(!"".equals(textArr[10])){
-                            translationStartDelay = (long) (Float.parseFloat(textArr[10]));
+                        if (!"".equals(textArr[10])) {
+                            translationStartDelay = (long) (parseFloat(textArr[10]));
                         }
                     }
-                    if (isPercentageNumber(beginX)) {
+                    if (isPercentageNumber(textArr[0])) {
                         beginX *= DanmakuFactory.BILI_PLAYER_WIDTH;
                     }
-                    if (isPercentageNumber(beginY)) {
+                    if (isPercentageNumber(textArr[1])) {
                         beginY *= DanmakuFactory.BILI_PLAYER_HEIGHT;
                     }
-                    if (isPercentageNumber(endX)) {
+                    if (textArr.length >= 8 && isPercentageNumber(textArr[7])) {
                         endX *= DanmakuFactory.BILI_PLAYER_WIDTH;
                     }
-                    if (isPercentageNumber(endY)) {
+                    if (textArr.length >= 9 && isPercentageNumber(textArr[8])) {
                         endY *= DanmakuFactory.BILI_PLAYER_HEIGHT;
                     }
                     item.duration = new Duration(alphaDuraion);
@@ -224,7 +237,7 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
 
                     if (textArr.length >= 12) {
                         // 是否有描边
-                        if (!TextUtils.isEmpty(textArr[11]) && TRUE_STRING.equals(textArr[11])) {
+                        if (!TextUtils.isEmpty(textArr[11]) && TRUE_STRING.equalsIgnoreCase(textArr[11])) {
                             item.textShadowColor = Color.TRANSPARENT;
                         }
                     }
@@ -232,22 +245,27 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
                         //TODO 字体 textArr[12]
                     }
                     if (textArr.length >= 14) {
-                        //TODO 是否有动画缓冲(easing)
+                        // Linear.easeIn or Quadratic.easeOut
+                        ((SpecialDanmaku) item).isQuadraticEaseOut = ("0".equals(textArr[13]));
                     }
                     if (textArr.length >= 15) {
                         // 路径数据
                         if (!"".equals(textArr[14])) {
                             String motionPathString = textArr[14].substring(1);
-                            String[] pointStrArray = motionPathString.split("L");
-                            if (pointStrArray.length > 0) {
-                                float[][] points = new float[pointStrArray.length][2];
-                                for (int i = 0; i < pointStrArray.length; i++) {
-                                    String[] pointArray = pointStrArray[i].split(",");
-                                    points[i][0] = Float.parseFloat(pointArray[0]);
-                                    points[i][1] = Float.parseFloat(pointArray[1]);
+                            if (!TextUtils.isEmpty(motionPathString)) {
+                                String[] pointStrArray = motionPathString.split("L");
+                                if (pointStrArray.length > 0) {
+                                    float[][] points = new float[pointStrArray.length][2];
+                                    for (int i = 0; i < pointStrArray.length; i++) {
+                                        String[] pointArray = pointStrArray[i].split(",");
+                                        if (pointArray.length >= 2) {
+                                            points[i][0] = parseFloat(pointArray[0]);
+                                            points[i][1] = parseFloat(pointArray[1]);
+                                        }
+                                    }
+                                    mContext.mDanmakuFactory.fillLinePathData(item, points, mDispScaleX,
+                                            mDispScaleY);
                                 }
-                                DanmakuFactory.fillLinePathData(item, points, mDispScaleX,
-                                        mDispScaleY);
                             }
                         }
                     }
@@ -274,8 +292,33 @@ public class BiliDanmukuParser extends BaseDanmakuParser {
 
     }
 
-    private boolean isPercentageNumber(float number) {
-        return number >= 0f && number <= 1f;
+    private boolean isPercentageNumber(String number) {
+        //return number >= 0f && number <= 1f;
+        return number != null && number.contains(".");
+    }
+
+    private float parseFloat(String floatStr) {
+        try {
+            return Float.parseFloat(floatStr);
+        } catch (NumberFormatException e) {
+            return 0.0f;
+        }
+    }
+
+    private int parseInteger(String intStr) {
+        try {
+            return Integer.parseInt(intStr);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+    
+    private long parseLong(String longStr) {
+        try {
+            return Long.parseLong(longStr);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     @Override

@@ -24,4 +24,31 @@ plugins {
     id 'com.android.application' version '7.3.1' apply false
     id 'com.android.library' version '7.3.1' apply false
     id 'org.jetbrains.kotlin.android' version '1.7.20' apply false
+    // 静态检查：只在 :app 应用（见 app/build.gradle），且不挂 check 链路。
+    // 版本锁定 1.22.0：兼容 Gradle 7.4 / AGP 7.3.1 / Kotlin 1.7.20（detekt 1.22.x 内置 Kotlin 1.7）。
+    id 'io.gitlab.arturbosch.detekt' version '1.22.0' apply false
+}
+
+/**
+ * 新增代码质量门禁（T2）：扫描 git diff「新增行」里的历史反模式
+ * （runOnUiThread( / org.json. / Thread.sleep( / !! 硬失败，findViewById( 提示级）。
+ *
+ * 与 :app:detekt 的分工：detekt 卡「规则」违规（复杂度/风格/潜在 bug），
+ * 本任务卡「审计里点名过的历史反模式」——后者 detekt 默认规则集覆盖不到。
+ *
+ * 用法（不会自动挂到 check/assemble 链路上，绝不拖慢发版构建）：
+ *   ./gradlew checkNewCode                                   # 检查工作区未提交改动
+ *   ./gradlew checkNewCode -PbaseRef=origin/shortvideo       # 检查相对某 ref 的新增行
+ *   ./gradlew checkNewCode -Pstrict=true                     # findViewById( 也直接失败
+ */
+tasks.register('checkNewCode', Exec) {
+    group = 'quality'
+    description = '扫描 git diff 新增行中的历史反模式（runOnUiThread/org.json/Thread.sleep/!!）'
+    def scriptFile = file("$rootDir/tools/quality/check_new_code.sh")
+    def base = project.findProperty('baseRef') ?: 'HEAD'
+    def strict = project.findProperty('strict') ?: ''
+    workingDir rootDir
+    commandLine(['bash', scriptFile.absolutePath, '--base', base] +
+            (strict == 'true' ? ['--strict'] : []))
+    onlyIf { scriptFile.exists() }
 }

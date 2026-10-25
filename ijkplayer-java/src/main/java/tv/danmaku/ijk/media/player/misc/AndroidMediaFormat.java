@@ -53,7 +53,7 @@ public class AndroidMediaFormat implements IMediaFormat {
         out.append(getClass().getName());
         out.append('{');
         if (mMediaFormat != null) {
-            out.append(mMediaFormat);
+            out.append(mMediaFormat.toString());
         } else {
             out.append("null");
         }

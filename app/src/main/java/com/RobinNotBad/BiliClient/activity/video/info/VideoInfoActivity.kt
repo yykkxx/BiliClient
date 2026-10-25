@@ -151,7 +151,9 @@ class VideoInfoActivity : BaseActivity() {
     override fun onDestroy() {
         Logu.d("onDestroy")
         Glide.get(BiliTerminal.context).clearMemory()
-        TerminalContext.getInstance().leaveDetailPage()
+        //显式释放本页缓存：aid/bvid 在 fetch 成功后已被更新为真实值，
+        //leaveVideoDetailPage 会把 aid/bvid 两个候选 key 都幂等清一遍，并同步摘掉栈登记
+        TerminalContext.getInstance().leaveVideoDetailPage(aid, bvid)
         super.onDestroy()
     }
 }

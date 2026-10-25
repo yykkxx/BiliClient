@@ -17,6 +17,9 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14 (API 34+) 起，dataSync 类型前台服务必须额外声明该权限；
+         当前 targetSdk 为 30，提前声明在旧系统上无副作用（未知权限被忽略）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".BiliTerminal"
@@ -29,8 +32,13 @@
         android:theme="@style/Theme.BiliClient"
         android:usesCleartextTraffic="true"
         tools:ignore="LockedOrientationActivity,RtlEnabled">
+        <!-- 下载服务属于「数据同步」类前台服务。
+             历史误用 mediaProjection（录屏/投屏专用）：该类型在 targetSdk 34+ 需要
+             用户授予屏幕共享授权，否则 startForeground 直接抛 SecurityException。
+             本服务与录屏无关，改为 dataSync（配合 FOREGROUND_SERVICE_DATA_SYNC 权限），
+             这是升 targetSdk 34+ 前必须先拆掉的雷。 -->
         <service android:name=".service.DownloadService"
-            android:foregroundServiceType="mediaProjection"
+            android:foregroundServiceType="dataSync"
             android:enabled="true"/>
 
         <!-- 主界面注册的拨号盘暗码：在系统拨号盘输入 *#*#159951#*#* 直达注册/登录入口 -->

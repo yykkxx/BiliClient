@@ -21,6 +21,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.TutorialActivity
 import com.RobinNotBad.BiliClient.model.CustomText
 import com.RobinNotBad.BiliClient.model.Tutorial
+import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import org.xmlpull.v1.XmlPullParser
@@ -191,7 +192,10 @@ object TutorialHelper {
 
     @JvmStatic
     fun showPagerTutorial(activity: Activity, pagecount: Int) {
-        activity.runOnUiThread {
+        // 协程化示范：原 activity.runOnUiThread { } 改为 CoroutineScopes.launchUi { }
+        // - 调用方可能在后台线程（解析完数据回调里），launchUi 统一投递到主线程；
+        // - 本 lambda 只做一次性的 View 初始化，不持有长任务，故无需显式 Job。
+        CoroutineScopes.launchUi {
             val pagename = activity.javaClass.simpleName
             val textView = activity.findViewById<TextView>(R.id.text_tutorial_pager)
             if (SharedPreferencesUtil.getBoolean("tutorial_pager_$pagename", true)) {

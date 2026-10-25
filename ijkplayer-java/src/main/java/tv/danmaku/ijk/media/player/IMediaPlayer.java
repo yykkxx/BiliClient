@@ -19,6 +19,7 @@ package tv.danmaku.ijk.media.player;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.view.Surface;
@@ -173,6 +174,19 @@ public interface IMediaPlayer {
 
     interface OnInfoListener {
         boolean onInfo(IMediaPlayer mp, int what, int extra);
+
+        /**
+         * BiliClient 兼容补丁：上游 fork 新增的两个回调在原版 ijkplayer 0.8.7 里不存在，
+         * 应用层大量使用 `setOnInfoListener { mp, what, extra -> ... }` 的 SAM 简写。
+         * 这里给它们默认实现，使 OnInfoListener 仍是单抽象方法接口（SAM），
+         * 应用层无需改动；不使用这两个回调的场景行为与旧版完全一致。
+         */
+        default boolean onInfoSEI(IMediaPlayer mp, int what, int extra, String sei_content) {
+            return false;
+        }
+
+        default void onInfoAudioPcmData(IMediaPlayer mp, byte[] arrPcm, int length) {
+        }
     }
 
     interface OnTimedTextListener {
@@ -212,4 +226,12 @@ public interface IMediaPlayer {
      * AndroidMediaPlayer: M:
      */
     void setDataSource(IMediaDataSource mediaDataSource);
+
+    int startRecord(String var1);
+    int stopRecord();
+    boolean getCurrentFrame(Bitmap var1);
+    void setFrameSpeed(float speed);
+    void setMaxPacketNum(int num);
+    void flushCache();
+    void setMediaCodecFlags(int flags);
 }

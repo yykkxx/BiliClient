@@ -23,6 +23,7 @@ import android.annotation.TargetApi;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
+import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
 import android.graphics.Rect;
 import android.media.MediaCodecInfo;
@@ -74,11 +75,13 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private static final int MEDIA_BUFFERING_UPDATE = 3;
     private static final int MEDIA_SEEK_COMPLETE = 4;
     private static final int MEDIA_SET_VIDEO_SIZE = 5;
+    private static final int MEDIA_SET_VIDEO_SEI  = 7;        // arg1 = width, arg2 = height, obj = SEI Content
+    private static final int MEDIA_AUDIO_PCM_DATA  = 8;       // obj = PCM data, arg1 = PCM size
     private static final int MEDIA_TIMED_TEXT = 99;
     private static final int MEDIA_ERROR = 100;
     private static final int MEDIA_INFO = 200;
 
-    private static final int MEDIA_SET_VIDEO_SAR = 10001;
+    protected static final int MEDIA_SET_VIDEO_SAR = 10001;
 
     //----------------------------------------
     // options
@@ -173,7 +176,12 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
      * Default library loader
      * Load them by yourself, if your libraries are not installed at default place.
      */
-    private static final IjkLibLoader sLocalLibLoader = System::loadLibrary;
+    private static final IjkLibLoader sLocalLibLoader = new IjkLibLoader() {
+        @Override
+        public void loadLibrary(String libName) throws UnsatisfiedLinkError, SecurityException {
+            System.loadLibrary(libName);
+        }
+    };
 
     private static volatile boolean mIsLibLoaded = false;
     public static void loadLibrariesOnce(IjkLibLoader libLoader) {
@@ -239,7 +247,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
          * Native setup requires a weak reference to our object. It's easier to
          * create it here than in C++.
          */
-        native_setup(new WeakReference<>(this));
+        native_setup(new WeakReference<IjkMediaPlayer>(this));
     }
 
     private native void _setFrameAtTime(String imgCachePath, long startTime, long endTime, int num, int imgDefinition)
@@ -599,7 +607,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
         if (mediaMeta == null || mediaMeta.mStreams == null)
             return null;
 
-        ArrayList<IjkTrackInfo> trackInfos = new ArrayList<>();
+        ArrayList<IjkTrackInfo> trackInfos = new ArrayList<IjkTrackInfo>();
         for (IjkMediaMeta.IjkStreamMeta streamMeta: mediaMeta.mStreams) {
             IjkTrackInfo trackInfo = new IjkTrackInfo(streamMeta);
             if (streamMeta.mType.equalsIgnoreCase(IjkMediaMeta.IJKM_VAL_TYPE__VIDEO)) {
@@ -612,7 +620,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
             trackInfos.add(trackInfo);
         }
 
-        return trackInfos.toArray(new IjkTrackInfo[0]);
+        return trackInfos.toArray(new IjkTrackInfo[trackInfos.size()]);
     }
 
     // TODO: @Override
@@ -855,7 +863,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
         String videoCodecInfo = _getVideoCodecInfo();
         if (!TextUtils.isEmpty(videoCodecInfo)) {
-            String[] nodes = videoCodecInfo.split(",");
+            String nodes[] = videoCodecInfo.split(",");
             if (nodes.length >= 2) {
                 mediaInfo.mVideoDecoder = nodes[0];
                 mediaInfo.mVideoDecoderImpl = nodes[1];
@@ -867,7 +875,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
         String audioCodecInfo = _getAudioCodecInfo();
         if (!TextUtils.isEmpty(audioCodecInfo)) {
-            String[] nodes = audioCodecInfo.split(",");
+            String nodes[] = audioCodecInfo.split(",");
             if (nodes.length >= 2) {
                 mediaInfo.mAudioDecoder = nodes[0];
                 mediaInfo.mAudioDecoderImpl = nodes[1];
@@ -950,7 +958,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     }
 
     public void setCacheShare(int share) {
-        _setPropertyLong(FFP_PROP_INT64_SHARE_CACHE_DATA, share);
+        _setPropertyLong(FFP_PROP_INT64_SHARE_CACHE_DATA, (long)share);
     }
 
     private static class EventHandler extends Handler {
@@ -958,7 +966,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
         public EventHandler(IjkMediaPlayer mp, Looper looper) {
             super(looper);
-            mWeakPlayer = new WeakReference<>(mp);
+            mWeakPlayer = new WeakReference<IjkMediaPlayer>(mp);
         }
 
         @Override
@@ -1035,6 +1043,22 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
                     player.notifyOnTimedText(text);
                 }
                 return;
+            case MEDIA_SET_VIDEO_SEI:
+                if (msg.obj != null) {
+                    if (msg.obj instanceof byte[]) {
+                        byte[] byteArray = (byte[]) msg.obj;
+                        String text = new String(byteArray);
+                        // 处理字符串
+                        player.notifyOnInfoSEI(msg.arg1, msg.arg2, text);
+                    }
+                }
+                break;
+
+            case MEDIA_AUDIO_PCM_DATA:
+                if (msg.obj != null) {
+                    player.notifyOnInfoAudioPcmData((byte[])msg.obj, msg.arg1);
+                }
+                break;
             case MEDIA_NOP: // interface test message - ignore
                 break;
 
@@ -1141,7 +1165,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     @CalledByNative
     private static boolean onNativeInvoke(Object weakThiz, int what, Bundle args) {
         DebugLog.ifmt(TAG, "onNativeInvoke %d", what);
-        if (!(weakThiz instanceof WeakReference<?>))
+        if (weakThiz == null || !(weakThiz instanceof WeakReference<?>))
             throw new IllegalStateException("<null weakThiz>.onNativeInvoke()");
 
         @SuppressWarnings("unchecked")
@@ -1195,7 +1219,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
     @CalledByNative
     private static String onSelectCodec(Object weakThiz, String mimeType, int profile, int level) {
-        if (!(weakThiz instanceof WeakReference<?>))
+        if (weakThiz == null || !(weakThiz instanceof WeakReference<?>))
             return null;
 
         @SuppressWarnings("unchecked")
@@ -1224,7 +1248,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
                 return null;
 
             Log.i(TAG, String.format(Locale.US, "onSelectCodec: mime=%s, profile=%d, level=%d", mimeType, profile, level));
-            ArrayList<IjkMediaCodecInfo> candidateCodecList = new ArrayList<>();
+            ArrayList<IjkMediaCodecInfo> candidateCodecList = new ArrayList<IjkMediaCodecInfo>();
             int numCodecs = MediaCodecList.getCodecCount();
             for (int i = 0; i < numCodecs; i++) {
                 MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
@@ -1279,4 +1303,20 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     public static native void native_profileBegin(String libName);
     public static native void native_profileEnd();
     public static native void native_setLogLevel(int level);
+
+
+    @Override
+    public native int startRecord(String var1);
+    @Override
+    public native int stopRecord();
+    @Override
+    public native boolean getCurrentFrame(Bitmap var1);
+    @Override
+    public native void setFrameSpeed(float speed);
+    @Override
+    public native void setMaxPacketNum(int num);
+    @Override
+    public native void flushCache();
+    @Override
+    public native void setMediaCodecFlags(int flags);
 }

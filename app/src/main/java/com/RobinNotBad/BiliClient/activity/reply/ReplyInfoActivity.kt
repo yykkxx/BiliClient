@@ -204,6 +204,16 @@ class ReplyInfoActivity : BaseActivity() {
         }
     }
 
+    override fun onDestroy() {
+        //本页通过 getReply 缓存了根评论对象（key 为 type_oid_rpid），退出时精确释放；
+        //type 在 onCreate 中解析，解析失败时为 null，此时不释放
+        val contentType = type
+        if (contentType != null) {
+            TerminalContext.getInstance().leaveReplyDetailPage(contentType, oid, rpid)
+        }
+        super.onDestroy()
+    }
+
     override fun eventBusEnabled(): Boolean {
         return true
     }

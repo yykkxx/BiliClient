@@ -28,10 +28,10 @@ public interface ILoader {
     /**
      * @param uri 弹幕文件地址(http:// file://)
      */
-    void load(String uri);
+    void load(String uri) throws IllegalDataException;
     /**
-     *
+     * 
      * @param in stream from Internet or local file
      */
-    void load(InputStream in);
+    void load(InputStream in) throws IllegalDataException;
 }

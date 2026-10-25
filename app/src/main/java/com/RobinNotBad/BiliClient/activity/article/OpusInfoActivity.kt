@@ -91,7 +91,10 @@ class OpusInfoActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        //TerminalContext.getInstance().leaveDetailPage();
+        //本页由专栏/图文/动态三个入口共用，缓存 key 统一是 Opus 码，
+        //进入时由 enterArticleDetailPage/enterOpusDetailPage/enterDynamicDetailPage 压栈，
+        //这里按栈式语义弹出并释放；空栈只会记日志，不会崩
+        TerminalContext.getInstance().leaveDetailPage()
         super.onDestroy()
     }
 }

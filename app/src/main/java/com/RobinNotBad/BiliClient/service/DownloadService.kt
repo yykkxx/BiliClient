@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
@@ -109,7 +110,24 @@ class DownloadService : Service() {
     @SuppressLint("MutatingSharedPrefs")
     override fun onStartCommand(serviceIntent: Intent?, flags: Int, startId: Int): Int {
         Logu.d("onStartCommand")
-        startForeground(FOREGROUND_ID, statusBuilder!!.build())
+        // 下载服务 = 数据同步类前台服务。显式传入 dataSync 类型（与 AndroidManifest 的
+        // android:foregroundServiceType="dataSync" 保持一致）：
+        // 1) API 29+ 允许带类型启动，行为与 targetSdk 无关；
+        // 2) targetSdk 升到 34+ 后，系统会按 manifest 声明的类型校验（历史误用 mediaProjection
+        //    会直接抛 SecurityException），这里显式声明 dataSync 才能顺利通过。
+        // 三参数 startForeground 自 API 29 起提供；本项目 minSdk=29，可直接使用。
+        // 不依赖 androidx.core 的 ServiceCompat（本项目 core 1.8.0 没有该方法）。
+        val foregroundNotification = statusBuilder?.build()
+        if (foregroundNotification == null) {
+            Logu.e("statusBuilder 尚未初始化，无法进入前台，停止下载服务")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        startForeground(
+            FOREGROUND_ID,
+            foregroundNotification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        )
 
         exitCode = ERR_UNKNOWN
         startNotifyProgress()

@@ -1,0 +1,1285 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:CookiesApi.kt$CookiesApi$!cookies.containsKey("bili_ticket") || cookies.get("bili_ticket")!!.equals("null") || !cookies.containsKey("bili_ticket_expires") || ticketExpires == null || ticketExpires &lt; System.currentTimeMillis() / 1000</ID>
+    <ID>ComplexCondition:FavoriteBatchDownloadActivity.kt$FavoriteBatchDownloadActivity.&lt;no name provided&gt;$newState == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_DRAGGING &amp;&amp; !rv.canScrollVertically(1) &amp;&amp; !bottomReached &amp;&amp; !loading</ID>
+    <ID>ComplexCondition:FileUtil.kt$FileUtil$file == null || !file.exists() || !file.canRead() || !file.isFile</ID>
+    <ID>ComplexCondition:GlideUtil.kt$GlideUtil$!url.startsWith("http") || url.endsWith("gif") || url.contains("@") || url.contains("afdian")</ID>
+    <ID>ComplexCondition:GlideUtil.kt$GlideUtil$!url.startsWith("http") || url.endsWith("gif") || url.contains("@") || url.contains("afdiancdn.com")</ID>
+    <ID>ComplexCondition:JsonUtil.kt$JsonUtil$(nextChar == ',' || nextChar == '}' || nextChar == ']') &amp;&amp; count == 0</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$!SharedPreferencesUtil.getBoolean("player_show_online", false) || isLiveMode || aid == 0L || cid == 0L</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$!destroyed &amp;&amp; isOnlineVideo &amp;&amp; aid &gt; 0 &amp;&amp; cid &gt; 0</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$!destroyed &amp;&amp; isOnlineVideo &amp;&amp; aid &gt; 0 &amp;&amp; cid &gt; 0 &amp;&amp; SharedPreferencesUtil.getBoolean("player_show_viewpoints", false)</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$(`var`.idV2 != null &amp;&amp; `var`.idV2 == varId) || (`var`.id != null &amp;&amp; `var`.id == varId)</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$(`var`.idV2 != null &amp;&amp; expr == `var`.idV2) || (`var`.id != null &amp;&amp; expr == `var`.id)</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$SharedPreferencesUtil.getBoolean("player_longclick", true) &amp;&amp; ijkPlayer != null &amp;&amp; isPlaying &amp;&amp; !isLiveMode</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$debugEnabled &amp;&amp; interactionData != null &amp;&amp; interactionData!!.hiddenVars != null &amp;&amp; !interactionData!!.hiddenVars!!.isEmpty() &amp;&amp; !isLiveMode &amp;&amp; !isAudioOnlyMode</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$interactionData != null &amp;&amp; interactionData!!.edges != null &amp;&amp; interactionData!!.edges!!.questions != null &amp;&amp; !questionShown</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$interactionData == null || interactionData!!.edges == null || interactionData!!.edges!!.questions == null || questionShown</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$interactionData == null || interactionData!!.hiddenVars == null || condition == null || condition.isEmpty()</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$interactionData == null || interactionData!!.hiddenVars == null || nativeAction == null || nativeAction.isEmpty()</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$isPrepared &amp;&amp; !isLiveMode &amp;&amp; danmakuReady() &amp;&amp; !isDanmakuLayerHealthy()</ID>
+    <ID>ComplexCondition:PlayerActivity.kt$PlayerActivity$isPrepared &amp;&amp; !isLiveMode &amp;&amp; event.action == MotionEvent.ACTION_SCROLL &amp;&amp; (event.source and InputDevice.SOURCE_CLASS_MASK) == InputDevice.SOURCE_ROTARY_ENCODER</ID>
+    <ID>ComplexCondition:PlayerDanmakuController.kt$PlayerDanmakuController$file != null &amp;&amp; file.exists() &amp;&amp; !destroyedProvider() &amp;&amp; cancelled?.get() != true</ID>
+    <ID>ComplexCondition:RefreshListActivity.kt$RefreshListActivity.&lt;no name provided&gt;$lastItemPosition &gt;= itemCount - 3 &amp;&amp; dy &gt; 0 &amp;&amp; !swipeRefreshLayout!!.isRefreshing &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:RefreshListActivity.kt$RefreshListActivity.&lt;no name provided&gt;$listener != null &amp;&amp; !recyclerView.canScrollVertically(1) &amp;&amp; !swipeRefreshLayout!!.isRefreshing &amp;&amp; newState == RecyclerView.SCROLL_STATE_DRAGGING &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:RefreshListFragment.kt$RefreshListFragment.&lt;no name provided&gt;$lastItemPosition &gt;= itemCount - 3 &amp;&amp; dy &gt; 0 &amp;&amp; !isRefreshing &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:RefreshListFragment.kt$RefreshListFragment.&lt;no name provided&gt;$listener != null &amp;&amp; !recyclerView.canScrollVertically(1) &amp;&amp; isRefreshing &amp;&amp; newState == RecyclerView.SCROLL_STATE_DRAGGING &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:RefreshMainActivity.kt$RefreshMainActivity.&lt;no name provided&gt;$lastItemPosition &gt;= itemCount - 3 &amp;&amp; dy &gt; 0 &amp;&amp; !swipeRefreshLayout!!.isRefreshing &amp;&amp; !isRefreshing &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:RefreshMainActivity.kt$RefreshMainActivity.&lt;no name provided&gt;$listener != null &amp;&amp; !recyclerView.canScrollVertically(1) &amp;&amp; !swipeRefreshLayout!!.isRefreshing &amp;&amp; newState == RecyclerView.SCROLL_STATE_DRAGGING &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:ReplyApi.kt$ReplyApi$result.has("data") &amp;&amp; !result.isNull("data") &amp;&amp; result.getJSONObject("data").has("reply") &amp;&amp; !result.getJSONObject("data").isNull("reply")</ID>
+    <ID>ComplexCondition:ReplyApi.kt$ReplyApi$rpid &lt;= 0L &amp;&amp; data.has("top_replies") &amp;&amp; !data.isNull("top_replies") &amp;&amp; cursor.getBoolean("is_begin")</ID>
+    <ID>ComplexCondition:ReplyInfoActivity.kt$ReplyInfoActivity.&lt;no name provided&gt;$lastItemPosition &gt;= itemCount - 3 &amp;&amp; dy &gt; 0 &amp;&amp; !refreshing &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:ScaleGestureDetector.kt$ScaleGestureDetector$!inAnchoredScaleMode() &amp;&amp; mInProgress &amp;&amp; (span &lt; mMinSpan || configChanged)</ID>
+    <ID>ComplexCondition:ScaleGestureDetector.kt$ScaleGestureDetector$!mInProgress &amp;&amp; span &gt;= minSpan &amp;&amp; (wasInProgress || Math.abs(span - mInitialSpan) &gt; mSpanSlop)</ID>
+    <ID>ComplexCondition:SearchActivity.kt$SearchActivity$actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE || event != null &amp;&amp; KeyEvent.KEYCODE_ENTER == event.getKeyCode() &amp;&amp; KeyEvent.ACTION_DOWN == event.getAction()</ID>
+    <ID>ComplexCondition:SearchFragment.kt$SearchFragment.&lt;no name provided&gt;$lastItemPosition &gt;= itemCount - 3 &amp;&amp; dy &gt; 0 &amp;&amp; !swipeRefreshLayout!!.isRefreshing &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:SearchFragment.kt$SearchFragment.&lt;no name provided&gt;$listener != null &amp;&amp; !recyclerView.canScrollVertically(1) &amp;&amp; !swipeRefreshLayout!!.isRefreshing &amp;&amp; !bottom</ID>
+    <ID>ComplexCondition:StoryPlayerActivity.kt$StoryPlayerActivity$currentCard != null &amp;&amp; !firstFrameShown &amp;&amp; !switching &amp;&amp; currentInfo == null</ID>
+    <ID>ComplexCondition:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$userInfo.mid != currentMid &amp;&amp; currentMid != 0L &amp;&amp; userInfo.mid != 0L &amp;&amp; userInfo.is_follow_display</ID>
+    <ID>ComplexCondition:WifiPreloadManager.kt$WifiPreloadManager$existing != null &amp;&amp; existing.file.exists() &amp;&amp; System.currentTimeMillis() - existing.createdAt &lt; EXPIRE_MS &amp;&amp; existing.remoteUrl == videoUrl</ID>
+    <ID>ConstructorParameterNaming:ArticleCard.kt$ArticleCard$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:ArticleInfo.kt$ArticleInfo$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:At.kt$At$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:Collection.kt$Collection$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:Collection.kt$Collection.Episode$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:Collection.kt$Collection.Section$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:ElectricPanel.kt$ElectricPanel$total_count: Int</ID>
+    <ID>ConstructorParameterNaming:ElectricUser.kt$ElectricUser$pay_mid: Long</ID>
+    <ID>ConstructorParameterNaming:Emote.kt$Emote$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:EmotePackage.kt$EmotePackage$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom.BadgeInfo$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom.FrameInfo$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom.NewPendants$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom.StudioInfo$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom.Verify$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:LiveRoom.kt$LiveRoom.Watched$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:MessageCard.kt$MessageCard.Cursor$is_end: Boolean</ID>
+    <ID>ConstructorParameterNaming:PlayerData.kt$PlayerData$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:ReplyAdapter.kt$ReplyAdapter$@JvmField val up_mid: Long</ID>
+    <ID>ConstructorParameterNaming:Series.kt$Series$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:Stats.kt$Stats$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:StringUtil.kt$StringUtil.LinkClickableSpan$private val `val`: String?</ID>
+    <ID>ConstructorParameterNaming:Subtitle.kt$Subtitle$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:SubtitleLink.kt$SubtitleLink$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$current_exp: Long</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$is_senior_member: Int</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$live_room: LiveRoom?</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$next_exp: Long</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$sys_notice: String?</ID>
+    <ID>ConstructorParameterNaming:UserInfo.kt$UserInfo$vip_role: Int</ID>
+    <ID>ConstructorParameterNaming:VideoCard.kt$VideoCard$`in`: Parcel</ID>
+    <ID>ConstructorParameterNaming:VideoInfo.kt$VideoInfo$`in`: Parcel</ID>
+    <ID>CyclomaticComplexMethod:AppInfoApi.kt$AppInfoApi$@JvmStatic fun check(context: Context)</ID>
+    <ID>CyclomaticComplexMethod:BangumiApi.kt$BangumiApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getInfo(mediaId: Long): Bangumi.Info</ID>
+    <ID>CyclomaticComplexMethod:BangumiInfoFragment.kt$BangumiInfoFragment$@SuppressLint("SetTextI18n") private fun initView()</ID>
+    <ID>CyclomaticComplexMethod:CookiesApi.kt$CookiesApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun checkCookies()</ID>
+    <ID>CyclomaticComplexMethod:CookiesApi.kt$CookiesApi$private fun murmur3_x64_128(source: InputStream, seed: BigInteger): BigInteger</ID>
+    <ID>CyclomaticComplexMethod:DownloadListActivity.kt$DownloadListActivity$@SuppressLint("NotifyDataSetChanged") fun refreshList(fromOutside: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:DownloadService.kt$DownloadService$@SuppressLint("MutatingSharedPrefs") override fun onStartCommand(serviceIntent: Intent?, flags: Int, startId: Int): Int</ID>
+    <ID>CyclomaticComplexMethod:DownloadService.kt$DownloadService$private fun downFileOnce(url: String?, file: File, allowResume: Boolean): Int</ID>
+    <ID>CyclomaticComplexMethod:DynamicAdapter.kt$DynamicAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:DynamicApi.kt$DynamicApi$@Throws(JSONException::class) @JvmStatic fun analyzeDynamic(dynamic_json: JSONObject): Dynamic</ID>
+    <ID>CyclomaticComplexMethod:DynamicHolder.kt$DynamicHolder$@SuppressLint("SetTextI18n", "ClickableViewAccessibility") fun showDynamic(context: Context, dynamic: Dynamic, clickable: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:EditSignActivity.kt$EditSignActivity$@SuppressLint("SetTextI18n") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:FavoriteApi.kt$FavoriteApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getFavoriteFolders(mid: Long): ArrayList&lt;FavoriteFolder&gt;</ID>
+    <ID>CyclomaticComplexMethod:FavoriteBatchDownloadActivity.kt$FavoriteBatchDownloadActivity$private fun downloadChecked(quality: Int)</ID>
+    <ID>CyclomaticComplexMethod:FavoriteBatchDownloadActivity.kt$FavoriteBatchDownloadActivity$private fun showQualityDialog()</ID>
+    <ID>CyclomaticComplexMethod:FolderChooseAdapter.kt$FolderChooseAdapter$override fun onBindViewHolder(@NonNull holder: FolderHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:FollowGroupAdapter.kt$FollowGroupAdapter$fun toggleGroup(tagid: Int)</ID>
+    <ID>CyclomaticComplexMethod:FollowGroupAdapter.kt$FollowGroupAdapter$override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:JsonUtil.kt$JsonUtil$@JvmStatic fun search(input: String?, name: String?, defaultValue: String?): String?</ID>
+    <ID>CyclomaticComplexMethod:LinkUrlUtil.kt$LinkUrlUtil$@JvmStatic fun handleWebURL(context: Context, text: String)</ID>
+    <ID>CyclomaticComplexMethod:LiveApi.kt$LiveApi$@JvmSuppressWildcards @Throws(JSONException::class) @JvmStatic fun analyzeLiveRooms(list: JSONArray): List&lt;LiveRoom&gt;</ID>
+    <ID>CyclomaticComplexMethod:LiveApi.kt$LiveApi$@Throws(JSONException::class, IOException::class) @JvmStatic fun getRoomPlayInfo(roomId: Long, qn: Int): LivePlayInfo?</ID>
+    <ID>CyclomaticComplexMethod:LiveInfoActivity.kt$LiveInfoActivity$@SuppressLint("SetTextI18n") override fun onCreate(@Nullable savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:LocalListActivity.kt$LocalListActivity$private fun scan(folder: File)</ID>
+    <ID>CyclomaticComplexMethod:MenuActivity.kt$MenuActivity$@SuppressLint("MissingInflatedId", "InflateParams") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:NetWorkUtil.kt$NetWorkUtil$private fun saveCookiesFromResponse(response: Response)</ID>
+    <ID>CyclomaticComplexMethod:NoticeHolder.kt$NoticeHolder$@SuppressLint("SetTextI18n") fun showMessage(message: MessageCard, context: Context)</ID>
+    <ID>CyclomaticComplexMethod:OnlineDanmakuDownloader.kt$OnlineDanmakuDownloader$@JvmStatic @JvmOverloads fun download(url: String?, target: File, cancelled: AtomicBoolean? = null): File?</ID>
+    <ID>CyclomaticComplexMethod:OnlineDanmakuDownloader.kt$OnlineDanmakuDownloader$@JvmStatic fun decompress(data: ByteArray?): ByteArray?</ID>
+    <ID>CyclomaticComplexMethod:OpusApi.kt$OpusApi$@JvmSuppressWildcards @Throws(IOException::class, JSONException::class) @JvmStatic fun getOpus(id: Long): Opus</ID>
+    <ID>CyclomaticComplexMethod:OpusContentAdapter.kt$OpusContentAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(holder: ArticleLineHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:OpusParagraph.kt$OpusParagraph$fun analyzeList(list: JSONObject?): CharSequence</ID>
+    <ID>CyclomaticComplexMethod:OpusParagraph.kt$OpusParagraph$fun analyzeText(text: JSONObject?): CharSequence</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$@SuppressLint("ClickableViewAccessibility") private fun setVideoGestures()</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$@SuppressLint("SetTextI18n") override fun onPrepared(mediaPlayer: IMediaPlayer)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$@SuppressLint("SimpleDateFormat") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$override fun onGenericMotionEvent(event: MotionEvent): Boolean</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun MPPrepare(nowurl: String?)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun checkEndInteractionQuestions()</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun downSubtitle(from_btn: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun executeNativeAction(nativeAction: String?)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun initUI()</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun jumpToInteractionPage(targetCid: Long, newData: InteractionVideoData)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun rebuildDanmakuLayer(showDanmaku: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun showInteractionQuestion(question: InteractionVideoData.InteractionQuestion)</ID>
+    <ID>CyclomaticComplexMethod:PlayerActivity.kt$PlayerActivity$private fun switchToPage(pageIndex: Int)</ID>
+    <ID>CyclomaticComplexMethod:PlayerDanmakuController.kt$PlayerDanmakuController$fun findTimestampAt(x: Float, y: Float): Long</ID>
+    <ID>CyclomaticComplexMethod:PlayerDanmakuController.kt$PlayerDanmakuController$fun startOnline( aid: Long, cid: Long, durationProvider: DurationProvider, onLoadFinished: LoadFinishedListener? = null )</ID>
+    <ID>CyclomaticComplexMethod:PrivateMsgAdapter.kt$PrivateMsgAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(@NonNull holder: ViewHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:PrivateMsgApi.kt$PrivateMsgApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getNewSessionsList(beginTs: Long, size: Int, build: Int, mobiApp: String?): ArrayList&lt;PrivateMsgSession&gt;</ID>
+    <ID>CyclomaticComplexMethod:PrivateMsgSessionsAdapter.kt$PrivateMsgSessionsAdapter$override fun onBindViewHolder(@NonNull holder: PrivateMsgSessionsHolder, position: Int)</ID>
+    <ID>CyclomaticComplexMethod:ProtobufParser.kt$ProtobufParser$@JvmStatic @Throws(java.io.IOException::class) fun parseDanmakuElem(data: ByteArray): DanmakuElem</ID>
+    <ID>CyclomaticComplexMethod:RecommendApi.kt$RecommendApi$@JvmStatic @JvmSuppressWildcards @Throws(IOException::class, JSONException::class) private fun getRecommendApp(videoCardList: MutableList&lt;VideoCard&gt;, isRefresh: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:ReplyAdapter.kt$ReplyAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(@NonNull holder: RecyclerView.ViewHolder, @SuppressLint("RecyclerView") position: Int)</ID>
+    <ID>CyclomaticComplexMethod:ReplyApi.kt$ReplyApi$@JvmSuppressWildcards @NonNull @Throws(JSONException::class, IOException::class) @JvmStatic fun getRepliesLazy(oid: Long, rpid: Long, pagination: String, type: Int, sort: Int, replyArrayList: MutableList&lt;Reply&gt;): Pair&lt;Int, String&gt;</ID>
+    <ID>CyclomaticComplexMethod:ScaleGestureDetector.kt$ScaleGestureDetector$fun onTouchEvent(event: MotionEvent)</ID>
+    <ID>CyclomaticComplexMethod:SearchActivity.kt$SearchActivity$@SuppressLint("MissingInflatedId", "NotifyDataSetChanged", "InflateParams") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:SearchActivity.kt$SearchActivity$@SuppressLint("NotifyDataSetChanged") fun searchKeyword(str: String)</ID>
+    <ID>CyclomaticComplexMethod:StoryApi.kt$StoryApi$@JvmStatic @Throws(IOException::class, JSONException::class) fun getFallbackFeed(out: MutableList&lt;StoryCard&gt;): Int</ID>
+    <ID>CyclomaticComplexMethod:StoryApi.kt$StoryApi$@JvmStatic fun prefetchToFile(url: String, dest: java.io.File, maxBytes: Long = 12L * 1024 * 1024): Boolean</ID>
+    <ID>CyclomaticComplexMethod:StoryApi.kt$StoryApi$@Throws(IOException::class, JSONException::class) private fun requestPlayUrl(aid: Long, cid: Long, qn: Int, html5: Boolean, dash: Boolean): StoryPlayInfo</ID>
+    <ID>CyclomaticComplexMethod:StoryApi.kt$StoryApi$private fun parseStoryItems(items: JSONArray, out: MutableList&lt;StoryCard&gt;): Int</ID>
+    <ID>CyclomaticComplexMethod:StoryPlaybackController.kt$StoryPlaybackController$private fun createPlayer()</ID>
+    <ID>CyclomaticComplexMethod:TestActivity.kt$TestActivity$@SuppressLint("MutatingSharedPrefs", "SetTextI18n") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:TutorialHelper.kt$TutorialHelper$@JvmStatic fun loadTutorial(xml: XmlResourceParser): Tutorial?</ID>
+    <ID>CyclomaticComplexMethod:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$@SuppressLint("SetTextI18n") fun bind(context: Context, userInfo: UserInfo)</ID>
+    <ID>CyclomaticComplexMethod:VideoCardHolder.kt$VideoCardHolder$@SuppressLint("SetTextI18n") fun showVideoCard(videoCard: VideoCard, context: Context)</ID>
+    <ID>CyclomaticComplexMethod:VideoInfoApi.kt$VideoInfoApi$@Throws(JSONException::class) @JvmStatic fun getInfoByJson(data: JSONObject): VideoInfo</ID>
+    <ID>CyclomaticComplexMethod:VideoInfoFragment.kt$VideoInfoFragment$@SuppressLint("SetTextI18n") private fun initView(rootview: View)</ID>
+    <ID>CyclomaticComplexMethod:VipActivity.kt$VipActivity$@SuppressLint("SetTextI18n") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:WifiPreloadManager.kt$WifiPreloadManager$@JvmStatic fun preload(aid: Long, cid: Long, videoUrl: String?)</ID>
+    <ID>CyclomaticComplexMethod:WifiPreloadManager.kt$WifiPreloadManager$private fun handleClient(client: Socket)</ID>
+    <ID>CyclomaticComplexMethod:WifiPreloadManager.kt$WifiPreloadManager$private fun relayFromRemote(entry: PreloadEntry, output: OutputStream, start: Long, endIncl: Long, localLen: Long)</ID>
+    <ID>EmptyClassBlock:SettingsAdapter.kt$SettingsAdapter.DividerHolder${ }</ID>
+    <ID>EmptyFunctionBlock:AnimationUtils.kt$AnimationUtils.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:CopyTextActivity.kt$CopyTextActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:DialogActivity.kt$DialogActivity${ }</ID>
+    <ID>EmptyFunctionBlock:EditSignActivity.kt$EditSignActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:ImageViewerActivity.kt$ImageViewerActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:InteractionDebugAdapter.kt$InteractionDebugAdapter.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:PlayerActivity.kt$PlayerActivity.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:PlayerDanmakuController.kt$PlayerDanmakuController.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:PrivateMsgActivity.kt$PrivateMsgActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:ScaleGestureDetector.kt$ScaleGestureDetector.SimpleOnScaleGestureListener${ }</ID>
+    <ID>EmptyFunctionBlock:SearchActivity.kt$SearchActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:SettingsAdapter.kt$SettingsAdapter.InputHolder.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:SortSettingActivity.kt$SortSettingActivity.&lt;no name provided&gt;${ }</ID>
+    <ID>EmptyFunctionBlock:StoryPlaybackController.kt$StoryPlaybackController${ }</ID>
+    <ID>EmptyFunctionBlock:TerminalContext.kt$TerminalContext${ }</ID>
+    <ID>EmptyFunctionBlock:TutorialActivity.kt$TutorialActivity${ }</ID>
+    <ID>EmptyFunctionBlock:TutorialHelper.kt$TutorialHelper.&lt;no name provided&gt;${ }</ID>
+    <ID>ExceptionRaisedInUnexpectedLocation:NetWorkUtil.kt$NetWorkUtil.FormData$override fun toString(): String</ID>
+    <ID>ForbiddenComment:OpusParagraph.kt$OpusParagraph$//TODO:忘记这个叫什么名字了，根据记忆应该是这个，如果不对请调整</ID>
+    <ID>FunctionParameterNaming:AppInfoApi.kt$AppInfoApi$debug_ver: Boolean</ID>
+    <ID>FunctionParameterNaming:AppInfoApi.kt$AppInfoApi$need_toast: Boolean</ID>
+    <ID>FunctionParameterNaming:BangumiApi.kt$BangumiApi$season_id: Long</ID>
+    <ID>FunctionParameterNaming:ConfInfoApi.kt$ConfInfoApi$raw_key: String</ID>
+    <ID>FunctionParameterNaming:ConfInfoApi.kt$ConfInfoApi$url_query: String</ID>
+    <ID>FunctionParameterNaming:CookieRefreshApi.kt$CookieRefreshApi$CorrespondPath: String</ID>
+    <ID>FunctionParameterNaming:CookieRefreshApi.kt$CookieRefreshApi$RefreshCsrf: String</ID>
+    <ID>FunctionParameterNaming:CookiesApi.kt$CookiesApi$k_: BigInteger</ID>
+    <ID>FunctionParameterNaming:DmImgParamUtil.kt$DmImgParamUtil$orig_url: String</ID>
+    <ID>FunctionParameterNaming:DynamicApi.kt$DynamicApi$dynamic_json: JSONObject</ID>
+    <ID>FunctionParameterNaming:DynamicApi.kt$DynamicApi$rich_text_nodes: JSONArray?</ID>
+    <ID>FunctionParameterNaming:DynamicApi.kt$DynamicApi.Content.Companion$biz_id: String?</ID>
+    <ID>FunctionParameterNaming:DynamicApi.kt$DynamicApi.Content.Companion$raw_text: String</ID>
+    <ID>FunctionParameterNaming:ElectricApi.kt$ElectricApi$up_mid: Long</ID>
+    <ID>FunctionParameterNaming:LiveApi.kt$LiveApi$room_id: Long</ID>
+    <ID>FunctionParameterNaming:MsgUtil.kt$MsgUtil$wait_time: Int</ID>
+    <ID>FunctionParameterNaming:NetWorkUtil.kt$NetWorkUtil$`val`: String</ID>
+    <ID>FunctionParameterNaming:OpusParagraph.kt$OpusParagraph$rich_list: JSONArray?</ID>
+    <ID>FunctionParameterNaming:PlayerActivity.kt$PlayerActivity$add_or_cut: Boolean?</ID>
+    <ID>FunctionParameterNaming:PlayerActivity.kt$PlayerActivity$curr_sec: Float</ID>
+    <ID>FunctionParameterNaming:PlayerActivity.kt$PlayerActivity$from_btn: Boolean</ID>
+    <ID>FunctionParameterNaming:PlayerActivity.kt$PlayerActivity$subtitle_url: String?</ID>
+    <ID>FunctionParameterNaming:PrivateMsgActivity.kt$PrivateMsgActivity$show_or_hide: Boolean</ID>
+    <ID>FunctionParameterNaming:PrivateMsgActivity.kt$PrivateMsgActivity$up_or_down: Boolean</ID>
+    <ID>FunctionParameterNaming:QRCodeUtil.kt$QRCodeUtil$@ColorInt color_black: Int</ID>
+    <ID>FunctionParameterNaming:QRCodeUtil.kt$QRCodeUtil$@ColorInt color_white: Int</ID>
+    <ID>FunctionParameterNaming:QRCodeUtil.kt$QRCodeUtil$@Nullable character_set: String?</ID>
+    <ID>FunctionParameterNaming:QRCodeUtil.kt$QRCodeUtil$@Nullable error_correction: String?</ID>
+    <ID>FunctionParameterNaming:QRLoginFragment.kt$QRLoginFragment.Companion$from_setup: Boolean</ID>
+    <ID>FunctionParameterNaming:ReplyFragment.kt$ReplyFragment.Companion$seek_rpid: Long</ID>
+    <ID>FunctionParameterNaming:ReplyFragment.kt$ReplyFragment.Companion$up_mid: Long</ID>
+    <ID>FunctionParameterNaming:Stats.kt$Stats.Companion$module_stat: JSONObject?</ID>
+    <ID>FunctionParameterNaming:TutorialHelper.kt$TutorialHelper$array_id: Int</ID>
+    <ID>FunctionParameterNaming:TutorialHelper.kt$TutorialHelper$tutorial_key: Int</ID>
+    <ID>FunctionParameterNaming:TutorialHelper.kt$TutorialHelper$tutorial_tag: String</ID>
+    <ID>FunctionParameterNaming:TutorialHelper.kt$TutorialHelper$tutorial_version: Int</ID>
+    <ID>FunctionParameterNaming:TutorialHelper.kt$TutorialHelper$xml_res_id: Int</ID>
+    <ID>ImplicitDefaultLocale:AppRcmdApi.kt$AppRcmdApi$String.format("%02x", b)</ID>
+    <ID>ImplicitDefaultLocale:BangumiInfoFragment.kt$BangumiInfoFragment$String.format("%.1f万", num / 10000.0)</ID>
+    <ID>ImplicitDefaultLocale:BangumiInfoFragment.kt$BangumiInfoFragment$String.format("%.1f亿", num / 100000000.0)</ID>
+    <ID>ImplicitDefaultLocale:BangumiInfoFragment.kt$BangumiInfoFragment$String.format("评分：%.1f (%d人)", bangumi.info!!.score, bangumi.info!!.count)</ID>
+    <ID>ImplicitDefaultLocale:CookiesApi.kt$CookiesApi$String.format("%016x%016x", m.mod(MOD), m.shiftRight(64).mod(MOD))</ID>
+    <ID>ImplicitDefaultLocale:CookiesApi.kt$CookiesApi$String.format("%05d", t)</ID>
+    <ID>ImplicitDefaultLocale:DashAudioStream.kt$DashAudioStream$String.format("ID:%d, codec:%s, bandwidth:%d", id, codecs, bandwidth)</ID>
+    <ID>ImplicitDefaultLocale:MessageApi.kt$MessageApi$String.format("&amp;id=%s&amp;at_time=%s", id, time)</ID>
+    <ID>ImplicitDefaultLocale:MessageApi.kt$MessageApi$String.format("&amp;id=%s&amp;reply_time=%s", id, time)</ID>
+    <ID>ImplicitDefaultLocale:StoryApi.kt$StoryApi$String.format("%02x", b)</ID>
+    <ID>ImplicitDefaultLocale:StoryPlayerActivity.kt$StoryPlayerActivity$String.format("%.1fx", speed)</ID>
+    <ID>ImplicitDefaultLocale:StoryPlayerActivity.kt$StoryPlayerActivity$String.format("%02d:%02d", m, s)</ID>
+    <ID>ImplicitDefaultLocale:UpdateInfoActivity.kt$UpdateInfoActivity$String.format("发布时间: %s", if (ctime == -1L) "未知" else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(if (ctime.toString().length == 13) ctime else ctime * 1000)))</ID>
+    <ID>ImplicitDefaultLocale:UpdateInfoActivity.kt$UpdateInfoActivity$String.format("是否为正式版: %s", if (isRelease == 1) "是" else "否")</ID>
+    <ID>ImplicitDefaultLocale:UpdateInfoActivity.kt$UpdateInfoActivity$String.format("版本名: %s", versionName)</ID>
+    <ID>ImplicitDefaultLocale:VideoInfoFragment.kt$VideoInfoFragment$String.format("合集 · %s", videoInfo.collection!!.title)</ID>
+    <ID>LargeClass:PlayerActivity.kt$PlayerActivity : ActivityOnPreparedListener</ID>
+    <ID>LargeClass:StoryPlayerActivity.kt$StoryPlayerActivity : BaseActivity</ID>
+    <ID>LongMethod:BangumiInfoFragment.kt$BangumiInfoFragment$@SuppressLint("SetTextI18n") private fun initView()</ID>
+    <ID>LongMethod:DownloadService.kt$DownloadService$@SuppressLint("MutatingSharedPrefs") override fun onStartCommand(serviceIntent: Intent?, flags: Int, startId: Int): Int</ID>
+    <ID>LongMethod:DynamicApi.kt$DynamicApi$@Throws(JSONException::class) @JvmStatic fun analyzeDynamic(dynamic_json: JSONObject): Dynamic</ID>
+    <ID>LongMethod:DynamicHolder.kt$DynamicHolder$@SuppressLint("SetTextI18n", "ClickableViewAccessibility") fun showDynamic(context: Context, dynamic: Dynamic, clickable: Boolean)</ID>
+    <ID>LongMethod:LiveInfoActivity.kt$LiveInfoActivity$@SuppressLint("SetTextI18n") override fun onCreate(@Nullable savedInstanceState: Bundle?)</ID>
+    <ID>LongMethod:OpusContentAdapter.kt$OpusContentAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(holder: ArticleLineHolder, position: Int)</ID>
+    <ID>LongMethod:PlayerActivity.kt$PlayerActivity$@SuppressLint("SetTextI18n") override fun onPrepared(mediaPlayer: IMediaPlayer)</ID>
+    <ID>LongMethod:ReplyAdapter.kt$ReplyAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(@NonNull holder: RecyclerView.ViewHolder, @SuppressLint("RecyclerView") position: Int)</ID>
+    <ID>LongMethod:TestActivity.kt$TestActivity$@SuppressLint("MutatingSharedPrefs", "SetTextI18n") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>LongMethod:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$@SuppressLint("SetTextI18n") fun bind(context: Context, userInfo: UserInfo)</ID>
+    <ID>LongMethod:VideoInfoFragment.kt$VideoInfoFragment$@SuppressLint("SetTextI18n") private fun initView(rootview: View)</ID>
+    <ID>LoopWithTooManyJumpStatements:DanmakuApi.kt$DanmakuApi$for (i in 1..segmentCount) { if (cancelled != null &amp;&amp; cancelled.get()) { report.cancelled = true Logu.d("新版弹幕API", "分段拉取被取消") break } val reply = getVideoDanmakuSegmentWithRetry(aid, cid, i, DEFAULT_MAX_ATTEMPTS, cancelled) if (reply == null) { // 这一段网络失败了：登记为缺失，继续拉后面的（不要整段放弃） report.missing.add(i) Logu.w("新版弹幕API", "分段 $i 获取失败，已登记等待补拉") continue } report.segments[i] = reply onSegment?.onSegment(i, reply) }</ID>
+    <ID>LoopWithTooManyJumpStatements:DownloadService.kt$DownloadService$while (!failed &amp;&amp; started) { val section_tmp = getFirst() if (section_tmp == null) break section = section_tmp // 获取视频链接 try { val data = section!!.toPlayerData() // 如果是仅音频下载，使用DASH格式获取音频流 if (section!!.isAudioOnly()) { PlayerApi.getVideoDash(data) url_audio = if (section!!.audioUrl != null &amp;&amp; section!!.audioUrl!!.isNotEmpty()) section!!.audioUrl else data.audioUrl url_video = null // 仅音频模式不需要视频 } else { PlayerApi.getVideo(data, true) url_video = data.videoUrl url_audio = null } url_danmaku = data.danmakuUrl } catch (e: JSONException) { setState(section!!.id, "error") notifyCompletion("下载链接获取失败：\n" + section!!.name_short, (section!!.id).toInt()) section = null refreshDownloadList() continue } catch (e: IOException) { failed = true exitCode = ERR_NETWORK setState(section!!.id, "none") continue } try { setState(section!!.id, "downloading") percent = 0f refreshDownloadList() var file_sign: File? = null when (section!!.type) { "video_single" -&gt; { // 单集视频 val path_single = section!!.getPath() file_sign = File(path_single, ".DOWNLOADING") if (!file_sign.exists() &amp;&amp; !file_sign.createNewFile()) { failed = true exitCode = ERR_FILE continue } toastState("下载封面") var result = downFile(section!!.url_cover, File(path_single, "cover.png")) if (result != NORMAL) { failed = true exitCode = result continue } // 仅音频模式不下载字幕和弹幕 if (!section!!.isAudioOnly()) { toastState("下载字幕") downSubtitles(section!!.aid, section!!.cid, path_single) toastState("下载弹幕") result = downDanmaku(url_danmaku!!, File(path_single, "danmaku.xml")) if (result != NORMAL) { failed = true exitCode = result continue } } // 根据下载类型选择下载内容 if (section!!.isAudioOnly()) { toastState("下载音频") result = downFile(url_audio, File(path_single, "audio.m4a")) if (result != NORMAL) { failed = true exitCode = result continue } } else { toastState("下载视频") result = downFile(url_video, File(path_single, "video.mp4")) if (result != NORMAL) { failed = true exitCode = result continue } } } "video_multi" -&gt; { // 多集视频 val path_page = section!!.getPath() val path_parent = path_page.parentFile if (!path_page.exists() &amp;&amp; !path_page.mkdirs()) { failed = true exitCode = ERR_FILE continue } file_sign = File(path_page, ".DOWNLOADING") if (!file_sign.exists() &amp;&amp; !file_sign.createNewFile()) { failed = true exitCode = ERR_FILE continue } toastState("下载封面") val cover_multi = File(path_parent, "cover.png") if (!cover_multi.exists()) { val result0 = downFile(section!!.url_cover, cover_multi) if (result0 != NORMAL) { failed = true exitCode = result0 continue } } // 仅音频模式不下载字幕和弹幕 if (!section!!.isAudioOnly()) { toastState("下载字幕") downSubtitles(section!!.aid, section!!.cid, path_page) toastState("下载弹幕") val result1 = downDanmaku(url_danmaku!!, File(path_page, "danmaku.xml")) if (result1 != NORMAL) { failed = true exitCode = result1 continue } } // 根据下载类型选择下载内容 if (section!!.isAudioOnly()) { toastState("下载音频") val result2 = downFile(url_audio, File(path_page, "audio.m4a")) if (result2 != NORMAL) { failed = true exitCode = result2 continue } } else { toastState("下载视频") val result3 = downFile(url_video, File(path_page, "video.mp4")) if (result3 != NORMAL) { failed = true exitCode = result3 continue } } } } notifyCompletion("下载成功：\n" + section!!.name_short, (section!!.id).toInt()) if (file_sign != null &amp;&amp; file_sign.exists()) file_sign.delete() deleteSection(section!!.id) refreshLocalList() section = null } catch (e: IOException) { failed = true exitCode = ERR_FILE setState(section!!.id, "error") } }</ID>
+    <ID>LoopWithTooManyJumpStatements:DynamicApi.kt$DynamicApi$for (i in 0 until rich_text_nodes.length()) { val rich_text_node = rich_text_nodes.optJSONObject(i) ?: continue val type = rich_text_node.optString("type") when (type) { "RICH_TEXT_NODE_TYPE_EMOJI" -&gt; { content.append(rich_text_node.optString("text")) val emoji = rich_text_node.optJSONObject("emoji") ?: continue emoteList.add(Emote(emoji.optString("text"), emoji.optString("icon_url"), emoji.optInt("size"))) } "RICH_TEXT_NODE_TYPE_AT" -&gt; { val indexs = StringUtil.appendString(content, rich_text_node.optString("text")) atList.add(At(rich_text_node.optLong("rid"), indexs.first, indexs.second)) } "RICH_TEXT_NODE_TYPE_WEB" -&gt; content.append(rich_text_node.optString("orig_text")) else -&gt; content.append(rich_text_node.optString("text")) } }</ID>
+    <ID>LoopWithTooManyJumpStatements:FavoriteBatchDownloadActivity.kt$FavoriteBatchDownloadActivity$for (aid in aids) { try { // VideoCard 只有 aid；下载需要 cid，先取详情（多 P 只取 P1） val info = VideoInfoApi.getVideoInfo(aid) if (info == null) { failed++; continue } if (info.cids == null || info.cids!!.isEmpty()) { failed++; continue } val cid = info.cids!![0] val before = DownloadService.queueCount() DownloadService.startDownload(info.title ?: aid.toString(), aid, cid, info.cover, quality, "video", "") // startDownload 是异步插库，等它真正进表再数（简单起见轮询一次短暂等待） var wait = 0 while (DownloadService.queueCount() == before &amp;&amp; wait &lt; 20) { Thread.sleep(50) wait++ } if (DownloadService.queueCount() &gt; before) queued++ else skipped++ } catch (e: InterruptedException) { Thread.currentThread().interrupt() return@Runnable } catch (e: Exception) { failed++ } }</ID>
+    <ID>LoopWithTooManyJumpStatements:NetWorkUtil.kt$NetWorkUtil$for (newCookieIn in newCookies) { //对每一条新cookie遍历 var newCookie = newCookieIn val cookies = Cookies(newCookie) if (cookies.containsKey("Domain") &amp;&amp; !cookies["Domain"]!!.endsWith("bilibili.com")) continue var index = newCookie.indexOf("; ") if (index != -1) newCookie = newCookie.substring(0, index) //如果没有分号不做处理 index = newCookie.indexOf("=") + 1 if (index == 0) continue //如果没有等号，跳过 val key = newCookie.substring(0, index) //key= Logu.d("newCookie", newCookie) var added = false for (i in oldCookies.indices) { //查找旧cookie表有没有 val oldCookie = oldCookies[i] if (oldCookie.contains(key)) { oldCookies[i] = newCookie //有的话直接换掉 added = true break } } if (!added) { oldCookies.add(newCookie) //没有就加项 } }</ID>
+    <ID>LoopWithTooManyJumpStatements:OnlineDanmakuDownloader.kt$OnlineDanmakuDownloader$while (!inflater.finished()) { val count = inflater.inflate(buf) if (count &gt; 0) { output.write(buf, 0, count) continue } // count == 0：数据不足或已结束，必须跳出，否则无限空转 if (inflater.needsInput() || inflater.needsDictionary()) break // 既没产出也不需要输入，说明数据异常 break }</ID>
+    <ID>LoopWithTooManyJumpStatements:PlayerActivity.kt$PlayerActivity$for (choice in question.choices!!) { if (choice.isHidden == 1) continue if (choice.condition != null &amp;&amp; !choice.condition!!.isEmpty()) { if (!evaluateCondition(choice.condition)) { continue } } handleChoiceSelection(choice) break }</ID>
+    <ID>LoopWithTooManyJumpStatements:PlayerActivity.kt$PlayerActivity$for (choice in question.choices!!) { if (choice.isHidden == 1) continue if (choice.condition != null &amp;&amp; !choice.condition!!.isEmpty()) { if (!evaluateCondition(choice.condition)) { continue } } val choiceView = createChoiceView(choice) interactionChoiceLayout!!.addView(choiceView) }</ID>
+    <ID>LoopWithTooManyJumpStatements:PlayerDanmakuController.kt$PlayerDanmakuController$while (it.hasNext()) { val danmaku = it.next() ?: continue if (danmaku.isOutside) continue if (x &lt; danmaku.left - HIT_SLOP || x &gt; danmaku.right + HIT_SLOP) continue if (y &lt; danmaku.top - HIT_SLOP || y &gt; danmaku.bottom + HIT_SLOP) continue // 后画的弹幕在更上层，命中更靠后的那条更符合直觉 hitText = danmaku.text }</ID>
+    <ID>LoopWithTooManyJumpStatements:RecommendApi.kt$RecommendApi$for (i in 0 until item.length()) { val card = item.optJSONObject(i) ?: continue //过滤广告与无法播放的卡片（参照 PiliPlus _filterAppRcmd） //av=普通视频卡片；inline_av/inline_av_v2=TV/手机端返回的内联视频卡片（字段结构与 av 一致，goto 也是 av） val cardGoto = card.optString("card_goto") if (cardGoto != "av" &amp;&amp; cardGoto != "inline_av" &amp;&amp; cardGoto != "inline_av_v2") { //只保留普通视频；bangumi 等卡片的 param 不是 aid，本客户端打不开 Log.d("BiliClient", "RecommendApi getRecommendApp: skip card_goto=$cardGoto") continue } if (card.has("ad_info") &amp;&amp; !card.isNull("ad_info")) { Log.d("BiliClient", "RecommendApi getRecommendApp: isAd") continue } if (card.optInt("can_play", 0) != 1) continue val playerArgs = card.optJSONObject("player_args") val argsAid = playerArgs?.optLong("aid", 0L) ?: 0L val aid = if (argsAid != 0L) argsAid else card.optString("param").toLongOrNull() ?: 0L if (aid == 0L) continue var cover = card.optString("cover") if (cover.startsWith("http://")) cover = "https://" + cover.substring(7) //统一走https val viewText = card.optString("cover_left_text_1") //APP端给的是现成的格式化文本（如"103.2万"） val view = if (viewText.isEmpty()) "" else viewText + "观看" val videoCard = VideoCard( card.optString("title"), card.optJSONObject("args")?.optString("up_name") ?: "", view, cover, aid, card.optString("bvid") ) videoCard.cid = playerArgs?.optLong("cid", 0L) ?: 0L videoCardList.add(videoCard) }</ID>
+    <ID>LoopWithTooManyJumpStatements:StoryApi.kt$StoryApi$for (i in 0 until items.length()) { val it = items.optJSONObject(i) ?: continue if (it.has("ad_info") &amp;&amp; !it.isNull("ad_info")) continue val aid = it.optLong("id", 0L) if (aid &lt;= 0) continue val bvid = it.optString("bvid") if (bvid.isEmpty() &amp;&amp; aid &lt;= 0) continue val card = StoryCard() card.aid = aid card.bvid = bvid card.title = it.optString("title") var cover = it.optString("pic") if (cover.startsWith("http://")) cover = "https://" + cover.substring(7) card.cover = cover card.upName = it.optJSONObject("owner")?.optString("name") ?: "" val view = it.optJSONObject("stat")?.optLong("view", 0L) ?: 0L card.view = if (view &gt; 0) StringUtil.toWan(view) + "观看" else "" card.cid = it.optLong("cid", 0L) card.durationSec = it.optInt("duration", 0) val dim = it.optJSONObject("dimension") if (dim != null) { var w = dim.optInt("width", 0) var h = dim.optInt("height", 0) val rotate = dim.optInt("rotate", 0) if (rotate == 90 || rotate == 270) { val t = w w = h h = t } card.width = w card.height = h } out.add(card) added++ }</ID>
+    <ID>LoopWithTooManyJumpStatements:StoryApi.kt$StoryApi$for (i in 0 until items.length()) { val it = items.optJSONObject(i) ?: continue val goto = it.optString("goto") val cardGoto = it.optString("card_goto") // 只收视频卡片：抖音式竖屏（vertical_av）以及普通 av（降级/新版接口可能混合返回） val isVideo = goto == "vertical_av" || cardGoto == "vertical_av" || goto == "av" || cardGoto == "av" || goto == "story_av" if (!isVideo) continue val playerArgs = it.optJSONObject("player_args") var aid = playerArgs?.optLong("aid", 0L) ?: 0L if (aid &lt;= 0) aid = it.optLong("param", 0L) if (aid &lt;= 0) continue val card = StoryCard() card.aid = aid card.bvid = it.optString("bvid") card.title = it.optString("title") var cover = it.optString("cover") if (cover.isEmpty()) cover = it.optString("pic") if (cover.startsWith("http://")) cover = "https://" + cover.substring(7) card.cover = cover card.upName = it.optJSONObject("owner")?.optString("name") ?: "" val view = it.optJSONObject("stat")?.optLong("view", 0L) ?: 0L card.view = if (view &gt; 0) StringUtil.toWan(view) + "观看" else "" card.cid = playerArgs?.optLong("cid", 0L) ?: it.optLong("cid", 0L) card.durationSec = it.optInt("duration", 0) val dim = it.optJSONObject("dimension") if (dim != null) { var w = dim.optInt("width", 0) var h = dim.optInt("height", 0) val rotate = dim.optInt("rotate", 0) if (rotate == 90 || rotate == 270) { val t = w w = h h = t } card.width = w card.height = h } out.add(card) added++ }</ID>
+    <ID>LoopWithTooManyJumpStatements:StoryApi.kt$StoryApi$while (true) { val read = input.read(buffer) if (read &lt;= 0) break written += read if (written &gt; maxBytes) break output.write(buffer, 0, read) }</ID>
+    <ID>LoopWithTooManyJumpStatements:TestActivity.kt$TestActivity$while (!source.exhausted()) { val line = source.readUtf8Line() if (line == null) break Log.d("debug-deepseek", line) if (line.startsWith("data:")) { val jsonData = line.substring(6).trim { it &lt;= ' ' } if ("[DONE]" == jsonData) break val data = JSONObject(jsonData) val choices = data.getJSONArray("choices") val delta = choices.getJSONObject(0).getJSONObject("delta") val deltaContent: String if (!delta.isNull("reasoning_content")) { deltaContent = delta.optString("reasoning_content") } else if (!delta.isNull("content")) { if (reasoning) { reasoning = false runOnUiThread(Runnable { output!!.append("\n\n*思考结束*\n\n") }) } deltaContent = delta.optString("content") } else deltaContent = "" if (!reasoning) contentBuilder.append(deltaContent) runOnUiThread(Runnable { output!!.append(deltaContent) }) } }</ID>
+    <ID>LoopWithTooManyJumpStatements:WifiPreloadManager.kt$WifiPreloadManager$while (serverRunning.get()) { try { val client = sock.accept() ?: continue Thread({ handleClient(client) }, "wifi-preload-" + nextClientSeq.incrementAndGet()).apply { isDaemon = true start() } } catch (e: IOException) { if (serverRunning.get()) continue else break } }</ID>
+    <ID>MaxLineLength:AppRcmdApi.kt$AppRcmdApi$"Mozilla/5.0 BiliDroid/1.9.4 (bbcallen@gmail.com) os/android model/android_tv mobi_app/android_tv build/102801 channel/master innerVer/102801 osVer/15 network/2"</ID>
+    <ID>MaxLineLength:AppRcmdApi.kt$AppRcmdApi$"Mozilla/5.0 BiliDroid/2.0.1 (bbcallen@gmail.com) os/android model/android_hd mobi_app/android_hd build/2001100 channel/master innerVer/2001100 osVer/15 network/2"</ID>
+    <ID>MaxLineLength:AppRcmdApi.kt$AppRcmdApi$"Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2"</ID>
+    <ID>MaxLineLength:ArticleApi.kt$ArticleApi$val url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail?id=" + opusId + "&amp;time_zone_offset=" + TimeZone.getDefault().getRawOffset() / 100000</ID>
+    <ID>MaxLineLength:BiliTerminal.kt$BiliTerminal$if</ID>
+    <ID>MaxLineLength:CollectionInfoActivity.kt$CollectionInfoActivity.CardAdapter$collectionInfoHolder.cover.setOnClickListener { view -&gt; context.startActivity(Intent(context, ImageViewerActivity::class.java).putExtra("imageList", ArrayList(Collections.singletonList(collection.cover)))) }</ID>
+    <ID>MaxLineLength:CollectionInfoActivity.kt$CollectionInfoActivity.CardAdapter$videoCardHolder.itemView.setOnClickListener { view -&gt; TerminalContext.getInstance().enterVideoDetailPage(context, videoCard.aid, videoCard.bvid) }</ID>
+    <ID>MaxLineLength:CollectionInfoActivity.kt$CollectionInfoActivity.SectionAdapter$collectionInfoHolder.cover.setOnClickListener { view -&gt; context.startActivity(Intent(context, ImageViewerActivity::class.java).putExtra("imageList", ArrayList(Collections.singletonList(collection.cover)))) }</ID>
+    <ID>MaxLineLength:CollectionInfoActivity.kt$CollectionInfoActivity.SectionAdapter$val videoCard = VideoCard(videoInfo.title, "", StringUtil.toWan(videoInfo.stats!!.view.toLong()), videoInfo.cover, videoInfo.aid, videoInfo.bvid)</ID>
+    <ID>MaxLineLength:CollectionInfoActivity.kt$CollectionInfoActivity.SectionAdapter$videoCardHolder.itemView.setOnClickListener { view -&gt; TerminalContext.getInstance().enterVideoDetailPage(context, videoCard.aid, videoCard.bvid) }</ID>
+    <ID>MaxLineLength:CookieRefreshApi.kt$CookieRefreshApi$val args = "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!) + "&amp;refresh_csrf=" + RefreshCsrf + "&amp;source=main_web&amp;refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "")</ID>
+    <ID>MaxLineLength:CookieRefreshApi.kt$CookieRefreshApi$val confirmCode = JSONObject(NetWorkUtil.post("https://passport.bilibili.com/x/passport-login/web/confirm/refresh", "csrf=" + NetWorkUtil.getInfoFromCookie("bili_jct", cookies_new) + "&amp;refresh_token=" + SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), NetWorkUtil.webHeaders).body!!.string()).getInt("code")</ID>
+    <ID>MaxLineLength:CookieRefreshApi.kt$CookieRefreshApi$val publicKeyPEM = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDLgd2OAkcGVtoE3ThUREbio0EgUc/prcajMKXvkCKFCWhJYJcLkcM2DKKcSeFpD/j6Boy538YXnR6VhcuUJOhH2x71nzPjfdTcqMz7djHum0qSZA0AyCBDABUqCrfNgCiJ00Ra7GmRj+YCK1NJEuewlb40JNrRuoEUXpabUzGB8QIDAQAB"</ID>
+    <ID>MaxLineLength:CookiesApi.kt$CookiesApi$if</ID>
+    <ID>MaxLineLength:CookiesApi.kt$CookiesApi$val payload = """{"payload": "{\"5062\":TIME_HERE,\"39c8\":\"333.1007.fp.risk\",\"920b\":\"0\",\"df35\":\"UUID_HERE\",\"03bf\":\"https://www.bilibili.com/\",\"6e7c\":\"RESOLUTION_HERE\",\"3c43\":{\"2673\":0,\"5766\":24,\"6527\":0,\"7003\":1,\"807e\":1,\"b8ce\":\"UA_HERE\",\"641c\":0,\"07a4\":\"zh-CN\",\"1c57\":8,\"0bd0\":4,\"748e\":PAIR_HERE,\"d61f\":PAIR_HERE,\"fc9d\":-480,\"6aa9\":\"Asia/Shanghai\",\"75b8\":1,\"3b21\":1,\"8a1c\":0,\"d52f\":\"not available\",\"adca\":\"Win32\",\"80c9\":[[\"360SoftMgrPlugin\",\"360SoftMgrPlugin\",[[\"application/360softmgrplugin\",\"dll\"]]],[\"Alipay Security Control 3\",\"Alipay Security Control\",[[\"application/x-alisecctrl-plugin\",\"*\"]]],[\"Alipay security control\",\"npaliedit\",[[\"application/aliedit\",\"\"]]],[\"BaiduYunGuanjia Application\",\"YunWebDetect\",[[\"application/bd-npyunwebdetect-plugin\",\"\"]]],[\"Chromium PDF Plugin\",\"Portable Document Format\",[[\"application/x-google-chrome-pdf\",\"pdf\"]]],[\"Chromium PDF Viewer\",\"\",[[\"application/pdf\",\"pdf\"]]],[\"Java Deployment Toolkit 8.0.2910.10\",\"NPRuntime Script Plug-in Library for Java(TM) Deploy\",[[\"application/java-deployment-toolkit\",\"\"]]],[\"Java(TM) Platform SE 8 U291\",\"Next Generation Java Plug-in 11.291.2 for Mozilla browsers\",[[\"application/x-java-applet\",\"\"],[\"application/x-java-bean\",\"\"],[\"application/x-java-vm\",\"\"],[\"application/x-java-applet;version=1.1.1\",\"\"],[\"application/x-java-bean;version=1.1.1\",\"\"],[\"application/x-java-applet;version=1.1\",\"\"],[\"application/x-java-bean;version=1.1\",\"\"],[\"application/x-java-applet;version=1.2\",\"\"],[\"application/x-java-bean;version=1.2\",\"\"],[\"application/x-java-applet;version=1.1.3\",\"\"],[\"application/x-java-bean;version=1.1.3\",\"\"],[\"application/x-java-applet;version=1.1.2\",\"\"],[\"application/x-java-bean;version=1.1.2\",\"\"],[\"application/x-java-applet;version=1.3\",\"\"],[\"application/x-java-bean;version=1.3\",\"\"],[\"application/x-java-applet;version=1.2.2\",\"\"],[\"application/x-java-bean;version=1.2.2\",\"\"],[\"application/x-java-applet;version=1.2.1\",\"\"],[\"application/x-java-bean;version=1.2.1\",\"\"],[\"application/x-java-applet;version=1.3.1\",\"\"],[\"application/x-java-bean;version=1.3.1\",\"\"],[\"application/x-java-applet;version=1.4\",\"\"],[\"application/x-java-bean;version=1.4\",\"\"],[\"application/x-java-applet;version=1.4.1\",\"\"],[\"application/x-java-bean;version=1.4.1\",\"\"],[\"application/x-java-applet;version=1.4.2\",\"\"],[\"application/x-java-bean;version=1.4.2\",\"\"],[\"application/x-java-applet;version=1.5\",\"\"],[\"application/x-java-bean;version=1.5\",\"\"],[\"application/x-java-applet;version=1.6\",\"\"],[\"application/x-java-bean;version=1.6\",\"\"],[\"application/x-java-applet;version=1.7\",\"\"],[\"application/x-java-bean;version=1.7\",\"\"],[\"application/x-java-applet;version=1.8\",\"\"],[\"application/x-java-bean;version=1.8\",\"\"],[\"application/x-java-applet;jpi-version=1.8.0_291\",\"\"],[\"application/x-java-bean;jpi-version=1.8.0_291\",\"\"],[\"application/x-java-vm-npruntime\",\"\"],[\"application/x-java-applet;deploy=11.291.2\",\"\"],[\"application/x-java-applet;javafx=8.0.291\",\"\"]]],[\"MicrosoftÂ® Windows Media Player Firefox Plugin\",\"np-mswmp\",[[\"application/x-ms-wmp\",\"*\"],[\"application/asx\",\"*\"],[\"video/x-ms-asf-plugin\",\"*\"],[\"application/x-mplayer2\",\"*\"],[\"video/x-ms-asf\",\"asf,asx,*\"],[\"video/x-ms-wm\",\"wm,*\"],[\"audio/x-ms-wma\",\"wma,*\"],[\"audio/x-ms-wax\",\"wax,*\"],[\"video/x-ms-wmv\",\"wmv,*\"],[\"video/x-ms-wvx\",\"wvx,*\"]]],[\"QQÃÃ´ÃÃÂ²Â¥Â·ÃÂ¿ÃÂ¼Ã¾\",\"QQÃÃ´ÃÃÂ²Â¥Â·ÃÂ¿ÃÂ¼Ã¾\",[[\"application/tecent-qzonemusic-plugin\",\"rts\"]]],[\"Shockwave Flash\",\"Shockwave Flash 34.0 r0\",[[\"application/x-shockwave-flash\",\"swf\"],[\"application/futuresplash\",\"spl\"]]],[\"XunLei User Plugin\",\"Xunlei User scriptability Plugin,version= 2.0.2.3\",[[\"application/npxluser_plugin\",\"\"]]],[\"iTrusChina iTrusPTA,XEnroll,iEnroll,hwPTA,UKeyInstalls Firefox Plugin\",\"iTrusPTA&amp;XEnroll hwPTA,IEnroll,UKeyInstalls for FireFox,version=1.0.0.2\",[[\"application/pta.itruspta.version.1\",\"*\"],[\"application/cenroll.cenroll.version.1\",\"\"],[\"application/itrusenroll.certenroll.version.1\",\"\"],[\"application/hwpta.itrushwpta\",\"\"],[\"application/hwwdkey.installwdkey\",\"\"],[\"application/hwepass2001.installepass2001\",\"\"]]],[\"npQQPhotoDrawEx\",\"npQQPhotoDrawEx Module\",[[\"application/tencent-qqphotodrawex2-plugin\",\"rts\"]]]],\"13ab\":\"hwAAAABJRU5ErkJggg==\",\"bfe9\":\"SAAskoALCSsZpEUcC+Av8DxpQVtSPLlMwAAAAASUVORK5CYII=\",\"a3c1\":[\"extensions:ANGLE_instanced_arrays;EXT_blend_minmax;EXT_clip_control;EXT_color_buffer_half_float;EXT_depth_clamp;EXT_disjoint_timer_query;EXT_float_blend;EXT_frag_depth;EXT_polygon_offset_clamp;EXT_shader_texture_lod;EXT_texture_compression_bptc;EXT_texture_compression_rgtc;EXT_texture_filter_anisotropic;EXT_sRGB;KHR_parallel_shader_compile;OES_element_index_uint;OES_fbo_render_mipmap;OES_standard_derivatives;OES_texture_float;OES_texture_float_linear;OES_texture_half_float;OES_texture_half_float_linear;OES_vertex_array_object;WEBGL_blend_func_extended;WEBGL_color_buffer_float;WEBGL_compressed_texture_s3tc;WEBGL_compressed_texture_s3tc_srgb;WEBGL_debug_renderer_info;WEBGL_debug_shaders;WEBGL_depth_texture;WEBGL_draw_buffers;WEBGL_lose_context;WEBGL_multi_draw;WEBGL_polygon_mode\",\"webgl aliased line width range:[1, 1]\",\"webgl aliased point size range:[1, 1024]\",\"webgl alpha bits:8\",\"webgl antialiasing:yes\",\"webgl blue bits:8\",\"webgl depth bits:24\",\"webgl green bits:8\",\"webgl max anisotropy:16\",\"webgl max combined texture image units:32\",\"webgl max cube map texture size:16384\",\"webgl max fragment uniform vectors:1024\",\"webgl max render buffer size:16384\",\"webgl max texture image units:16\",\"webgl max texture size:16384\",\"webgl max varying vectors:30\",\"webgl max vertex attribs:16\",\"webgl max vertex texture image units:16\",\"webgl max vertex uniform vectors:4096\",\"webgl max viewport dims:[32767, 32767]\",\"webgl red bits:8\",\"webgl renderer:WebKit WebGL\",\"webgl shading language version:WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)\",\"webgl stencil bits:0\",\"webgl vendor:WebKit\",\"webgl version:WebGL 1.0 (OpenGL ES 2.0 Chromium)\",\"webgl unmasked vendor:Google Inc. (Intel)\",\"webgl unmasked renderer:ANGLE (Intel, Intel(R) HD Graphics 4000 (0x00000166) Direct3D11 vs_5_0 ps_5_0, D3D11)\",\"webgl vertex shader high float precision:23\",\"webgl vertex shader high float precision rangeMin:127\",\"webgl vertex shader high float precision rangeMax:127\",\"webgl vertex shader medium float precision:23\",\"webgl vertex shader medium float precision rangeMin:127\",\"webgl vertex shader medium float precision rangeMax:127\",\"webgl vertex shader low float precision:23\",\"webgl vertex shader low float precision rangeMin:127\",\"webgl vertex shader low float precision rangeMax:127\",\"webgl fragment shader high float precision:23\",\"webgl fragment shader high float precision rangeMin:127\",\"webgl fragment shader high float precision rangeMax:127\",\"webgl fragment shader medium float precision:23\",\"webgl fragment shader medium float precision rangeMin:127\",\"webgl fragment shader medium float precision rangeMax:127\",\"webgl fragment shader low float precision:23\",\"webgl fragment shader low float precision rangeMin:127\",\"webgl fragment shader low float precision rangeMax:127\",\"webgl vertex shader high int precision:0\",\"webgl vertex shader high int precision rangeMin:31\",\"webgl vertex shader high int precision rangeMax:30\",\"webgl vertex shader medium int precision:0\",\"webgl vertex shader medium int precision rangeMin:31\",\"webgl vertex shader medium int precision rangeMax:30\",\"webgl vertex shader low int precision:0\",\"webgl vertex shader low int precision rangeMin:31\",\"webgl vertex shader low int precision rangeMax:30\",\"webgl fragment shader high int precision:0\",\"webgl fragment shader high int precision rangeMin:31\",\"webgl fragment shader high int precision rangeMax:30\",\"webgl fragment shader medium int precision:0\",\"webgl fragment shader medium int precision rangeMin:31\",\"webgl fragment shader medium int precision rangeMax:30\",\"webgl fragment shader low int precision:0\",\"webgl fragment shader low int precision rangeMin:31\",\"webgl fragment shader low int precision rangeMax:30\"],\"6bc5\":\"Google Inc. (Intel)~ANGLE (Intel, Intel(R) HD Graphics 4000 (0x00000166) Direct3D11 vs_5_0 ps_5_0, D3D11)\",\"ed31\":0,\"72bd\":0,\"097b\":0,\"52cd\":[0,0,0],\"a658\":[\"Arial\",\"Arial Black\",\"Arial Narrow\",\"Arial Unicode MS\",\"Book Antiqua\",\"Bookman Old Style\",\"Calibri\",\"Cambria\",\"Cambria Math\",\"Century\",\"Century Gothic\",\"Century Schoolbook\",\"Comic Sans MS\",\"Consolas\",\"Courier\",\"Courier New\",\"Georgia\",\"Helvetica\",\"Impact\",\"Lucida Bright\",\"Lucida Calligraphy\",\"Lucida Console\",\"Lucida Fax\",\"Lucida Handwriting\",\"Lucida Sans\",\"Lucida Sans Typewriter\",\"Lucida Sans Unicode\",\"Microsoft Sans Serif\",\"Monotype Corsiva\",\"MS Gothic\",\"MS PGothic\",\"MS Reference Sans Serif\",\"MS Sans Serif\",\"MS Serif\",\"MYRIAD PRO\",\"Palatino Linotype\",\"Segoe Print\",\"Segoe Script\",\"Segoe UI\",\"Segoe UI Light\",\"Segoe UI Semibold\",\"Segoe UI Symbol\",\"Tahoma\",\"Times\",\"Times New Roman\",\"Trebuchet MS\",\"Verdana\",\"Wingdings\",\"Wingdings 2\",\"Wingdings 3\"],\"d02f\":\"124.04347527516074\"}}"}"""</ID>
+    <ID>MaxLineLength:DownloadService.kt$DownloadService$if (!danmakuFile.exists() &amp;&amp; !danmakuFile.createNewFile()) return ERR_FILE else if (!danmakuFile.delete() || !danmakuFile.createNewFile()) return ERR_FILE</ID>
+    <ID>MaxLineLength:DynamicAdapter.kt$DynamicAdapter$class</ID>
+    <ID>MaxLineLength:DynamicApi.kt$DynamicApi$"&amp;features=itemOpusStyle,listOnlyfans,opusBigCover,onlyfansVote,forwardListHidden,decorationCard,commentsNewVersion,onlyfansAssetsV2,ugcDelete,onlyfansQaCard,avatarAutoTheme,sunflowerStyle,eva3CardOpus,eva3CardVideo,eva3CardComment"</ID>
+    <ID>MaxLineLength:DynamicApi.kt$DynamicApi$return</ID>
+    <ID>MaxLineLength:DynamicApi.kt$DynamicApi$val url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all/update?type=" + type + "&amp;update_baseline=" + updateBaseline + "&amp;web_location=333.1365"</ID>
+    <ID>MaxLineLength:EmoteActivity.kt$EmoteActivity.GridSpacingItemDecoration$class</ID>
+    <ID>MaxLineLength:FavoriteApi.kt$FavoriteApi$val url = "https://api.bilibili.com/x/v3/fav/folder/created/list-all?type=2&amp;jsonp=jsonp&amp;rid=" + aid + "&amp;up_mid=" + SharedPreferencesUtil.getLong("mid", 0)</ID>
+    <ID>MaxLineLength:FileUtil.kt$FileUtil$return File(SharedPreferencesUtil.getString("save_path_pictures", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString() + "/哔哩终端/"))</ID>
+    <ID>MaxLineLength:FolderChooseAdapter.kt$FolderChooseAdapter$class</ID>
+    <ID>MaxLineLength:FollowUsersActivity.kt$FollowUsersActivity$val result = if (modeLocal == 0) FollowApi.getFollowingList(midLocal, page, userListLocal!!) else FollowApi.getFollowerList(midLocal, page, userListLocal!!)</ID>
+    <ID>MaxLineLength:HistoryApi.kt$HistoryApi$val url = "https://api.bilibili.com/x/web-interface/history/cursor?type=archive&amp;view_at=" + lastResult.timestamp + "&amp;business=" + lastResult.business + "&amp;max=" + lastResult.offset</ID>
+    <ID>MaxLineLength:InteractionDebugAdapter.kt$InteractionDebugAdapter$class</ID>
+    <ID>MaxLineLength:LinkUrlUtil.kt$LinkUrlUtil$TYPE_UID -&gt; context.startActivity(Intent(context, UserInfoActivity::class.java).putExtra("mid", java.lang.Long.parseLong(`val`.replaceFirst("(?i)^uid".toRegex(), ""))))</ID>
+    <ID>MaxLineLength:LinkUrlUtil.kt$LinkUrlUtil$context.startActivity(Intent(context, UserInfoActivity::class.java).putExtra("mid", java.lang.Long.parseLong(`val`.replaceFirst("(?i)^uid".toRegex(), ""))))</ID>
+    <ID>MaxLineLength:LiveInfoActivity.kt$LiveInfoActivity$cover.setOnClickListener { view -&gt; startActivity(Intent(view.context, ImageViewerActivity::class.java).putExtra("imageList", ArrayList(listOf(room.user_cover)))) }</ID>
+    <ID>MaxLineLength:LoginApi.kt$LoginApi$return NetWorkUtil.get("https://passport.bilibili.com/x/passport-login/web/qrcode/poll?source=main-fe-header&amp;qrcode_key=" + oauthKey, CookiesApi.genWebHeaders())</ID>
+    <ID>MaxLineLength:LoginApi.kt$LoginApi$val listResult = JSONObject(NetWorkUtil.post(listUrl, NetWorkUtil.FormData().put("csrf", SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "")).toString()).body!!.string())</ID>
+    <ID>MaxLineLength:MessageSettingsAdapter.kt$MessageSettingsAdapter$class</ID>
+    <ID>MaxLineLength:NetWorkUtil.kt$NetWorkUtil$if (cookiesStr.isEmpty()) ArrayList() else ArrayList(listOf(*cookiesStr.split("; ".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()))</ID>
+    <ID>MaxLineLength:NoticeHolder.kt$NoticeHolder$ReplyApi.REPLY_TYPE_VIDEO -&gt; TerminalContext.getInstance().enterVideoDetailPage(context, 0, (childReply as Reply).ofBvid, null, seekReply)</ID>
+    <ID>MaxLineLength:OpusApi.kt$OpusApi$/* url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?"; url += "timezone_offset=-480&amp;platform=web&amp;gaia_source=main_web&amp;id=" + id + "&amp;features=itemOpusStyle,opusBigCover,onlyfansVote,endFooterHidden,decorationCard,onlyfansAssetsV2,ugcDelete,onlyfansQaCard,editable,opusPrivateVisible,avatarAutoTheme&amp;web_location=333.1368&amp;x-bili-device-req-json=%7B%22platform%22:%22web%22,%22device%22:%22pc%22%7D&amp;x-bili-web-req-json=%7B%22spm_id%22:%22333.1368%22%7D"; Response response = NetWorkUtil.get(ConfInfoApi.signWBI(url)); ResponseBody responseBody = response.body; if(responseBody == null) return opus; JSONObject json = new JSONObject(responseBody.string()); JSONObject item = json.getJSONObject("data").getJSONObject("item"); analyzeOldStyleDynamic(opus, item); */</ID>
+    <ID>MaxLineLength:OpusParagraph.kt$OpusParagraph$EmoteUtil.replaceSingle(stringBuilder, emoji.optString("icon_url"), emoji.optInt("size"), stringBuilder.length - rich.getString("text").length, stringBuilder.length, 1.0f)</ID>
+    <ID>MaxLineLength:OpusParagraph.kt$OpusParagraph$stringBuilder.setSpan(StringUtil.LinkClickableSpan(rich.getString("jump_url"), LinkUrlUtil.TYPE_WEB_URL, rich.getString("jump_url")), startLength, stringBuilder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)</ID>
+    <ID>MaxLineLength:OpusParagraph.kt$OpusParagraph$stringBuilder.setSpan(StringUtil.LinkClickableSpan(rich.optString("jump_url"), LinkUrlUtil.TYPE_WEB_URL, rich.getString("jump_url")), stringBuilder.length - rich.getString("text").length, stringBuilder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)</ID>
+    <ID>MaxLineLength:PlayerActivity.kt$PlayerActivity$if</ID>
+    <ID>MaxLineLength:PrivateMsgActivity.kt$PrivateMsgActivity$val result = PrivateMsgApi.sendMsg(SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 114514L), uid, PrivateMessage.TYPE_TEXT, System.currentTimeMillis() / 1000, "{\"content\":\"" + content + "\"}")</ID>
+    <ID>MaxLineLength:PrivateMsgAdapter.kt$PrivateMsgAdapter$class</ID>
+    <ID>MaxLineLength:PrivateMsgSessionsAdapter.kt$PrivateMsgSessionsAdapter$PrivateMessage.TYPE_VIDEO, PrivateMessage.TYPE_PIC_CARD, PrivateMessage.TYPE_NOMAL_CARD -&gt; holder.contentText.setText(msgContent.content!!.getString("title"))</ID>
+    <ID>MaxLineLength:PrivateMsgSessionsAdapter.kt$PrivateMsgSessionsAdapter$class</ID>
+    <ID>MaxLineLength:RefreshListActivity.kt$RefreshListActivity.&lt;no name provided&gt;$if</ID>
+    <ID>MaxLineLength:RefreshMainActivity.kt$RefreshMainActivity.&lt;no name provided&gt;$if</ID>
+    <ID>MaxLineLength:ReplyApi.kt$ReplyApi$val arg = "oid=" + oid + "&amp;type=1&amp;rpid=" + root + "&amp;action=" + (if (action) "1" else "0") + "&amp;jsonp=jsonp&amp;csrf=" + (SharedPreferencesUtil.getString("csrf", "") ?: "")</ID>
+    <ID>MaxLineLength:StoryApi.kt$StoryApi$"Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2"</ID>
+    <ID>MaxLineLength:TutorialActivity.kt$TutorialActivity$val tutorial: com.RobinNotBad.BiliClient.model.Tutorial = java.util.Objects.requireNonNull&lt;com.RobinNotBad.BiliClient.model.Tutorial&gt;(TutorialHelper.loadTutorial(getResources().getXml(intent.getIntExtra("xml_id", R.xml.tutorial_recommend))))</ID>
+    <ID>MaxLineLength:UpdateInfoActivity.kt$UpdateInfoActivity$/* CenterThreadPool.run(() -&gt; { try { runOnUiThread(() -&gt; MsgUtil.showMsg("开始获取下载地址")); String url = AppInfoApi.getDownloadUrl(versionCode); if (TextUtils.isEmpty(url)) { runOnUiThread(() -&gt; MsgUtil.showMsg("没有该版本的下载地址")); } else { Request request = new Request.Builder() .get() .url(url) .build(); NetWorkUtil.getOkHttpInstance().newCall(request).enqueue(new Callback() { @Override public void onFailure(@NonNull Call call, @NonNull IOException e) { runOnUiThread(() -&gt; { MsgUtil.showMsg("下载失败: " + e.getMessage()); downloadBtn.setText("下载"); }); } @Override public void onResponse(@NonNull Call call, @NonNull Response response) { if (!response.isSuccessful()) { runOnUiThread(() -&gt; MsgUtil.showMsg("下载失败！")); } else { try { downloading = true; stopDownload = false; ResponseBody responseBody = response.body(); if (responseBody != null) { long fileSize = responseBody.contentLength(); File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "BiliTerminal_" + versionCode + ".apk"); if (file.exists() &amp;&amp; !file.delete()) { int num = 1; while (file.exists()) { if (file.delete()) break; file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "BiliTerminal_" + versionCode + "(" + num++ + ").apk"); } } FileOutputStream fos = new FileOutputStream(file); int bytesRead; byte[] data = new byte[1024]; long totalBytesRead = 0; while ((bytesRead = responseBody.byteStream().read(data)) != -1) { if (stopDownload) break; fos.write(data, 0, bytesRead); totalBytesRead += bytesRead; int progress = (int) ((totalBytesRead * 100) / fileSize); runOnUiThread(()-&gt;downloadBtn.setText(String.format(Locale.getDefault(), "下载(%d%%)", progress))); } fos.flush(); fos.close(); if (!stopDownload) { startActivity(new Intent(UpdateInfoActivity.this, UpdateDownloadResultActivity.class) .putExtra("path", file.getAbsolutePath())); } else { if (file.delete()) { runOnUiThread(() -&gt; MsgUtil.showMsg("已中止下载并删除文件")); } else { runOnUiThread(() -&gt; MsgUtil.showMsg("已中止下载，删除文件失败")); } } stopDownload = false; downloading = false; } } catch (Throwable th) { MsgUtil.err("下载出错：",th); downloading = false; } } downloadBtn.setText("下载"); } }); } } catch (IOException e) { runOnUiThread(() -&gt; MsgUtil.showMsg("网络异常")); } catch (Throwable th) { runOnUiThread(() -&gt; MsgUtil.showMsg("错误: " + th.getMessage())); } }); */</ID>
+    <ID>MaxLineLength:UpdateInfoActivity.kt$UpdateInfoActivity$pubTimeTv!!.text = String.format("发布时间: %s", if (ctime == -1L) "未知" else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(if (ctime.toString().length == 13) ctime else ctime * 1000)))</ID>
+    <ID>MaxLineLength:UserInfo.kt$UserInfo$constructor</ID>
+    <ID>MaxLineLength:UserInfoApi.kt$UserInfoApi$val result = UserInfo(mid, name, avatar, sign, fans, attention, level, followed, notice, official, officialDesc, sys_notice, liveroom, card.getInt("is_senior_member"))</ID>
+    <ID>MaxLineLength:UserInfoApi.kt$UserInfoApi$val result = UserInfo(mid, name, avatar, sign, fans, attention, level, followed, notice, official, officialDesc, vip.getInt("role"), sys_notice, liveroom, card.getInt("is_senior_member"))</ID>
+    <ID>MaxLineLength:VideoInfoFragment.kt$VideoInfoFragment$val badgeBG = RadiusBackgroundSpan(0, getResources().getDimension(R.dimen.card_round).toInt(), Color.WHITE, ThemeUtil.mapLegacyColor(0xFFCF4B5F.toInt()))</ID>
+    <ID>MayBeConst:CookiesApi.kt$CookiesApi$private val CHARSET = "0123456789ABCDEF"</ID>
+    <ID>MayBeConst:CookiesApi.kt$CookiesApi$private val M = 5</ID>
+    <ID>MayBeConst:CookiesApi.kt$CookiesApi$private val R1 = 27</ID>
+    <ID>MayBeConst:CookiesApi.kt$CookiesApi$private val R2 = 31</ID>
+    <ID>MayBeConst:CookiesApi.kt$CookiesApi$private val R3 = 33</ID>
+    <ID>MayBeConst:NetWorkUtil.kt$NetWorkUtil$@JvmField val USER_AGENT_WEB: String = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.95 Safari/537.36"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$// ==================== 旧版本（v5.0.0-alpha 时代）单 token 键，仅用于迁移 ==================== @JvmField val APP_RCMD_ACCESS_TOKEN = "app_rcmd_access_token"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$// 旧版本已存 token 属于哪个身份（迁移用；迁移完成后不再读写） @JvmField val APP_RCMD_TOKEN_IDENTITY = "app_rcmd_token_identity"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$// 移动端推荐客户端身份（当前激活的一派）：hd（默认）/ tv / phone @JvmField val APP_RCMD_IDENTITY = "app_rcmd_identity"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$// 移动端推荐逻辑（实验性）：全部使用独立前缀 app_rcmd_，与 web 登录互不影响 @JvmField val APP_RCMD_ENABLED = "app_rcmd_enabled"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val APP_RCMD_BUVID = "app_rcmd_buvid"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val APP_RCMD_COOKIES = "app_rcmd_cookies"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val APP_RCMD_MID = "app_rcmd_mid"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val APP_RCMD_REFRESH_TOKEN = "app_rcmd_refresh_token"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val ASYNC_INFLATE_ENABLE = "async_inflate_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val DYNAMIC_UPDATE_CHECK_ENABLE = "dynamic_update_check_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val DYNAMIC_UPDATE_NUM = "dynamic_update_num"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val FOLLOW_GROUP_MODE = "follow_group_mode"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val LINK_ENABLE = "link_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val LOAD_TRANSITION = "load_transition"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val MENU_SORT = "menu_sort"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val MESSAGE_UPDATE_CHECK_ENABLE = "message_update_check_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val MESSAGE_UPDATE_NUM = "message_update_num"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val NEW_DANMAKU_API = "new_danmaku_api"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val NIGHT_REMINDER_ENABLE = "night_reminder_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val NO_MEDAL = "no_medal"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val NO_VIP_COLOR = "no_vip_color"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val PLAYER_MEDIA_SESSION_ENABLE = "player_media_session_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val PRIVATE_MSG_AUTO_READ_ENABLE = "private_msg_auto_read_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val PRIVATE_MSG_UNREAD_BADGE_ENABLE = "private_msg_unread_badge_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val RCMD_API_NEW_PARAM = "rcmd_api_new_param"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val RECENT_UP_DISPLAY_ENABLE = "recent_up_display_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val REPLY_MARQUEE_NAME = "reply_marquee_name"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val SEARCH_DEFAULT_CONTENT_ENABLE = "search_default_content_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val SNACKBAR_ENABLE = "snackbar_enable"</ID>
+    <ID>MayBeConst:SharedPreferencesUtil.kt$SharedPreferencesUtil$@JvmField val STRICT_URL_MATCH = "strict_url_match"</ID>
+    <ID>MayBeConst:VideoInfo.kt$VideoInfo.Companion$@JvmField val COPYRIGHT_REPRINT: Int = 2</ID>
+    <ID>MayBeConst:VideoInfo.kt$VideoInfo.Companion$@JvmField val COPYRIGHT_SELF: Int = 1</ID>
+    <ID>NestedBlockDepth:AppInfoApi.kt$AppInfoApi$@JvmStatic fun check(context: Context)</ID>
+    <ID>NestedBlockDepth:AppRcmdApi.kt$AppRcmdApi$@Throws(JSONException::class) @JvmStatic fun saveLogin(data: JSONObject): Long</ID>
+    <ID>NestedBlockDepth:BaseActivity.kt$BaseActivity$open fun setRound()</ID>
+    <ID>NestedBlockDepth:DownloadService.kt$DownloadService$private fun downSubtitles(aid: Long, cid: Long, folder: File): Int</ID>
+    <ID>NestedBlockDepth:DynamicActivity.kt$DynamicActivity$override fun onActivityResult(requestCode: Int, resultCode: Int, @Nullable data: Intent?)</ID>
+    <ID>NestedBlockDepth:DynamicAdapter.kt$DynamicAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>NestedBlockDepth:DynamicApi.kt$DynamicApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun mentionAtFindUser(name: String): Long</ID>
+    <ID>NestedBlockDepth:DynamicApi.kt$DynamicApi$@Throws(JSONException::class) @JvmStatic fun analyzeDynamic(dynamic_json: JSONObject): Dynamic</ID>
+    <ID>NestedBlockDepth:DynamicHolder.kt$DynamicHolder$@SuppressLint("SetTextI18n", "ClickableViewAccessibility") fun showDynamic(context: Context, dynamic: Dynamic, clickable: Boolean)</ID>
+    <ID>NestedBlockDepth:FavoriteApi.kt$FavoriteApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getFavoriteFolders(mid: Long): ArrayList&lt;FavoriteFolder&gt;</ID>
+    <ID>NestedBlockDepth:FollowGroupAdapter.kt$FollowGroupAdapter$fun toggleGroup(tagid: Int)</ID>
+    <ID>NestedBlockDepth:FollowGroupAdapter.kt$FollowGroupAdapter$override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int)</ID>
+    <ID>NestedBlockDepth:LinkUrlUtil.kt$LinkUrlUtil$@JvmStatic fun handleWebURL(context: Context, text: String)</ID>
+    <ID>NestedBlockDepth:LiveApi.kt$LiveApi$@JvmSuppressWildcards @Throws(JSONException::class) @JvmStatic fun analyzeLiveRooms(list: JSONArray): List&lt;LiveRoom&gt;</ID>
+    <ID>NestedBlockDepth:LiveApi.kt$LiveApi$@Throws(JSONException::class, IOException::class) @JvmStatic fun getRoomPlayInfo(roomId: Long, qn: Int): LivePlayInfo?</ID>
+    <ID>NestedBlockDepth:LocalListActivity.kt$LocalListActivity$private fun scan(folder: File)</ID>
+    <ID>NestedBlockDepth:MenuActivity.kt$MenuActivity$@SuppressLint("MissingInflatedId", "InflateParams") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>NestedBlockDepth:NetWorkUtil.kt$NetWorkUtil.FormData$override fun toString(): String</ID>
+    <ID>NestedBlockDepth:OpusApi.kt$OpusApi$@JvmSuppressWildcards @Throws(IOException::class, JSONException::class) @JvmStatic fun getOpus(id: Long): Opus</ID>
+    <ID>NestedBlockDepth:OpusContentAdapter.kt$OpusContentAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(holder: ArticleLineHolder, position: Int)</ID>
+    <ID>NestedBlockDepth:OpusParagraph.kt$OpusParagraph$fun analyzeList(list: JSONObject?): CharSequence</ID>
+    <ID>NestedBlockDepth:OpusParagraph.kt$OpusParagraph$fun analyzeText(text: JSONObject?): CharSequence</ID>
+    <ID>NestedBlockDepth:PlayerActivity.kt$PlayerActivity$fun controlVideo()</ID>
+    <ID>NestedBlockDepth:PlayerActivity.kt$PlayerActivity$override fun onGenericMotionEvent(event: MotionEvent): Boolean</ID>
+    <ID>NestedBlockDepth:PlayerActivity.kt$PlayerActivity$private fun checkEndInteractionQuestions()</ID>
+    <ID>NestedBlockDepth:PlayerActivity.kt$PlayerActivity$private fun evaluateValueExpression(expr: String): Long</ID>
+    <ID>NestedBlockDepth:PlayerActivity.kt$PlayerActivity$private fun executeNativeAction(nativeAction: String?)</ID>
+    <ID>NestedBlockDepth:PlayerActivity.kt$PlayerActivity$private fun setDisplay()</ID>
+    <ID>NestedBlockDepth:PlayerApi.kt$PlayerApi$@JvmStatic fun getHighEnergyData(cid: Long, aid: Long): HighEnergyData?</ID>
+    <ID>NestedBlockDepth:PlayerDanmakuController.kt$PlayerDanmakuController$fun startOnline( aid: Long, cid: Long, durationProvider: DurationProvider, onLoadFinished: LoadFinishedListener? = null )</ID>
+    <ID>NestedBlockDepth:PrivateMsgApi.kt$PrivateMsgApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getNewSessionsList(beginTs: Long, size: Int, build: Int, mobiApp: String?): ArrayList&lt;PrivateMsgSession&gt;</ID>
+    <ID>NestedBlockDepth:PrivateMsgApi.kt$PrivateMsgApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getPrivateMsgList(allMsgJson: JSONObject): ArrayList&lt;PrivateMessage&gt;</ID>
+    <ID>NestedBlockDepth:PrivateMsgApi.kt$PrivateMsgApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getSessionsList(size: Int): ArrayList&lt;PrivateMsgSession&gt;</ID>
+    <ID>NestedBlockDepth:QRCodeUtil.kt$QRCodeUtil$@Nullable @JvmStatic fun createQRCodeBitmap( content: String?, width: Int, height: Int, @Nullable character_set: String?, @Nullable error_correction: String?, @Nullable margin: String?, @ColorInt color_black: Int, @ColorInt color_white: Int ): Bitmap?</ID>
+    <ID>NestedBlockDepth:RecommendActivity.kt$RecommendActivity$private fun checkCookieRefresh()</ID>
+    <ID>NestedBlockDepth:ReplyAdapter.kt$ReplyAdapter$@SuppressLint("SetTextI18n") override fun onBindViewHolder(@NonNull holder: RecyclerView.ViewHolder, @SuppressLint("RecyclerView") position: Int)</ID>
+    <ID>NestedBlockDepth:ReplyFragment.kt$ReplyFragment$fun setManager(source: Any?)</ID>
+    <ID>NestedBlockDepth:SearchActivity.kt$SearchActivity$@SuppressLint("NotifyDataSetChanged") fun searchKeyword(str: String)</ID>
+    <ID>NestedBlockDepth:SearchApi.kt$SearchApi$@JvmStatic @Throws(JSONException::class) fun getVideosFromSearchResult(input: JSONArray, videoCardList: ArrayList&lt;VideoCard&gt;, first: Boolean)</ID>
+    <ID>NestedBlockDepth:SeriesApi.kt$SeriesApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getUserSeries(mid: Long, page: Int, seasonList: MutableList&lt;Series&gt;): Int</ID>
+    <ID>NestedBlockDepth:ShowTextActivity.kt$ShowTextActivity$@SuppressLint("MissingInflatedId") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>NestedBlockDepth:SortSettingActivity.kt$SortSettingActivity$@SuppressLint("MissingInflatedId") override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>NestedBlockDepth:StoryApi.kt$StoryApi$@JvmStatic fun prefetchToFile(url: String, dest: java.io.File, maxBytes: Long = 12L * 1024 * 1024): Boolean</ID>
+    <ID>NestedBlockDepth:StoryApi.kt$StoryApi$@Throws(IOException::class, JSONException::class) private fun requestPlayUrl(aid: Long, cid: Long, qn: Int, html5: Boolean, dash: Boolean): StoryPlayInfo</ID>
+    <ID>NestedBlockDepth:TutorialHelper.kt$TutorialHelper$@JvmStatic fun loadTutorial(xml: XmlResourceParser): Tutorial?</ID>
+    <ID>NestedBlockDepth:UserInfoApi.kt$UserInfoApi$@Throws(IOException::class, JSONException::class) @JvmStatic fun getUserInfo(mid: Long): UserInfo?</ID>
+    <ID>NestedBlockDepth:VideoInfoApi.kt$VideoInfoApi$@Throws(JSONException::class) @JvmStatic fun analyzeUgcSeason(json: JSONObject): Collection</ID>
+    <ID>NestedBlockDepth:WifiPreloadManager.kt$WifiPreloadManager$private fun handleClient(client: Socket)</ID>
+    <ID>NestedBlockDepth:WifiPreloadManager.kt$WifiPreloadManager$private fun relayFromRemote(entry: PreloadEntry, output: OutputStream, start: Long, endIncl: Long, localLen: Long)</ID>
+    <ID>PackageNaming:AboutActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:AddFavoriteActivity.kt$package com.RobinNotBad.BiliClient.activity.video.info</ID>
+    <ID>PackageNaming:AnimationUtils.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:Announcement.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:AnnouncementAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:AnnouncementsActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:ApiResult.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:AppInfoApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:AppRcmdApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:AppRcmdLoginActivity.kt$package com.RobinNotBad.BiliClient.activity.settings.login</ID>
+    <ID>PackageNaming:ArticleApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:ArticleCard.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ArticleCardAdapter.kt$package com.RobinNotBad.BiliClient.adapter.article</ID>
+    <ID>PackageNaming:ArticleCardHolder.kt$package com.RobinNotBad.BiliClient.adapter.article</ID>
+    <ID>PackageNaming:ArticleInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ArticleLine.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:AsyncLayoutInflaterX.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:At.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:Bangumi.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:BangumiApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:BangumiInfoFragment.kt$package com.RobinNotBad.BiliClient.activity.video.info</ID>
+    <ID>PackageNaming:BaseActivity.kt$package com.RobinNotBad.BiliClient.activity.base</ID>
+    <ID>PackageNaming:BaseFragment.kt$package com.RobinNotBad.BiliClient.activity.base</ID>
+    <ID>PackageNaming:BatteryView.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:BiliTerminal.kt$package com.RobinNotBad.BiliClient</ID>
+    <ID>PackageNaming:CatchActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:CenterThreadPool.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:CoinLog.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:CoinLogActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:CoinLogAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:CoinLogApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:Collection.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:CollectionInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.video.collection</ID>
+    <ID>PackageNaming:ConfInfoApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:ContentType.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:CookieRefreshApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:Cookies.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:CookiesApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:CopyTextActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:CreativeCenterActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:CreativeCenterApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:CustomGlideModule.kt$package com.RobinNotBad.BiliClient.helper</ID>
+    <ID>PackageNaming:CustomGridManager.kt$package com.RobinNotBad.BiliClient.ui.widget.recycler</ID>
+    <ID>PackageNaming:CustomLinearManager.kt$package com.RobinNotBad.BiliClient.ui.widget.recycler</ID>
+    <ID>PackageNaming:CustomText.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DanmakuApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:DanmakuBackfiller.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:DanmakuElem.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DanmakuThermalController.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:DashAudioStream.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DashData.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DashVideoStream.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DialogActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:DmImgParamUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:DmSegMobileReply.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DownloadActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:DownloadAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:DownloadListActivity.kt$package com.RobinNotBad.BiliClient.activity.video.local</ID>
+    <ID>PackageNaming:DownloadSection.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DownloadService.kt$package com.RobinNotBad.BiliClient.service</ID>
+    <ID>PackageNaming:DownloadSqlHelper.kt$package com.RobinNotBad.BiliClient.helper.sql</ID>
+    <ID>PackageNaming:DragAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:Dynamic.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:DynamicActivity.kt$package com.RobinNotBad.BiliClient.activity.dynamic</ID>
+    <ID>PackageNaming:DynamicAdapter.kt$package com.RobinNotBad.BiliClient.adapter.dynamic</ID>
+    <ID>PackageNaming:DynamicApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:DynamicHolder.kt$package com.RobinNotBad.BiliClient.adapter.dynamic</ID>
+    <ID>PackageNaming:DynamicInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.dynamic</ID>
+    <ID>PackageNaming:DynamicInfoFragment.kt$package com.RobinNotBad.BiliClient.activity.dynamic</ID>
+    <ID>PackageNaming:EditSignActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:ElectricApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:ElectricPanel.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ElectricUser.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ElectricUserAdapter.kt$package com.RobinNotBad.BiliClient.adapter.user</ID>
+    <ID>PackageNaming:Emote.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:EmoteActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:EmoteApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:EmotePackage.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:EmoteUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:ErrorCatch.kt$package com.RobinNotBad.BiliClient</ID>
+    <ID>PackageNaming:ExpLog.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ExpLogActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:ExpLogAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:ExpLogApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:FavoriteApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:FavoriteBatchDownloadActivity.kt$package com.RobinNotBad.BiliClient.activity.user.favorite</ID>
+    <ID>PackageNaming:FavoriteFolder.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:FavoriteFolderAdapter.kt$package com.RobinNotBad.BiliClient.adapter.favorite</ID>
+    <ID>PackageNaming:FavoriteFolderCreateActivity.kt$package com.RobinNotBad.BiliClient.activity.user.favorite</ID>
+    <ID>PackageNaming:FavoriteFolderEditActivity.kt$package com.RobinNotBad.BiliClient.activity.user.favorite</ID>
+    <ID>PackageNaming:FavoriteFolderListActivity.kt$package com.RobinNotBad.BiliClient.activity.user.favorite</ID>
+    <ID>PackageNaming:FavoriteVideoListActivity.kt$package com.RobinNotBad.BiliClient.activity.user.favorite</ID>
+    <ID>PackageNaming:FavouriteOpusListActivity.kt$package com.RobinNotBad.BiliClient.activity.user.favorite</ID>
+    <ID>PackageNaming:FileUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:FolderChooseAdapter.kt$package com.RobinNotBad.BiliClient.adapter.favorite</ID>
+    <ID>PackageNaming:FollowApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:FollowGroupAdapter.kt$package com.RobinNotBad.BiliClient.adapter.user</ID>
+    <ID>PackageNaming:FollowLiveActivity.kt$package com.RobinNotBad.BiliClient.activity.live</ID>
+    <ID>PackageNaming:FollowTag.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:FollowUsersActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:FollowingBangumisActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:GetIntentActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:GlideUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:HighEnergyData.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:HighEnergyProgressBar.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:HistoryActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:HistoryApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:ImageAutoLoadScrollListener.kt$package com.RobinNotBad.BiliClient.util.view</ID>
+    <ID>PackageNaming:ImageViewerActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:InstanceActivity.kt$package com.RobinNotBad.BiliClient.activity.base</ID>
+    <ID>PackageNaming:InteractionDebugActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:InteractionDebugAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:InteractionVideoApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:InteractionVideoData.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:IntroductionActivity.kt$package com.RobinNotBad.BiliClient.activity.settings.setup</ID>
+    <ID>PackageNaming:JsonUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:LauncherActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:LikeCoinFavApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:LinkUrlUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:ListChooseActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:ListLayoutUtil.kt$package com.RobinNotBad.BiliClient.ui.widget.recycler</ID>
+    <ID>PackageNaming:LiveApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:LiveCardAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:LiveInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:LiveInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.live</ID>
+    <ID>PackageNaming:LivePlayInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:LiveRoom.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:LocalListActivity.kt$package com.RobinNotBad.BiliClient.activity.video.local</ID>
+    <ID>PackageNaming:LocalPageChooseActivity.kt$package com.RobinNotBad.BiliClient.activity.video.local</ID>
+    <ID>PackageNaming:LocalVideo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:LocalVideoAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:LoginActivity.kt$package com.RobinNotBad.BiliClient.activity.settings.login</ID>
+    <ID>PackageNaming:LoginApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:LoginRecord.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:LoginRecordActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:LoginRecordAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:LoginRecordApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:Logu.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:MarqueeTextView.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:MedalInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:MedalListAdapter.kt$package com.RobinNotBad.BiliClient.adapter.user</ID>
+    <ID>PackageNaming:MedalWallActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:MediaEpisodeAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:MenuActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:MessageActivity.kt$package com.RobinNotBad.BiliClient.activity.message</ID>
+    <ID>PackageNaming:MessageApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:MessageCard.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:MessageSettingItem.kt$package com.RobinNotBad.BiliClient.model.message</ID>
+    <ID>PackageNaming:MessageSettingsActivity.kt$package com.RobinNotBad.BiliClient.activity.message</ID>
+    <ID>PackageNaming:MessageSettingsAdapter.kt$package com.RobinNotBad.BiliClient.adapter.message</ID>
+    <ID>PackageNaming:MsgUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:MultiPageActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:MySpaceActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:NetWorkUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:NoticeActivity.kt$package com.RobinNotBad.BiliClient.activity.message</ID>
+    <ID>PackageNaming:NoticeAdapter.kt$package com.RobinNotBad.BiliClient.adapter.message</ID>
+    <ID>PackageNaming:NoticeHolder.kt$package com.RobinNotBad.BiliClient.adapter.message</ID>
+    <ID>PackageNaming:OnItemClickListener.kt$package com.RobinNotBad.BiliClient.listener</ID>
+    <ID>PackageNaming:OnItemLongClickListener.kt$package com.RobinNotBad.BiliClient.listener</ID>
+    <ID>PackageNaming:OnLoadMoreListener.kt$package com.RobinNotBad.BiliClient.listener</ID>
+    <ID>PackageNaming:OnlineDanmakuDownloader.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:Opus.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:OpusAdapter.kt$package com.RobinNotBad.BiliClient.adapter.article</ID>
+    <ID>PackageNaming:OpusApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:OpusContentAdapter.kt$package com.RobinNotBad.BiliClient.adapter.article</ID>
+    <ID>PackageNaming:OpusInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.article</ID>
+    <ID>PackageNaming:OpusInfoFragment.kt$package com.RobinNotBad.BiliClient.activity.article</ID>
+    <ID>PackageNaming:OpusParagraph.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:PageChooseAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:PageInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:PageSelectorAdapter.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:PhotoViewpager.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:PlaybackWatchdog.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:PlayerActivity.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:PlayerApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:PlayerDanmakuController.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:PlayerDanmuClientListener.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:PlayerData.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:PopularActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:PreciousActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:PrivateMessage.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:PrivateMsgActivity.kt$package com.RobinNotBad.BiliClient.activity.message</ID>
+    <ID>PackageNaming:PrivateMsgAdapter.kt$package com.RobinNotBad.BiliClient.adapter.message</ID>
+    <ID>PackageNaming:PrivateMsgApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:PrivateMsgSession.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:PrivateMsgSessionsAdapter.kt$package com.RobinNotBad.BiliClient.adapter.message</ID>
+    <ID>PackageNaming:ProtobufParser.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:QRCodeUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:QRLoginFragment.kt$package com.RobinNotBad.BiliClient.activity.settings.login</ID>
+    <ID>PackageNaming:QualityChooseAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:QualityChooserActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:QualitySelectorAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:RadiusBackgroundSpan.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:RankingActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:RankingApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:RecentUpAdapter.kt$package com.RobinNotBad.BiliClient.adapter.dynamic</ID>
+    <ID>PackageNaming:RecommendActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:RecommendApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:RecommendLiveActivity.kt$package com.RobinNotBad.BiliClient.activity.live</ID>
+    <ID>PackageNaming:RefreshListActivity.kt$package com.RobinNotBad.BiliClient.activity.base</ID>
+    <ID>PackageNaming:RefreshListFragment.kt$package com.RobinNotBad.BiliClient.activity.base</ID>
+    <ID>PackageNaming:RefreshMainActivity.kt$package com.RobinNotBad.BiliClient.activity.base</ID>
+    <ID>PackageNaming:Reply.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ReplyAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:ReplyApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:ReplyCardHolder.kt$package com.RobinNotBad.BiliClient.adapter.message</ID>
+    <ID>PackageNaming:ReplyEvent.kt$package com.RobinNotBad.BiliClient.event</ID>
+    <ID>PackageNaming:ReplyFragment.kt$package com.RobinNotBad.BiliClient.activity.reply</ID>
+    <ID>PackageNaming:ReplyInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.reply</ID>
+    <ID>PackageNaming:Result.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:RotaryNestedScrollView.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:RotaryRecyclerView.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:RotaryScrollHelper.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:RotaryScrollView.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:ScaleGestureDetector.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:SearchActivity.kt$package com.RobinNotBad.BiliClient.activity.search</ID>
+    <ID>PackageNaming:SearchApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:SearchArticleFragment.kt$package com.RobinNotBad.BiliClient.activity.search</ID>
+    <ID>PackageNaming:SearchFragment.kt$package com.RobinNotBad.BiliClient.activity.search</ID>
+    <ID>PackageNaming:SearchHistoryAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:SearchLiveFragment.kt$package com.RobinNotBad.BiliClient.activity.search</ID>
+    <ID>PackageNaming:SearchSuggestionsAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:SearchUserFragment.kt$package com.RobinNotBad.BiliClient.activity.search</ID>
+    <ID>PackageNaming:SearchVideoFragment.kt$package com.RobinNotBad.BiliClient.activity.search</ID>
+    <ID>PackageNaming:SecretCodeReceiver.kt$package com.RobinNotBad.BiliClient.receiver</ID>
+    <ID>PackageNaming:SendDynamicActivity.kt$package com.RobinNotBad.BiliClient.activity.dynamic.send</ID>
+    <ID>PackageNaming:Series.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:SeriesApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:SeriesCardAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:SeriesInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.video.series</ID>
+    <ID>PackageNaming:SettingAppRcmdActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingLaboratoryActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingMainActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingMenuActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingPrefActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingQualityActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingRepliesActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingSection.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:SettingTerminalPlayerActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingUIActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SettingsAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:SetupUIActivity.kt$package com.RobinNotBad.BiliClient.activity.settings.setup</ID>
+    <ID>PackageNaming:SharedPreferencesUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:ShowTextActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:SnackEvent.kt$package com.RobinNotBad.BiliClient.event</ID>
+    <ID>PackageNaming:SortSettingActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:SpecialLoginActivity.kt$package com.RobinNotBad.BiliClient.activity.settings.login</ID>
+    <ID>PackageNaming:SponsorActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:Stats.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:StoryApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:StoryPlaybackController.kt$package com.RobinNotBad.BiliClient.activity.video.story</ID>
+    <ID>PackageNaming:StoryPlayerActivity.kt$package com.RobinNotBad.BiliClient.activity.video.story</ID>
+    <ID>PackageNaming:StreamPolicyManager.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:StringUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:Subtitle.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:SubtitleAdapter.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:SubtitleLink.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:TerminalContext.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:TestActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:TextClock.kt$package com.RobinNotBad.BiliClient.ui.widget</ID>
+    <ID>PackageNaming:ThemeChooseActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:ThemeUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:Timeline.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:TimelineActivity.kt$package com.RobinNotBad.BiliClient.activity.video</ID>
+    <ID>PackageNaming:TimelineAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:TimelineApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:TimestampSpannedCacheStuffer.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:ToolsUtil.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:Tutorial.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:TutorialActivity.kt$package com.RobinNotBad.BiliClient.activity</ID>
+    <ID>PackageNaming:TutorialHelper.kt$package com.RobinNotBad.BiliClient.helper</ID>
+    <ID>PackageNaming:UIPreviewActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
+    <ID>PackageNaming:UpListAdapter.kt$package com.RobinNotBad.BiliClient.adapter.user</ID>
+    <ID>PackageNaming:UpdateInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.update</ID>
+    <ID>PackageNaming:UpdateInstallActivity.kt$package com.RobinNotBad.BiliClient.activity.update</ID>
+    <ID>PackageNaming:UserArticleFragment.kt$package com.RobinNotBad.BiliClient.activity.user.info</ID>
+    <ID>PackageNaming:UserDynamicAdapter.kt$package com.RobinNotBad.BiliClient.adapter.dynamic</ID>
+    <ID>PackageNaming:UserDynamicFragment.kt$package com.RobinNotBad.BiliClient.activity.user.info</ID>
+    <ID>PackageNaming:UserInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:UserInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.user.info</ID>
+    <ID>PackageNaming:UserInfoApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:UserListAdapter.kt$package com.RobinNotBad.BiliClient.adapter.user</ID>
+    <ID>PackageNaming:UserSeriesActivity.kt$package com.RobinNotBad.BiliClient.activity.video.series</ID>
+    <ID>PackageNaming:UserVideoAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:UserVideoFragment.kt$package com.RobinNotBad.BiliClient.activity.user.info</ID>
+    <ID>PackageNaming:VideoCard.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:VideoCardAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:VideoCardHolder.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:VideoCheckAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
+    <ID>PackageNaming:VideoInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:VideoInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.video.info</ID>
+    <ID>PackageNaming:VideoInfoApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:VideoInfoFragment.kt$package com.RobinNotBad.BiliClient.activity.video.info</ID>
+    <ID>PackageNaming:VideoRcmdFragment.kt$package com.RobinNotBad.BiliClient.activity.video.info</ID>
+    <ID>PackageNaming:ViewPagerFragmentAdapter.kt$package com.RobinNotBad.BiliClient.adapter.viewpager</ID>
+    <ID>PackageNaming:ViewPagerViewAdapter.kt$package com.RobinNotBad.BiliClient.adapter.viewpager</ID>
+    <ID>PackageNaming:ViewPoint.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:ViewPointAdapter.kt$package com.RobinNotBad.BiliClient.adapter</ID>
+    <ID>PackageNaming:ViewScaleGestureListener.kt$package com.RobinNotBad.BiliClient.activity.player</ID>
+    <ID>PackageNaming:VipActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:VipApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:VipInfo.kt$package com.RobinNotBad.BiliClient.model</ID>
+    <ID>PackageNaming:WatchLaterActivity.kt$package com.RobinNotBad.BiliClient.activity.user</ID>
+    <ID>PackageNaming:WatchLaterApi.kt$package com.RobinNotBad.BiliClient.api</ID>
+    <ID>PackageNaming:WeakNetworkInterceptor.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:WifiPreloadManager.kt$package com.RobinNotBad.BiliClient.util</ID>
+    <ID>PackageNaming:WriteReplyActivity.kt$package com.RobinNotBad.BiliClient.activity.reply</ID>
+    <ID>PrintStackTrace:BangumiApi.kt$BangumiApi$e</ID>
+    <ID>PrintStackTrace:CenterThreadPool.kt$CenterThreadPool$e</ID>
+    <ID>PrintStackTrace:CookieRefreshApi.kt$CookieRefreshApi$e</ID>
+    <ID>PrintStackTrace:CopyTextActivity.kt$CopyTextActivity.&lt;no name provided&gt;$e</ID>
+    <ID>PrintStackTrace:CreativeCenterApi.kt$CreativeCenterApi$e</ID>
+    <ID>PrintStackTrace:DownloadActivity.kt$DownloadActivity$e</ID>
+    <ID>PrintStackTrace:DownloadActivity.kt$DownloadActivity.Companion$e</ID>
+    <ID>PrintStackTrace:DownloadService.kt$DownloadService.Companion$e</ID>
+    <ID>PrintStackTrace:DynamicApi.kt$DynamicApi$e</ID>
+    <ID>PrintStackTrace:ErrorCatch.kt$ErrorCatch$t</ID>
+    <ID>PrintStackTrace:FileUtil.kt$FileUtil$e</ID>
+    <ID>PrintStackTrace:ImageAutoLoadScrollListener.kt$ImageAutoLoadScrollListener$e</ID>
+    <ID>PrintStackTrace:NetWorkUtil.kt$NetWorkUtil$e</ID>
+    <ID>PrintStackTrace:PlayerActivity.kt$PlayerActivity$e</ID>
+    <ID>PrintStackTrace:PlayerApi.kt$PlayerApi$e</ID>
+    <ID>PrintStackTrace:PlayerDanmuClientListener.kt$PlayerDanmuClientListener$e</ID>
+    <ID>PrintStackTrace:QRCodeUtil.kt$QRCodeUtil$e</ID>
+    <ID>PrintStackTrace:SpecialLoginActivity.kt$SpecialLoginActivity$e</ID>
+    <ID>PrintStackTrace:StoryPlayerActivity.kt$StoryPlayerActivity$e</ID>
+    <ID>PrintStackTrace:TutorialHelper.kt$TutorialHelper$e</ID>
+    <ID>PrintStackTrace:UserInfoApi.kt$UserInfoApi$e</ID>
+    <ID>PrintStackTrace:VideoCardHolder.kt$VideoCardHolder$e</ID>
+    <ID>PrintStackTrace:VideoInfoApi.kt$VideoInfoApi$e</ID>
+    <ID>PrintStackTrace:VideoInfoFragment.kt$VideoInfoFragment$e</ID>
+    <ID>PrintStackTrace:WifiPreloadManager.kt$WifiPreloadManager$e</ID>
+    <ID>ProtectedMemberInFinalClass:ArticleCard.kt$ArticleCard$protected constructor(`in`: Parcel) { title = `in`.readString() id = `in`.readLong() cover = `in`.readString() upName = `in`.readString() view = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:ArticleInfo.kt$ArticleInfo$protected constructor(`in`: Parcel) { id = `in`.readLong() title = `in`.readString() summary = `in`.readString() banner = `in`.readString() upInfo = `in`.readParcelable(UserInfo::class.java.classLoader) ctime = `in`.readLong() stats = `in`.readParcelable(Stats::class.java.classLoader) wordCount = `in`.readInt() keywords = `in`.readString() content = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:At.kt$At$protected constructor(`in`: Parcel) { id = `in`.readLong() start = `in`.readInt() end = `in`.readInt() name = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:Collection.kt$Collection$protected constructor(`in`: Parcel) { id = `in`.readInt() title = `in`.readString() cover = `in`.readString() intro = `in`.readString() mid = `in`.readLong() sections = `in`.createTypedArrayList(Section.CREATOR) ?: ArrayList() cards = `in`.createTypedArrayList(VideoCard.CREATOR) ?: ArrayList() view = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:Collection.kt$Collection.Episode$protected constructor(`in`: Parcel) { season_id = `in`.readInt() section_id = `in`.readInt() id = `in`.readLong() aid = `in`.readLong() cid = `in`.readLong() title = `in`.readString() bvid = `in`.readString() arc = `in`.readParcelable(VideoInfo::class.java.classLoader) }</ID>
+    <ID>ProtectedMemberInFinalClass:Collection.kt$Collection.Section$protected constructor(`in`: Parcel) { season_id = `in`.readInt() id = `in`.readInt() title = `in`.readString() type = `in`.readInt() episodes = `in`.createTypedArrayList(Episode.CREATOR) ?: ArrayList() }</ID>
+    <ID>ProtectedMemberInFinalClass:Emote.kt$Emote$protected constructor(`in`: Parcel) { id = `in`.readInt() packageId = `in`.readInt() name = `in`.readString() alias = `in`.readString() url = `in`.readString() size = `in`.readInt() }</ID>
+    <ID>ProtectedMemberInFinalClass:EmotePackage.kt$EmotePackage$protected constructor(`in`: Parcel) { id = `in`.readInt() text = `in`.readString() url = `in`.readString() type = `in`.readInt() attr = `in`.readInt() size = `in`.readInt() item_id = `in`.readInt() emotes = `in`.createTypedArrayList(Emote.CREATOR) permanent = `in`.readByte() != 0.toByte() }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom$protected constructor(`in`: Parcel) { roomid = `in`.readLong() short_id = `in`.readLong() uid = `in`.readLong() title = `in`.readString() uname = `in`.readString() tags = `in`.readString() description = `in`.readString() online = `in`.readInt() attention = `in`.readInt() user_cover = `in`.readString() user_cover_flag = `in`.readInt() system_cover = `in`.readString() cover = `in`.readString() keyframe = `in`.readString() show_cover = `in`.readString() face = `in`.readString() area_parent_id = `in`.readInt() area_parent_name = `in`.readString() area_id = `in`.readInt() area_name = `in`.readString() session_id = `in`.readString() group_id = `in`.readLong() show_callback = `in`.readString() click_callback = `in`.readString() liveTime = `in`.readString() live_status = `in`.readInt() old_area_id = `in`.readInt() background = `in`.readString() is_portrait = `in`.readByte() != 0.toByte() room_silent_type = `in`.readString() room_silent_level = `in`.readInt() room_silent_second = `in`.readInt() pk_status = `in`.readInt() pk_id = `in`.readLong() battle_id = `in`.readLong() allow_change_area_time = `in`.readInt() allow_upload_cover_time = `in`.readInt() verify = `in`.readParcelable(Verify::class.java.classLoader) watched_show = `in`.readParcelable(Watched::class.java.classLoader) new_pendants = `in`.readParcelable(NewPendants::class.java.classLoader) studio_info = `in`.readParcelable(StudioInfo::class.java.classLoader) }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom.BadgeInfo$protected constructor(`in`: Parcel) { name = `in`.readString() position = `in`.readInt() value = `in`.readString() desc = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom.FrameInfo$protected constructor(`in`: Parcel) { name = `in`.readString() value = `in`.readString() position = `in`.readInt() desc = `in`.readString() area = `in`.readInt() area_old = `in`.readInt() bg_color = `in`.readString() bg_pic = `in`.readString() use_old_area = `in`.readByte() != 0.toByte() }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom.NewPendants$protected constructor(`in`: Parcel) { frame = `in`.readParcelable(FrameInfo::class.java.classLoader) mobile_frame = `in`.readParcelable(FrameInfo::class.java.classLoader) badge = `in`.readParcelable(BadgeInfo::class.java.classLoader) mobile_badge = `in`.readParcelable(BadgeInfo::class.java.classLoader) }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom.StudioInfo$protected constructor(`in`: Parcel) { status = `in`.readInt() master_list = `in`.readArrayList(Any::class.java.classLoader) }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom.Verify$protected constructor(`in`: Parcel) { role = `in`.readInt() desc = `in`.readString() type = `in`.readInt() }</ID>
+    <ID>ProtectedMemberInFinalClass:LiveRoom.kt$LiveRoom.Watched$protected constructor(`in`: Parcel) { isSwitch = `in`.readByte() != 0.toByte() num = `in`.readInt() text_small = `in`.readString() text_large = `in`.readString() icon = `in`.readString() icon_location = `in`.readInt() icon_web = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:PlayerActivity.kt$PlayerActivity$protected fun eventBusEnabled(): Boolean</ID>
+    <ID>ProtectedMemberInFinalClass:PlayerData.kt$PlayerData$protected constructor(`in`: Parcel) { title = `in`.readString() videoUrl = `in`.readString() danmakuUrl = `in`.readString() qn = `in`.readInt() qnStrList = `in`.createStringArray() qnValueList = `in`.createIntArray() aid = `in`.readLong() cid = `in`.readLong() mid = `in`.readLong() progress = `in`.readInt() type = `in`.readInt() timeStamp = `in`.readLong() pagenames = `in`.createStringArrayList() val cidsList = ArrayList&lt;Long&gt;() `in`.readList(cidsList, Long::class.java.classLoader) cids = cidsList currentPageIndex = `in`.readInt() audioUrl = `in`.readString() // dashData不序列化，下载时会重新获取 }</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var aid: Long = 0</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var count = 0</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var mid: Long = 0</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var replyAdapter: ReplyAdapter? = null</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var replyList: ArrayList&lt;Reply&gt;? = null</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var sort = 3</ID>
+    <ID>ProtectedMemberInFinalClass:ReplyFragment.kt$ReplyFragment$@JvmField protected var type = 0</ID>
+    <ID>ProtectedMemberInFinalClass:Series.kt$Series$protected constructor(`in`: Parcel) { type = `in`.readString() id = `in`.readInt() title = `in`.readString() cover = `in`.readString() intro = `in`.readString() mid = `in`.readLong() total = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:Stats.kt$Stats$protected constructor(`in`: Parcel) { view = `in`.readInt() like = `in`.readInt() reply = `in`.readInt() coin = `in`.readInt() share = `in`.readInt() danmaku = `in`.readInt() favorite = `in`.readInt() followed = `in`.readByte() != 0.toByte() liked = `in`.readByte() != 0.toByte() disliked = `in`.readByte() != 0.toByte() favoured = `in`.readByte() != 0.toByte() coined = `in`.readInt() like_disabled = `in`.readByte() != 0.toByte() coin_disabled = `in`.readByte() != 0.toByte() fav_disabled = `in`.readByte() != 0.toByte() reply_disabled = `in`.readByte() != 0.toByte() share_disabled = `in`.readByte() != 0.toByte() coin_limit = `in`.readInt() }</ID>
+    <ID>ProtectedMemberInFinalClass:Subtitle.kt$Subtitle$protected constructor(`in`: Parcel) { content = `in`.readString() from = `in`.readDouble() to = `in`.readDouble() }</ID>
+    <ID>ProtectedMemberInFinalClass:SubtitleLink.kt$SubtitleLink$protected constructor(`in`: Parcel) { id = `in`.readLong() isAI = `in`.readByte() != 0.toByte() lang = `in`.readString() url = `in`.readString() }</ID>
+    <ID>ProtectedMemberInFinalClass:UserInfo.kt$UserInfo$protected constructor(`in`: Parcel) { mid = `in`.readLong() name = `in`.readString() avatar = `in`.readString() sign = `in`.readString() fans = `in`.readInt() level = `in`.readInt() following = `in`.readInt() followed = `in`.readByte() != 0.toByte() notice = `in`.readString() official = `in`.readInt() officialDesc = `in`.readString() mtime = `in`.readLong() vip_role = `in`.readInt() vip_nickname_color = `in`.readString() current_exp = `in`.readLong() next_exp = `in`.readLong() medal_name = `in`.readString() medal_level = `in`.readInt() sys_notice = `in`.readString() live_room = `in`.readParcelable(LiveRoom::class.java.classLoader) is_senior_member = `in`.readInt() is_follow_display = `in`.readByte() != 0.toByte() }</ID>
+    <ID>ProtectedMemberInFinalClass:VideoCard.kt$VideoCard$protected constructor(`in`: Parcel) { title = `in`.readString() upName = `in`.readString() view = `in`.readString() cover = `in`.readString() type = `in`.readString() aid = `in`.readLong() bvid = `in`.readString() cid = `in`.readLong() }</ID>
+    <ID>ProtectedMemberInFinalClass:VideoInfo.kt$VideoInfo$protected constructor(`in`: Parcel) { bvid = `in`.readString() aid = `in`.readLong() title = `in`.readString() staff = `in`.createTypedArrayList(UserInfo.CREATOR) cover = `in`.readString() description = `in`.readString() duration = `in`.readString() stats = `in`.readParcelable(Stats::class.java.classLoader) timeDesc = `in`.readString() pagenames = `in`.createStringArrayList() cids = ArrayList() `in`.readList(cids!!, Long::class.java.classLoader) descAts = `in`.createTypedArrayList(At.CREATOR) upowerExclusive = `in`.readByte() != 0.toByte() argueMsg = `in`.readString() isCooperation = `in`.readByte() != 0.toByte() isSteinGate = `in`.readByte() != 0.toByte() is360 = `in`.readByte() != 0.toByte() epid = `in`.readLong() copyright = `in`.readInt() collection = `in`.readParcelable(Collection::class.java.classLoader) }</ID>
+    <ID>ProtectedMemberInFinalClass:VideoInfoActivity.kt$VideoInfoActivity$protected fun initVideoInfoView()</ID>
+    <ID>SerialVersionUIDInSerializableClass:ArticleCard.kt$ArticleCard : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:ArticleInfo.kt$ArticleInfo : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:At.kt$At : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Collection.kt$Collection : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Collection.kt$Collection$Episode : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Collection.kt$Collection$Section : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Dynamic.kt$Dynamic : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Emote.kt$Emote : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:EmotePackage.kt$EmotePackage : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$Codec : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$Format : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$P2PData : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$PlayUrl : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$ProtocolInfo : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$QnDesc : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LivePlayInfo.kt$LivePlayInfo$UrlInfo : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom$BadgeInfo : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom$FrameInfo : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom$NewPendants : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom$StudioInfo : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom$Verify : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:LiveRoom.kt$LiveRoom$Watched : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:MedalInfo.kt$MedalInfo : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Reply.kt$Reply : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Series.kt$Series : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Stats.kt$Stats : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Timeline.kt$Timeline : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Timeline.kt$Timeline$DayInfo : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:Timeline.kt$Timeline$Episode : Serializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:UserInfo.kt$UserInfo : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:VideoCard.kt$VideoCard : ParcelableSerializable</ID>
+    <ID>SerialVersionUIDInSerializableClass:VideoInfo.kt$VideoInfo : ParcelableSerializable</ID>
+    <ID>SpreadOperator:NetWorkUtil.kt$NetWorkUtil$(*cookiesStr.split("; ".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray())</ID>
+    <ID>SpreadOperator:OpusContentAdapter.kt$OpusContentAdapter$(*urls)</ID>
+    <ID>SpreadOperator:PlayerDanmuClientListener.kt$PlayerDanmuClientListener$(*decompressed)</ID>
+    <ID>SpreadOperator:PlayerDanmuClientListener.kt$PlayerDanmuClientListener$(3, 7, *obj.toString().toByteArray(StandardCharsets.UTF_8))</ID>
+    <ID>SpreadOperator:PlayerDanmuClientListener.kt$PlayerDanmuClientListener.&lt;no name provided&gt;$(1, 2, *ByteArray(0))</ID>
+    <ID>SpreadOperator:PlayerDanmuClientListener.kt$PlayerDanmuClientListener.MessageData$(*getPacket(protocolVersion, actionCode, *data))</ID>
+    <ID>SpreadOperator:QualityChooserActivity.kt$QualityChooserActivity$(*(playerData.qnStrList ?: arrayOfNulls(0)))</ID>
+    <ID>SwallowedException:AppInfoApi.kt$AppInfoApi$e: IOException</ID>
+    <ID>SwallowedException:AppInfoApi.kt$AppInfoApi$e: JSONException</ID>
+    <ID>SwallowedException:AppRcmdApi.kt$AppRcmdApi$e: IOException</ID>
+    <ID>SwallowedException:AsyncLayoutInflaterX.kt$AsyncLayoutInflaterX.BasicInflater$e: ClassNotFoundException</ID>
+    <ID>SwallowedException:BiliTerminal.kt$BiliTerminal$e: Exception</ID>
+    <ID>SwallowedException:BiliTerminal.kt$BiliTerminal.Companion$e: Exception</ID>
+    <ID>SwallowedException:CopyTextActivity.kt$CopyTextActivity$e: Exception</ID>
+    <ID>SwallowedException:DanmakuBackfiller.kt$DanmakuBackfiller$e: Exception</ID>
+    <ID>SwallowedException:DownloadService.kt$DownloadService$e: IOException</ID>
+    <ID>SwallowedException:DownloadService.kt$DownloadService$e: JSONException</ID>
+    <ID>SwallowedException:DownloadService.kt$DownloadService.Companion$e: Exception</ID>
+    <ID>SwallowedException:DynamicActivity.kt$DynamicActivity$e: Exception</ID>
+    <ID>SwallowedException:FavoriteBatchDownloadActivity.kt$FavoriteBatchDownloadActivity$e: Exception</ID>
+    <ID>SwallowedException:FollowGroupAdapter.kt$FollowGroupAdapter$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:ImageViewerActivity.kt$ImageViewerActivity$e: OutOfMemoryError</ID>
+    <ID>SwallowedException:LinkUrlUtil.kt$LinkUrlUtil$e: ActivityNotFoundException</ID>
+    <ID>SwallowedException:LinkUrlUtil.kt$LinkUrlUtil$e: IOException</ID>
+    <ID>SwallowedException:LinkUrlUtil.kt$LinkUrlUtil$e: JSONException</ID>
+    <ID>SwallowedException:LiveInfoActivity.kt$LiveInfoActivity$e: ActivityNotFoundException</ID>
+    <ID>SwallowedException:LocalPageChooseActivity.kt$LocalPageChooseActivity$e: ActivityNotFoundException</ID>
+    <ID>SwallowedException:PlayerActivity.kt$PlayerActivity$e: Exception</ID>
+    <ID>SwallowedException:PlayerActivity.kt$PlayerActivity.&lt;no name provided&gt;$e: Exception</ID>
+    <ID>SwallowedException:PlayerDanmakuController.kt$PlayerDanmakuController$e: ConcurrentModificationException</ID>
+    <ID>SwallowedException:PlayerDanmakuController.kt$PlayerDanmakuController$e: Exception</ID>
+    <ID>SwallowedException:PlayerDanmakuController.kt$PlayerDanmakuController$e: NullPointerException</ID>
+    <ID>SwallowedException:ProtobufParser.kt$ProtobufParser$e: Exception</ID>
+    <ID>SwallowedException:RecommendActivity.kt$RecommendActivity$e: JSONException</ID>
+    <ID>SwallowedException:SettingMainActivity.kt$SettingMainActivity$e: Exception</ID>
+    <ID>SwallowedException:ShowTextActivity.kt$ShowTextActivity$e: JSONException</ID>
+    <ID>SwallowedException:SpecialLoginActivity.kt$SpecialLoginActivity$e: JSONException</ID>
+    <ID>SwallowedException:StoryApi.kt$StoryApi$e: Exception</ID>
+    <ID>SwallowedException:StoryPlaybackController.kt$StoryPlaybackController$e: Exception</ID>
+    <ID>SwallowedException:StoryPlayerActivity.kt$StoryPlayerActivity$e: Exception</ID>
+    <ID>SwallowedException:ToolsUtil.kt$ToolsUtil$e: NoSuchAlgorithmException</ID>
+    <ID>SwallowedException:UserListAdapter.kt$UserListAdapter$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:WifiPreloadManager.kt$WifiPreloadManager$e: Exception</ID>
+    <ID>SwallowedException:WifiPreloadManager.kt$WifiPreloadManager$e: IOException</ID>
+    <ID>ThrowingExceptionsWithoutMessageOrCause:Result.kt$Result.Companion$NullPointerException()</ID>
+    <ID>ThrowsCount:StoryApi.kt$StoryApi$@Throws(IOException::class, JSONException::class) private fun requestPlayUrl(aid: Long, cid: Long, qn: Int, html5: Boolean, dash: Boolean): StoryPlayInfo</ID>
+    <ID>TooGenericExceptionThrown:AppInfoApi.kt$AppInfoApi$throw Exception("获取失败")</ID>
+    <ID>TooGenericExceptionThrown:AppInfoApi.kt$AppInfoApi$throw Exception("错误：" + result.getString("msg"))</ID>
+    <ID>TooGenericExceptionThrown:AppInfoApi.kt$AppInfoApi$throw Exception(result.getString("msg"))</ID>
+    <ID>TooGenericExceptionThrown:CookiesApi.kt$CookiesApi$throw RuntimeException(e)</ID>
+    <ID>TooGenericExceptionThrown:DmImgParamUtil.kt$DmImgParamUtil$throw RuntimeException(e)</ID>
+    <ID>TooGenericExceptionThrown:NetWorkUtil.kt$NetWorkUtil.FormData$throw RuntimeException(e)</ID>
+    <ID>TooGenericExceptionThrown:ReplyInfoActivity.kt$ReplyInfoActivity$throw RuntimeException(e)</ID>
+    <ID>TooGenericExceptionThrown:Result.kt$Result$throw Exception("value is null")</ID>
+    <ID>TooGenericExceptionThrown:StoryPlayerActivity.kt$StoryPlayerActivity$throw Exception("取不到 cid（aid=" + card.aid + "）")</ID>
+    <ID>TooGenericExceptionThrown:StoryPlayerActivity.kt$StoryPlayerActivity$throw Exception("缺少 cid")</ID>
+    <ID>TooGenericExceptionThrown:ToolsUtil.kt$ToolsUtil$throw RuntimeException("没有md5这个算法！")</ID>
+    <ID>TooGenericExceptionThrown:UpdateInstallActivity.kt$UpdateInstallActivity$throw RuntimeException("Mapping between ID and text is error")</ID>
+    <ID>UnusedPrivateMember:CollectionInfoActivity.kt$CollectionInfoActivity$val mid = getIntent().getLongExtra("mid", -1)</ID>
+    <ID>UnusedPrivateMember:CollectionInfoActivity.kt$CollectionInfoActivity$val season_id = getIntent().getIntExtra("season_id", -1)</ID>
+    <ID>UnusedPrivateMember:CookiesApi.kt$CookiesApi$i</ID>
+    <ID>UnusedPrivateMember:DownloadListActivity.kt$DownloadListActivity$fromOutside: Boolean</ID>
+    <ID>UnusedPrivateMember:HistoryActivity.kt$HistoryActivity$p: Int</ID>
+    <ID>UnusedPrivateMember:ListLayoutUtil.kt$ListLayoutUtil$forceSingleColumn: Boolean</ID>
+    <ID>UnusedPrivateMember:NoticeActivity.kt$NoticeActivity$i: Int</ID>
+    <ID>UnusedPrivateMember:OpusInfoActivity.kt$OpusInfoActivity$event: ReplyEvent</ID>
+    <ID>UnusedPrivateMember:PlayerActivity.kt$PlayerActivity$private fun showTimeJumpDialog()</ID>
+    <ID>UnusedPrivateMember:PlayerActivity.kt$PlayerActivity$private var danmakuSyncRunnable: Runnable? = null</ID>
+    <ID>UnusedPrivateMember:PlayerActivity.kt$PlayerActivity$val wasPlaying = isPlaying</ID>
+    <ID>UnusedPrivateMember:ReplyFragment.kt$ReplyFragment$page: Int</ID>
+    <ID>UnusedPrivateMember:SearchActivity.kt$SearchActivity$view: View</ID>
+    <ID>UnusedPrivateMember:TimelineAdapter.kt$TimelineAdapter$private val dateFormat: SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())</ID>
+    <ID>UnusedPrivateMember:WifiPreloadManager.kt$WifiPreloadManager$val localAvailable = localLen - start</ID>
+    <ID>UseRequire:DmImgParamUtil.kt$DmImgParamUtil$throw IllegalArgumentException("max must be greater than or equal to min")</ID>
+    <ID>UseRequire:InteractionVideoApi.kt$InteractionVideoApi$throw IllegalArgumentException("aid和bvid必须提供其中一个")</ID>
+    <ID>UtilityClassWithPublicConstructor:DynamicApi.kt$DynamicApi$Content</ID>
+    <ID>UtilityClassWithPublicConstructor:TerminalContext.kt$TerminalContext$InstanceHolder</ID>
+    <ID>VariableNaming:AboutActivity.kt$AboutActivity$val code_str = SpannableString("版本号\n" + getPackageManager().getPackageInfo(getPackageName(), 0).versionCode)</ID>
+    <ID>VariableNaming:AboutActivity.kt$AboutActivity$val version_str = SpannableString("版本名\n" + getPackageManager().getPackageInfo(getPackageName(), 0).versionName)</ID>
+    <ID>VariableNaming:AboutActivity.kt$AboutActivity$var eggClick_Dev = 0</ID>
+    <ID>VariableNaming:AboutActivity.kt$AboutActivity$var eggClick_authorWords = 0</ID>
+    <ID>VariableNaming:AboutActivity.kt$AboutActivity$var eggClick_toUncle = 0</ID>
+    <ID>VariableNaming:AddFavoriteActivity.kt$AddFavoriteActivity$val RESULT_ADDED = 1</ID>
+    <ID>VariableNaming:AddFavoriteActivity.kt$AddFavoriteActivity$val RESULT_DELETED = -1</ID>
+    <ID>VariableNaming:AnnouncementAdapter.kt$AnnouncementAdapter$val extra_start: Int = if (content != null) content.indexOf("&lt;extra_insert&gt;") else -1</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Episode$@JvmField var title_long: String? = null</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Info$@JvmField var area_name: String? = null</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Info$@JvmField var cover_horizontal: String? = null</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Info$@JvmField var media_id: Long = 0</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Info$@JvmField var season_id: Long = 0</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Info$@JvmField var type_name: String? = null</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Info$@JvmField var up_info: UpInfo? = null // UP主信息</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Publish$@JvmField var is_finish: Int = 0 // 完结状态 0：未完结 1：已完结</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Publish$@JvmField var is_started: Int = 0 // 是否发布 0：未发布 1：已发布</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Publish$@JvmField var pub_time: String? = null // 发布时间</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Publish$@JvmField var pub_time_show: String? = null // 发布时间文字介绍</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Season$@JvmField var media_id: Long = 0</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Season$@JvmField var season_id: Long = 0</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Season$@JvmField var season_title: String? = null</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Series$@JvmField var series_id: Long = 0</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Series$@JvmField var series_title: String? = null</ID>
+    <ID>VariableNaming:Bangumi.kt$Bangumi.Stat$@JvmField var series_follow: Int = 0 // 系列追番数</ID>
+    <ID>VariableNaming:BangumiInfoFragment.kt$BangumiInfoFragment$private var episode_choose: TextView? = null</ID>
+    <ID>VariableNaming:BangumiInfoFragment.kt$BangumiInfoFragment$private var section_choose: Button? = null</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$/** 视频卡片列表页标记（#2）：打开后可用实验室「双列模式」信息流布局 */ @JvmField var video_card_layout: Boolean = false</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$@JvmField var force_single_column: Boolean = false</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$@JvmField var old_context: Context? = null</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$@JvmField var window_height: Int = 0</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$@JvmField var window_width: Int = 0</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$val paddingH_percent = SharedPreferencesUtil.getInt("paddingH_percent", 0)</ID>
+    <ID>VariableNaming:BaseActivity.kt$BaseActivity$val paddingV_percent = SharedPreferencesUtil.getInt("paddingV_percent", 0)</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val battery_height = height - padding</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val battery_width = (width * 0.9f).toInt()</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val fill_bottom = battery_height - inside_padding</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val fill_left = padding + inside_padding</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val fill_right = ((battery_width - inside_padding) * power_percent).toInt()</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val fill_top = padding + inside_padding</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val head_bottom = head_top + head_height</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val head_height = (height * 0.4f).toInt()</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val head_right = battery_width + head_width</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val head_top = (battery_height - head_height + padding) / 2</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val head_width = (width * 0.08f).toInt()</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val inside_padding = (width * 0.08f).toInt()</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val power_percent = mPower / 100.0f</ID>
+    <ID>VariableNaming:BatteryView.kt$BatteryView$val stroke_width = (width * 0.05f).toInt()</ID>
+    <ID>VariableNaming:CatchActivity.kt$CatchActivity$val reason_view = findViewById&lt;TextView&gt;(R.id.catch_reason)</ID>
+    <ID>VariableNaming:CatchActivity.kt$CatchActivity$val stack_view = findViewById&lt;TextView&gt;(R.id.stack)</ID>
+    <ID>VariableNaming:CatchActivity.kt$CatchActivity$var reason_str: SpannableString? = null</ID>
+    <ID>VariableNaming:Collection.kt$Collection.Episode$@JvmField var season_id: Int = 0</ID>
+    <ID>VariableNaming:Collection.kt$Collection.Episode$@JvmField var section_id: Int = 0</ID>
+    <ID>VariableNaming:Collection.kt$Collection.Section$@JvmField var season_id: Int = 0</ID>
+    <ID>VariableNaming:CollectionInfoActivity.kt$CollectionInfoActivity$val from_aid = getIntent().getLongExtra("fromVideo", -1)</ID>
+    <ID>VariableNaming:CollectionInfoActivity.kt$CollectionInfoActivity$val season_id = getIntent().getIntExtra("season_id", -1)</ID>
+    <ID>VariableNaming:DialogActivity.kt$DialogActivity$val close_btn = findViewById&lt;MaterialButton&gt;(R.id.close_btn)</ID>
+    <ID>VariableNaming:DialogActivity.kt$DialogActivity$var wait_time = 0</ID>
+    <ID>VariableNaming:DownloadActivity.kt$DownloadActivity$val CompleteFileSize = file.length()</ID>
+    <ID>VariableNaming:DownloadActivity.kt$DownloadActivity$val TotalFileSize = response.body!!.contentLength()</ID>
+    <ID>VariableNaming:DownloadActivity.kt$DownloadActivity$var no_bili_headers = false</ID>
+    <ID>VariableNaming:DownloadSection.kt$DownloadSection$@JvmField var name_short: String? = null</ID>
+    <ID>VariableNaming:DownloadSection.kt$DownloadSection$@JvmField var url_cover: String? = null</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val CompleteFileSize = file.length()</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val FOREGROUND_ID = 1027</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val NOTIFICATION_CHANNEL_ID = "biliterminal_download"</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val TotalFileSize = if (segmentSize &gt; 0) segmentSize + resumeFrom else -1L</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val cover_multi = File(path_parent, "cover.png")</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val path_page = section!!.getPath()</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val path_parent = path_page.parentFile</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val path_single = section!!.getPath()</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$val section_tmp = getFirst()</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$var file_sign: File? = null</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$var url_audio: String?</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$var url_danmaku: String?</ID>
+    <ID>VariableNaming:DownloadService.kt$DownloadService$var url_video: String?</ID>
+    <ID>VariableNaming:Dynamic.kt$Dynamic$@JvmField var comment_id: Long = 0L</ID>
+    <ID>VariableNaming:Dynamic.kt$Dynamic$@JvmField var comment_type: Int = 0</ID>
+    <ID>VariableNaming:Dynamic.kt$Dynamic$@JvmField var dynamic_forward: Dynamic? = null</ID>
+    <ID>VariableNaming:Dynamic.kt$Dynamic$@JvmField var major_object: Any? = null</ID>
+    <ID>VariableNaming:Dynamic.kt$Dynamic$@JvmField var major_type: String? = null</ID>
+    <ID>VariableNaming:DynamicAdapter.kt$DynamicAdapter.WriteDynamic$val write_dynamic: MaterialButton = itemView.findViewById(R.id.write_dynamic)</ID>
+    <ID>VariableNaming:DynamicHolder.kt$DynamicHolder$@JvmField val cell_dynamic_article: View</ID>
+    <ID>VariableNaming:DynamicHolder.kt$DynamicHolder$@JvmField val cell_dynamic_image: View</ID>
+    <ID>VariableNaming:DynamicHolder.kt$DynamicHolder$@JvmField val cell_dynamic_video: View</ID>
+    <ID>VariableNaming:DynamicHolder.kt$DynamicHolder$@JvmField var cell_dynamic_child: View? = null</ID>
+    <ID>VariableNaming:DynamicHolder.kt$DynamicHolder$@JvmField var item_dynamic_delete: TextView? = null</ID>
+    <ID>VariableNaming:DynamicHolder.kt$DynamicHolder$@JvmField var item_dynamic_share: TextView? = null</ID>
+    <ID>VariableNaming:DynamicInfoActivity.kt$DynamicInfoActivity$private var seek_reply: Long = 0</ID>
+    <ID>VariableNaming:ElectricPanel.kt$ElectricPanel$@JvmField var special_day: Int = 0 // 0 作用尚不明确</ID>
+    <ID>VariableNaming:ElectricPanel.kt$ElectricPanel$@JvmField var total_count: Int = 0 // 总计充电次数</ID>
+    <ID>VariableNaming:ElectricUser.kt$ElectricUser$@JvmField var msg_hidden: Int = 0 // 0 作用尚不明确</ID>
+    <ID>VariableNaming:ElectricUser.kt$ElectricUser$@JvmField var pay_mid: Long = 0L // 充电用户mid</ID>
+    <ID>VariableNaming:ElectricUser.kt$ElectricUser$@JvmField var trend_type: Int = 0 // 0 作用尚不明确</ID>
+    <ID>VariableNaming:ElectricUser.kt$ElectricUser$@JvmField var vip_info: VipInfo? = null // 充电用户会员信息</ID>
+    <ID>VariableNaming:EmotePackage.kt$EmotePackage$@JvmField var item_id: Int = 0</ID>
+    <ID>VariableNaming:FolderChooseAdapter.kt$FolderChooseAdapter.FolderHolder$val folder_name: TextView</ID>
+    <ID>VariableNaming:ImageViewerActivity.kt$ImageViewerActivity$val time_now = System.currentTimeMillis()</ID>
+    <ID>VariableNaming:InteractionDebugAdapter.kt$InteractionDebugAdapter$val `var`: InteractionVideoData.InteractionHiddenVar = varList!!.get(position)</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$private var desc_expand = false</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$private var host_list: RecyclerView? = null</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$private var room_id: Long = 0</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$private var tags_expand = false</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$val play_url = urlInfo.host + codec.base_url + urlInfo.extra</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$val quality_list = findViewById&lt;RecyclerView&gt;(R.id.quality_list)</ID>
+    <ID>VariableNaming:LiveInfoActivity.kt$LiveInfoActivity$val up_recyclerView = findViewById&lt;RecyclerView&gt;(R.id.up_recyclerView)</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var conf_json: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var live_status: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var live_time: Long = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var official_room_id: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var official_type: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var pwd_verified: Boolean = false</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var risk_with_delay: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo$@JvmField var short_id: Long = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var accept_qn: MutableList&lt;Int&gt;? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var attr_name: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var base_url: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var codec_name: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var current_qn: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var dolby_type: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var hdr_qn: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Codec$@JvmField var url_info: MutableList&lt;UrlInfo&gt;? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Format$@JvmField var format_name: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.Format$@JvmField var master_url: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.P2PData$@JvmField var m_p2p: Boolean = false</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.P2PData$@JvmField var m_servers: MutableList&lt;String&gt;? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.P2PData$@JvmField var p2p_type: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.PlayUrl$@JvmField var dolby_qn: Int = 0</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.PlayUrl$@JvmField var g_qn_desc: MutableList&lt;QnDesc&gt;? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.PlayUrl$@JvmField var p2p_data: P2PData? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.ProtocolInfo$@JvmField var protocol_name: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.QnDesc$@JvmField var attr_desc: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.QnDesc$@JvmField var hdr_desc: String? = null</ID>
+    <ID>VariableNaming:LivePlayInfo.kt$LivePlayInfo.UrlInfo$@JvmField var stream_ttl: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var allow_change_area_time: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var allow_upload_cover_time: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var area_id: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var area_name: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var area_parent_id: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var area_parent_name: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var battle_id: Long = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var click_callback: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var group_id: Long = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var is_portrait: Boolean = false</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var live_status: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var new_pendants: NewPendants? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var old_area_id: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var pk_id: Long = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var pk_status: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var room_silent_level: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var room_silent_second: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var room_silent_type: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var session_id: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var short_id: Long = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var show_callback: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var show_cover: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var studio_info: StudioInfo? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var system_cover: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var user_cover: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var user_cover_flag: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom$@JvmField var watched_show: Watched? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.FrameInfo$@JvmField var area_old: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.FrameInfo$@JvmField var bg_color: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.FrameInfo$@JvmField var bg_pic: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.FrameInfo$@JvmField var use_old_area: Boolean = false</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.NewPendants$@JvmField var mobile_badge: BadgeInfo? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.NewPendants$@JvmField var mobile_frame: FrameInfo? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.StudioInfo$@JvmField var master_list: MutableList&lt;Any?&gt;? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.Watched$@JvmField var icon_location: Int = 0</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.Watched$@JvmField var icon_web: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.Watched$@JvmField var text_large: String? = null</ID>
+    <ID>VariableNaming:LiveRoom.kt$LiveRoom.Watched$@JvmField var text_small: String? = null</ID>
+    <ID>VariableNaming:LoginActivity.kt$LoginActivity$val from_setup = getIntent().getBooleanExtra("from_setup", false)</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var day_limit: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var guard_icon: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var guard_level: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var honor_icon: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var live_status: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var medal_color_border: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var medal_color_end: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var medal_color_start: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var medal_id: Long = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var medal_name: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var next_intimacy: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var target_icon: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var target_id: Long = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var target_name: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var today_feed: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_color: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_color_border: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_color_end: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_color_start: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_guard_icon: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_guard_level: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_honor_icon: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_id: Long = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_is_light: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_level: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_name: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_ruid: Long = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_score: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var uinfo_medal_typ: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var user_receive_count: Int = 0</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var v2_medal_color_border: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var v2_medal_color_end: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var v2_medal_color_level: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var v2_medal_color_start: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var v2_medal_color_text: String? = null</ID>
+    <ID>VariableNaming:MedalInfo.kt$MedalInfo$@JvmField var wearing_status: Int = 0</ID>
+    <ID>VariableNaming:MessageCard.kt$MessageCard.Cursor$@JvmField val is_end: Boolean</ID>
+    <ID>VariableNaming:MultiPageActivity.kt$MultiPageActivity$val cid_curr = videoInfo.cids!![position]</ID>
+    <ID>VariableNaming:MultiPageActivity.kt$MultiPageActivity$val file_sign = File(downPath, ".DOWNLOADING")</ID>
+    <ID>VariableNaming:OpusInfoActivity.kt$OpusInfoActivity$private var seek_reply: Long = 0</ID>
+    <ID>VariableNaming:PageChooseAdapter.kt$PageChooseAdapter.Holder$val folder_name: TextView = itemView.findViewById(R.id.text)</ID>
+    <ID>VariableNaming:PageInfo.kt$PageInfo$@JvmField var page_num: Int = 0</ID>
+    <ID>VariableNaming:PageInfo.kt$PageInfo$@JvmField var require_ps: Int = 0</ID>
+    <ID>VariableNaming:PageInfo.kt$PageInfo$@JvmField var return_ps: Int = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$/** 表冠控制进度时每一档前进/后退的毫秒数（#23） */ private val CROWN_SEEK_STEP_MS = 5000f</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$/** 长按倍速时显示在视频上方的半透明提示框（#7） */ private var text_speed_hint: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$/** 长按倍速的倍率（原实现固定 3.0x，提示框文案“二倍速”按此常量生成） */ private val LONG_CLICK_SPEED = 2.0f</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$@JvmField var online_number = "0"</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$@JvmField var text_audio_subtitle: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$@JvmField var text_audio_title: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$@JvmField var text_subtitle: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$@JvmField var text_title: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private val speed_strs = arrayOf("x 0.5", "x 0.75", "x 1.0", "x 1.25", "x 1.5", "x 1.75", "x 2.0", "x 3.0")</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private val speed_values = floatArrayOf(0.5F, 0.75F, 1.0F, 1.25F, 1.5F, 1.75F, 2.0F, 3.0F)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var anim_loading: AnimationDrawable? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var auto_next_enabled = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var bottom_buttons: RelativeLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_audio_only: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_auto_next: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_control: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_danmaku: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_danmaku_send: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_debug: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_loop: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_menu: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_page_selector: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_quality: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_rotate: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_subtitle: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var btn_viewpoint: ImageButton? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var card_danmaku_send: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var card_page_selector: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var card_quality_selector: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var card_subtitle: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var card_time_jump: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var card_viewpoint_selector: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var danmaku_url: String? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var gesture_click_disabled = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var gesture_moved = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var gesture_scaled = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var img_loading: ImageView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var layout_audio_only: RelativeLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var layout_card_bg: RelativeLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var layout_control: RelativeLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var layout_speed: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var layout_top: RelativeLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var layout_video: RelativeLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var loading_info: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var loading_text0: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var loading_text1: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var loop_enabled = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var menu_opened = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var progress_history: Long = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var progress_str: String? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var right_control: LinearLayout? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var right_second: HorizontalScrollView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var screen_height = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var screen_landscape = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var screen_round = false</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var screen_width = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var seekbar_progress: HighEnergyProgressBar? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var seekbar_speed: SeekBar? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var subtitle_count = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var subtitle_curr_index = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var subtitle_delta = 0f</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var subtitle_selected = -1</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var text_newspeed: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var text_online: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var text_progress: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var text_speed: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var text_volume: TextView? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var time_jump_input: EditText? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var timestamp_click: Long = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_all = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_height = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_now = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_now_last = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_origX = 0f</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_origY = 0f</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_url: String? = null</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$private var video_width = 0</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val EReport = "播放器可能遇到错误！\n错误码：$what\n附加：$extra"</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val ai_allowed = from_btn || SharedPreferencesUtil.getBoolean("player_subtitle_ai_allowed", false)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val ai_not_only = subtitleLinks!!.size &gt; 2 || (subtitleLinks!!.size == 2 &amp;&amp; !subtitleLinks!![0]!!.isAI)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val doublemove_enabled = SharedPreferencesUtil.getBoolean("player_doublemove", true)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val gesture_scaling = scaleGestureListener!!.scaling</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val height_case2 = height * screen_width / width</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val height_delta = 0.5f * video_height * (layout_video!!.getScaleY() - 1f)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val now_timestamp = System.currentTimeMillis()</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val root_layout = findViewById&lt;ViewGroup&gt;(R.id.root_layout)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val video_mul = height.toFloat() / width.toFloat()</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val video_x_max = video_origX + width_delta</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val video_x_min = video_origX - width_delta</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val video_y_max = video_origY + height_delta</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val video_y_min = video_origY - height_delta</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val width_case1 = width * screen_height / height</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$val width_delta = 0.5f * video_width * (layout_video!!.getScaleX() - 1f)</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$var need_adjust = true</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$var need_show = true</ID>
+    <ID>VariableNaming:PlayerActivity.kt$PlayerActivity$var subtitle_curr = subtitles!![subtitle_curr_index]</ID>
+    <ID>VariableNaming:PlayerDanmakuController.kt$PlayerDanmakuController$/** 命中检测外扩像素 */ private val HIT_SLOP = 6f</ID>
+    <ID>VariableNaming:PlayerDanmakuController.kt$PlayerDanmakuController$/** 时间戳标记色：B站蓝（#2） */ private val TIMESTAMP_COLOR = Color.rgb(0x40, 0xC0, 0xFF)</ID>
+    <ID>VariableNaming:PrivateMessage.kt$PrivateMessage$@JvmField var content_array: JSONArray? = JSONArray()</ID>
+    <ID>VariableNaming:PrivateMessage.kt$PrivateMessage$@JvmField var msg_source: Int = 0</ID>
+    <ID>VariableNaming:PrivateMsgActivity.kt$PrivateMsgActivity$@JvmField var layout_input: View? = null</ID>
+    <ID>VariableNaming:QRLoginFragment.kt$QRLoginFragment$val guideline_left = view.findViewById&lt;Guideline&gt;(R.id.guideline33)</ID>
+    <ID>VariableNaming:QRLoginFragment.kt$QRLoginFragment$val guideline_right = view.findViewById&lt;Guideline&gt;(R.id.guideline34)</ID>
+    <ID>VariableNaming:QRLoginFragment.kt$QRLoginFragment$var QRImage: Bitmap? = null</ID>
+    <ID>VariableNaming:QRLoginFragment.kt$QRLoginFragment$var from_setup = false</ID>
+    <ID>VariableNaming:QRLoginFragment.kt$QRLoginFragment$var need_refresh = false</ID>
+    <ID>VariableNaming:QualityChooseAdapter.kt$QualityChooseAdapter.Holder$@JvmField val folder_name: TextView = itemView.findViewById(R.id.text)</ID>
+    <ID>VariableNaming:RefreshListFragment.kt$RefreshListFragment$/** 视频卡片列表页标记（#2）：打开后可用实验室「双列模式」信息流布局 */ @JvmField var video_card_layout: Boolean = false</ID>
+    <ID>VariableNaming:RefreshListFragment.kt$RefreshListFragment$@JvmField var force_single_column = false</ID>
+    <ID>VariableNaming:Reply.kt$Reply$val `val` = jsonObject.getLong(key)</ID>
+    <ID>VariableNaming:ReplyAdapter.kt$ReplyAdapter$val name_str = SpannableStringBuilder()</ID>
+    <ID>VariableNaming:ReplyAdapter.kt$ReplyAdapter$var last_length = name_str.length</ID>
+    <ID>VariableNaming:ReplyAdapter.kt$ReplyAdapter.ReplyHolder$@JvmField val item_reply_delete: TextView = itemView.findViewById(R.id.item_reply_delete)</ID>
+    <ID>VariableNaming:ReplyAdapter.kt$ReplyAdapter.WriteReply$@JvmField val count_label: TextView = itemView.findViewById(R.id.count_label)</ID>
+    <ID>VariableNaming:ReplyAdapter.kt$ReplyAdapter.WriteReply$@JvmField val write_reply: MaterialButton = itemView.findViewById(R.id.write_reply)</ID>
+    <ID>VariableNaming:ReplyInfoActivity.kt$ReplyInfoActivity$private var up_mid: Long = 0</ID>
+    <ID>VariableNaming:SearchActivity.kt$SearchActivity$@JvmField var tutorial_show = false</ID>
+    <ID>VariableNaming:SearchActivity.kt$SearchActivity$private var animate_last: Long = 0</ID>
+    <ID>VariableNaming:SearchArticleFragment.kt$SearchArticleFragment$val size_old = this.articleCardList.size</ID>
+    <ID>VariableNaming:SearchHistoryAdapter.kt$SearchHistoryAdapter.BtnListHolder$@JvmField val text_view: TextView = itemView.findViewById(R.id.text)</ID>
+    <ID>VariableNaming:SearchLiveFragment.kt$SearchLiveFragment$val size_old = this.roomList.size</ID>
+    <ID>VariableNaming:SearchSuggestionsAdapter.kt$SearchSuggestionsAdapter.SuggestionHolder$@JvmField val text_view: TextView = itemView.findViewById(R.id.text)</ID>
+    <ID>VariableNaming:SearchUserFragment.kt$SearchUserFragment$val size_old = this.userInfoList.size</ID>
+    <ID>VariableNaming:SearchVideoFragment.kt$SearchVideoFragment$val size_old = this.videoCardList.size</ID>
+    <ID>VariableNaming:SettingMainActivity.kt$SettingMainActivity$val login_cookie = findViewById&lt;MaterialCardView&gt;(R.id.login_cookie)</ID>
+    <ID>VariableNaming:SettingMenuActivity.kt$SettingMenuActivity$private var menu_live: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:SettingMenuActivity.kt$SettingMenuActivity$private var menu_popular: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:SettingMenuActivity.kt$SettingMenuActivity$private var menu_precious: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:SettingMenuActivity.kt$SettingMenuActivity$private var menu_ranking: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:SettingMenuActivity.kt$SettingMenuActivity$private var menu_timeline: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:SettingMenuActivity.kt$SettingMenuActivity$val sort_btn = findViewById&lt;MaterialButton&gt;(R.id.sort)</ID>
+    <ID>VariableNaming:SettingUIActivity.kt$SettingUIActivity$private var density_input: EditText? = null</ID>
+    <ID>VariableNaming:ShowTextActivity.kt$ShowTextActivity$val extra_start = content.indexOf("&lt;extra_insert&gt;")</ID>
+    <ID>VariableNaming:ShowTextActivity.kt$ShowTextActivity$val title_video = videoCard.findViewById&lt;TextView&gt;(R.id.content)</ID>
+    <ID>VariableNaming:Stats.kt$Stats$@JvmField var coin_disabled: Boolean = false</ID>
+    <ID>VariableNaming:Stats.kt$Stats$@JvmField var coin_limit: Int = 0</ID>
+    <ID>VariableNaming:Stats.kt$Stats$@JvmField var fav_disabled: Boolean = false</ID>
+    <ID>VariableNaming:Stats.kt$Stats$@JvmField var like_disabled: Boolean = false</ID>
+    <ID>VariableNaming:Stats.kt$Stats$@JvmField var reply_disabled: Boolean = false</ID>
+    <ID>VariableNaming:Stats.kt$Stats$@JvmField var share_disabled: Boolean = false</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$val api_key = input_link!!.text.toString()</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$val input_json = JSONObject()</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$val input_str = input_data!!.text.toString()</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$val output_json = JSONObject()</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$val output_str = contentBuilder.toString()</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var btn_cookies: MaterialCardView? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var btn_crash: MaterialCardView? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var btn_opus: MaterialCardView? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var btn_request: MaterialCardView? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var input_data: EditText? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var input_link: EditText? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var sw_post: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:TestActivity.kt$TestActivity$var sw_wbi: SwitchMaterial? = null</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.DayInfo$@JvmField var date_ts: Long = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.DayInfo$@JvmField var day_of_week: Int = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.DayInfo$@JvmField var is_today: Int = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var delay_id: Long = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var delay_index: String? = null</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var delay_reason: String? = null</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var ep_cover: String? = null</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var episode_id: Long = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var pub_index: String? = null</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var pub_time: String? = null</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var pub_ts: Long = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var season_id: Long = 0</ID>
+    <ID>VariableNaming:Timeline.kt$Timeline.Episode$@JvmField var square_cover: String? = null</ID>
+    <ID>VariableNaming:TutorialActivity.kt$TutorialActivity$private var wait_time = 3</ID>
+    <ID>VariableNaming:TutorialActivity.kt$TutorialActivity$val close_btn = findViewById&lt;MaterialButton&gt;(R.id.close_btn)</ID>
+    <ID>VariableNaming:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$val official_signs = arrayOf("哔哩哔哩不知名UP主", "哔哩哔哩知名UP主", "哔哩哔哩大V达人", "哔哩哔哩企业认证", "哔哩哔哩组织认证", "哔哩哔哩媒体认证", "哔哩哔哩政府认证", "哔哩哔哩高能主播", "社会不知名人士", "社会知名人士")</ID>
+    <ID>VariableNaming:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$var desc_expand: Boolean = false</ID>
+    <ID>VariableNaming:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$var electric_expand: Boolean = false</ID>
+    <ID>VariableNaming:UserDynamicAdapter.kt$UserDynamicAdapter.UserInfoHolder$var notice_expand: Boolean = false</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var current_exp: Long = 0</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var is_follow_display: Boolean = false</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var is_senior_member: Int = 0</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var live_room: LiveRoom? = null</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var medal_level: Int = 0</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var medal_name: String? = ""</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var next_exp: Long = 0</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var sys_notice: String? = ""</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var vip_nickname_color: String? = ""</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$@JvmField var vip_role: Int = 0</ID>
+    <ID>VariableNaming:UserInfo.kt$UserInfo$val fans_detail = userInfoJson.getJSONObject("fans_detail")</ID>
+    <ID>VariableNaming:VideoCardHolder.kt$VideoCardHolder$val sstr_live = SpannableString("[直播]" + StringUtil.htmlToString(videoCard.title ?: ""))</ID>
+    <ID>VariableNaming:VideoCardHolder.kt$VideoCardHolder$val sstr_series = SpannableString("[系列]" + StringUtil.htmlToString(videoCard.title ?: ""))</ID>
+    <ID>VariableNaming:VideoCardHolder.kt$VideoCardHolder$val str_upName = videoCard.upName</ID>
+    <ID>VariableNaming:VideoCardHolder.kt$VideoCardHolder$val str_viewCount = videoCard.view</ID>
+    <ID>VariableNaming:VideoInfoActivity.kt$VideoInfoActivity$private var seek_reply: Long = 0</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$private var desc_expand = false</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$private var tags_expand = false</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val RESULT_ADDED = 1</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val RESULT_DELETED = -1</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val file_sign = File(downPath, ".DOWNLOADING")</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val old_len = tag_str.length</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val tag_str = SpannableStringBuilder("标签：")</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val tags_spannable = getDescSpan(VideoInfoApi.getTags(videoInfo.aid))</ID>
+    <ID>VariableNaming:VideoInfoFragment.kt$VideoInfoFragment$val up_recyclerView = rootview.findViewById(R.id.up_recyclerView) as RecyclerView</ID>
+    <ID>VariableNaming:ViewScaleGestureListener.kt$ViewScaleGestureListener$@JvmField var can_reset: Boolean = false</ID>
+    <ID>VariableNaming:WriteReplyActivity.kt$WriteReplyActivity$val toast_msg = "评论发送失败：\n" + (if (msgMap.containsKey(resultCode)) msgMap[resultCode] else resultCode)</ID>
+  </CurrentIssues>
+</SmellBaseline>

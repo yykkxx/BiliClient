@@ -1,6 +1,10 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    // 静态检查（detekt）：现有违规进 app/detekt-baseline.xml，只卡新增。
+    // 配置集中在根目录 detekt.yml，说明见 tools/quality/README.md。
+    // 注意：本插件不会挂到 check/assemble 链路，发版构建不受影响。
+    id 'io.gitlab.arturbosch.detekt'
 }
 
 int betaVer = 0 //如果为0则是正式版
@@ -29,7 +33,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
         versionCode 20261025
-        versionName "5.0.2-alpha4"
+        versionName "5.0.2-alpha5"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
@@ -98,6 +102,44 @@ android {
     }
 }
 
+// ---------------------------------------------------------------------------
+// detekt：新增违规门禁（T2）
+//   - buildUponDefaultConfig = true：官方默认规则集全开，本文件只做调参；
+//   - baseline：仓库内 app/detekt-baseline.xml 收录“当前已有的全部违规”，
+//     基线内的历史问题不再拦，只拦新增（老代码按文件接触时迁移，不做运动式重写）；
+//   - 单线程 + 不并行：设备内存紧张，构建统一走 /tmp/bili_build.sh（flock 串行 + Xmx1280m）；
+//   - 只分析 app/src/main/java，不含 build/ 产物与生成代码。
+// 手动执行：bash /tmp/bili_build.sh :app:detekt
+// ---------------------------------------------------------------------------
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(files("$rootDir/detekt.yml"))
+    baseline = file("$projectDir/detekt-baseline.xml")
+    parallel = false
+    source.setFrom(files("$projectDir/src/main/java"))
+    reports {
+        txt.required.set(false)
+        xml.required.set(false)
+        html.required.set(false)
+        sarif.required.set(false)
+        md.required.set(false)
+    }
+}
+
+tasks.withType(io.gitlab.arturbosch.detekt.Detekt).configureEach {
+    // Kotlin 编译目标是 1.8（见 android.kotlinOptions），detekt 保持一致
+    jvmTarget = '1.8'
+    // 单线程兜底：并发分析会导致本机 OOM / 抢占构建锁
+    parallel = false
+    reports {
+        txt.required.set(false)
+        xml.required.set(false)
+        html.required.set(false)
+        sarif.required.set(false)
+        md.required.set(false)
+    }
+}
+
 dependencies {
     //noinspection GradleDependency
     implementation 'com.google.zxing:core:3.3.0'
@@ -135,4 +177,9 @@ dependencies {
     implementation "com.aayushatharva.brotli4j:brotli4j:1.16.0"
     implementation 'com.google.protobuf:protobuf-javalite:3.21.12'
     implementation 'androidx.core:core-ktx:1.8.0'
+    // 协程：新代码统一用 kotlinx.coroutines（替代 runOnUiThread / 裸 Thread / Timer）。
+    // 1.6.4 是 Kotlin 1.7.x 兼容线（1.7.0+ 需要 Kotlin 1.8，不能用）；工具封装见
+    // util/CoroutineScopes.kt，规范见 tools/quality/README.md。
+    //noinspection GradleDependency
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
 }

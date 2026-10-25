@@ -20,6 +20,7 @@ package tv.danmaku.ijk.media.player;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.media.MediaDataSource;
 import android.media.MediaPlayer;
@@ -120,6 +121,33 @@ public class AndroidMediaPlayer extends AbstractMediaPlayer {
         mMediaDataSource = new MediaDataSourceProxy(mediaDataSource);
         mInternalMediaPlayer.setDataSource(mMediaDataSource);
     }
+
+    @Override
+    public int startRecord(String var1) {
+        return 0;
+    }
+
+    @Override
+    public int stopRecord() {
+        return 0;
+    }
+
+    @Override
+    public boolean getCurrentFrame(Bitmap var1) {
+        return false;
+    }
+
+    @Override
+    public void setFrameSpeed(float speed) { }
+
+    @Override
+    public void setMaxPacketNum(int num) {}
+
+    @Override
+    public void flushCache() {}
+
+    @Override
+    public void setMediaCodecFlags(int flags) {}
 
     @TargetApi(Build.VERSION_CODES.M)
     private static class MediaDataSourceProxy extends MediaDataSource {
@@ -357,7 +385,7 @@ public class AndroidMediaPlayer extends AbstractMediaPlayer {
         public final WeakReference<AndroidMediaPlayer> mWeakMediaPlayer;
 
         public AndroidMediaPlayerListenerHolder(AndroidMediaPlayer mp) {
-            mWeakMediaPlayer = new WeakReference<>(mp);
+            mWeakMediaPlayer = new WeakReference<AndroidMediaPlayer>(mp);
         }
 
         @Override

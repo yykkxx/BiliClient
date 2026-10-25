@@ -94,7 +94,7 @@ public class IjkMediaFormat implements IMediaFormat {
         }
     }
 
-    private static final Map<String, Formatter> sFormatterMap = new HashMap<>();
+    private static final Map<String, Formatter> sFormatterMap = new HashMap<String, Formatter>();
 
     {
         sFormatterMap.put(KEY_IJK_CODEC_LONG_NAME_UI, new Formatter() {

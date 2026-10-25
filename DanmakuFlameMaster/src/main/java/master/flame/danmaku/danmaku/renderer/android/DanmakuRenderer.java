@@ -19,19 +19,103 @@ package master.flame.danmaku.danmaku.renderer.android;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
 import master.flame.danmaku.danmaku.model.ICacheManager;
-import master.flame.danmaku.danmaku.model.IDanmakuIterator;
 import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.IDisplayer;
+import master.flame.danmaku.danmaku.model.IDrawingCache;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.danmaku.renderer.IRenderer;
 import master.flame.danmaku.danmaku.renderer.Renderer;
-import master.flame.danmaku.danmaku.util.SystemClock;
 
 
 public class DanmakuRenderer extends Renderer {
 
-    private final DanmakuTimer mStartTimer = new DanmakuTimer();
-    private final RenderingState mRenderingState = new RenderingState();
+    private class Consumer extends IDanmakus.DefaultConsumer<BaseDanmaku> {
+        private BaseDanmaku lastItem;
+        public IDisplayer disp;
+        public RenderingState renderingState;
+        public long startRenderTime;
+
+        @Override
+        public int accept(BaseDanmaku drawItem) {
+            lastItem = drawItem;
+            if (drawItem.isTimeOut()) {
+                disp.recycle(drawItem);
+                return renderingState.isRunningDanmakus ? ACTION_REMOVE : ACTION_CONTINUE;
+            }
+
+            if (!renderingState.isRunningDanmakus && drawItem.isOffset()) {
+                return ACTION_CONTINUE;
+            }
+
+            if (!drawItem.hasPassedFilter()) {
+                mContext.mDanmakuFilters.filter(drawItem, renderingState.indexInScreen, renderingState.totalSizeInScreen, renderingState.timer, false, mContext);
+            }
+            if (drawItem.getActualTime() < startRenderTime
+                    || (drawItem.priority == 0 && drawItem.isFiltered())) {
+                return ACTION_CONTINUE;
+            }
+
+            if (drawItem.isLate()) {
+                IDrawingCache<?> cache = drawItem.getDrawingCache();
+                if (mCacheManager != null && (cache == null || cache.get() == null)) {
+                    mCacheManager.addDanmaku(drawItem);
+                }
+                return ACTION_BREAK;
+            }
+
+            if (drawItem.getType() == BaseDanmaku.TYPE_SCROLL_RL) {
+                // 同屏弹幕密度只对滚动弹幕有效
+                renderingState.indexInScreen++;
+            }
+
+            // measure
+            if (!drawItem.isMeasured()) {
+                drawItem.measure(disp, false);
+            }
+
+            // notify prepare drawing
+            if (!drawItem.isPrepared()) {
+                drawItem.prepare(disp, false);
+            }
+
+            // layout
+            mDanmakusRetainer.fix(drawItem, disp, mVerifier);
+
+            // draw
+            if (drawItem.isShown()) {
+                if (drawItem.lines == null && drawItem.getBottom() > disp.getHeight()) {
+                    return ACTION_CONTINUE;    // skip bottom outside danmaku
+                }
+                int renderingType = drawItem.draw(disp);
+                if (renderingType == IRenderer.CACHE_RENDERING) {
+                    renderingState.cacheHitCount++;
+                } else if (renderingType == IRenderer.TEXT_RENDERING) {
+                    renderingState.cacheMissCount++;
+                    if (mCacheManager != null) {
+                        mCacheManager.addDanmaku(drawItem);
+                    }
+                }
+                renderingState.addCount(drawItem.getType(), 1);
+                renderingState.addTotalCount(1);
+                renderingState.appendToRunningDanmakus(drawItem);
+
+                if (mOnDanmakuShownListener != null
+                        && drawItem.firstShownFlag != mContext.mGlobalFlagValues.FIRST_SHOWN_RESET_FLAG) {
+                    drawItem.firstShownFlag = mContext.mGlobalFlagValues.FIRST_SHOWN_RESET_FLAG;
+                    mOnDanmakuShownListener.onDanmakuShown(drawItem);
+                }
+            }
+            return ACTION_CONTINUE;
+        }
+
+        @Override
+        public void after() {
+            renderingState.lastDanmaku = lastItem;
+            super.after();
+        }
+    }
+
+    private DanmakuTimer mStartTimer;
     private final DanmakuContext mContext;
     private DanmakusRetainer.Verifier mVerifier;
     private final DanmakusRetainer.Verifier verifier = new DanmakusRetainer.Verifier() {
@@ -47,10 +131,11 @@ public class DanmakuRenderer extends Renderer {
     private final DanmakusRetainer mDanmakusRetainer;
     private ICacheManager mCacheManager;
     private OnDanmakuShownListener mOnDanmakuShownListener;
+    private Consumer mConsumer = new Consumer();
 
     public DanmakuRenderer(DanmakuContext config) {
         mContext = config;
-        mDanmakusRetainer = new DanmakusRetainer();
+        mDanmakusRetainer = new DanmakusRetainer(config.isAlignBottom());
     }
 
     @Override
@@ -76,81 +161,12 @@ public class DanmakuRenderer extends Renderer {
     }
 
     @Override
-    public RenderingState draw(IDisplayer disp, IDanmakus danmakus, long startRenderTime) {
-        int lastTotalDanmakuCount = mRenderingState.totalDanmakuCount;
-        mRenderingState.reset();       
-        IDanmakuIterator itr = danmakus.iterator();
-        int orderInScreen = 0;        
-        mStartTimer.update(SystemClock.uptimeMillis());
-        int sizeInScreen = danmakus.size();
-        BaseDanmaku drawItem = null;
-        while (itr.hasNext()) {
-
-            drawItem = itr.next();
-
-            if (!drawItem.hasPassedFilter()) {
-                mContext.mDanmakuFilters.filter(drawItem, orderInScreen, sizeInScreen, mStartTimer, false, mContext);
-            }
-
-            if (drawItem.time < startRenderTime
-                    || (drawItem.priority == 0 && drawItem.isFiltered())) {
-                continue;
-            }
-
-            if (drawItem.isLate()) {
-                if (mCacheManager != null && !drawItem.hasDrawingCache()) {
-                    mCacheManager.addDanmaku(drawItem);
-                }
-                break;
-            }
-            
-            if (drawItem.getType() == BaseDanmaku.TYPE_SCROLL_RL){
-                // 同屏弹幕密度只对滚动弹幕有效
-                orderInScreen++;
-            }
-
-            // measure
-            if (!drawItem.isMeasured()) {
-                drawItem.measure(disp, false);
-            }
-
-            // layout
-            mDanmakusRetainer.fix(drawItem, disp, mVerifier);
-
-            // draw
-            if (!drawItem.isOutside() && drawItem.isShown()) {
-                if (drawItem.lines == null && drawItem.getBottom() > disp.getHeight()) {
-                    continue;    // skip bottom outside danmaku
-                }
-                int renderingType = drawItem.draw(disp);
-                if(renderingType == IRenderer.CACHE_RENDERING) {
-                    mRenderingState.cacheHitCount++;
-                } else if(renderingType == IRenderer.TEXT_RENDERING) {
-                    mRenderingState.cacheMissCount++;
-                    if (mCacheManager != null) {
-                        mCacheManager.addDanmaku(drawItem);
-                    }
-                }
-                mRenderingState.addCount(drawItem.getType(), 1);
-                mRenderingState.addTotalCount(1);
-
-                if (mOnDanmakuShownListener != null
-                        && drawItem.firstShownFlag != mContext.mGlobalFlagValues.FIRST_SHOWN_RESET_FLAG) {
-                    drawItem.firstShownFlag = mContext.mGlobalFlagValues.FIRST_SHOWN_RESET_FLAG;
-                    mOnDanmakuShownListener.onDanmakuShown(drawItem);
-                }
-            }
-
-        }
-        
-        mRenderingState.nothingRendered = (mRenderingState.totalDanmakuCount == 0);
-        mRenderingState.endTime = drawItem != null ? drawItem.time : RenderingState.UNKNOWN_TIME;
-        if (mRenderingState.nothingRendered) {
-            mRenderingState.beginTime = RenderingState.UNKNOWN_TIME;
-        }
-        mRenderingState.incrementCount = mRenderingState.totalDanmakuCount - lastTotalDanmakuCount;
-        mRenderingState.consumingTime = mStartTimer.update(SystemClock.uptimeMillis());
-        return mRenderingState;
+    public void draw(final IDisplayer disp, IDanmakus danmakus, long startRenderTime, final RenderingState renderingState) {
+        mStartTimer = renderingState.timer;
+        mConsumer.disp = disp;
+        mConsumer.renderingState = renderingState;
+        mConsumer.startRenderTime = startRenderTime;
+        danmakus.forEachSync(mConsumer);
     }
 
     public void setCacheManager(ICacheManager cacheManager) {
@@ -165,5 +181,11 @@ public class DanmakuRenderer extends Renderer {
     @Override
     public void removeOnDanmakuShownListener() {
         mOnDanmakuShownListener = null;
+    }
+
+    public void alignBottom(boolean enable) {
+        if (mDanmakusRetainer != null) {
+            mDanmakusRetainer.alignBottom(enable);
+        }
     }
 }

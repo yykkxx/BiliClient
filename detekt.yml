@@ -1,0 +1,82 @@
+# =============================================================================
+# BiliClient detekt 配置  —— 新增违规门禁（T2）
+#
+# 生效方式：app/build.gradle 里
+#   detekt { buildUponDefaultConfig = true; config.setFrom(files("$rootDir/detekt.yml")) }
+# 因此本文件**只需要写与默认规则集的差异**（调参 / 关闭某条规则），
+# 没写的规则一律走 detekt 1.22.0 官方默认值。
+#
+# 变更策略（用户明确不做运动式重写）：
+#   1) 现有违规**不在这里逐条豁免**，全部收进 app/detekt-baseline.xml（detektBaseline 生成）；
+#      基线里的历史问题不拦，只拦**新增**；
+#   2) 老代码按文件接触时迁移（接触到的文件里的历史违规可逐步从 baseline 减少）；
+#   3) 新增代码必须过默认规则集 —— 觉得规则本身不合理，就在这里按「规则集: 规则: 参数」覆盖，
+#      并在本文件注释里写明理由，不要往 baseline 里塞新条目。
+#
+# 相关命令（都必须走 /tmp/bili_build.sh，本机内存紧张）：
+#   bash /tmp/bili_build.sh :app:detekt           # 跑门禁（有新增违规 → FAILED）
+#   bash /tmp/bili_build.sh :app:detektBaseline   # 重新生成 baseline（慎用，会吞掉现有违规）
+#   bash /tmp/bili_build.sh :app:detektGenerateConfig  # 生成完整的默认 detekt.yml 参考
+# 分工说明（detekt vs tools/quality/check_new_code.sh）见 tools/quality/README.md
+# =============================================================================
+
+build:
+  # 有任何一条「未进 baseline」的问题就让 :app:detekt FAILED
+  # —— 这就是“只卡新增”的总开关
+  maxIssues: 0
+
+config:
+  # detekt.yml 里写错键名/失效的覆盖会报警告，便于发现悄悄失效的调参
+  validation: true
+  warningsAsErrors: false
+
+processors:
+  active: true
+
+console-reports:
+  active: true
+
+# -----------------------------------------------------------------------------
+# 规则调整（都是对历史代码风格的中和，全新代码仍受其余默认规则约束）
+# -----------------------------------------------------------------------------
+style:
+  MaxLineLength:
+    # 默认 120：本仓库中文注释与链式调用较多，放宽到 160（仍会提示）
+    maxLineLength: 160
+  MagicNumber:
+    # UI/播放器代码里数值（毫秒、尺寸、重试次数）很常见，强制抽常量噪音大、收益低
+    active: false
+  ReturnCount:
+    # 解析类函数按“命中即返回”写更清晰
+    max: 8
+  UnnecessaryAbstractClass:
+    active: false
+
+complexity:
+  LongMethod:
+    # 播放器/详情页长方法多，历史已进 baseline；阈值放宽一点，仍能拦住新增的巨型函数
+    threshold: 150
+  LongParameterList:
+    # 历史回调/构造器参数普遍多；对新增代码强制拆分收益低
+    active: false
+  TooManyFunctions:
+    # 关闭原因：本仓库 Activity/Fragment 巨型类是常态（TerminalContext/PlayerActivity 等），
+    # 且该规则的 baseline 条目对「函数个数」敏感——别人在大文件里加一个函数就会让基线失配，
+    # 变成误报（不是真正的“新增债务”）。类体积债务改由 LongMethod / ComplexMethod 兜。
+    active: false
+
+naming:
+  PackageNaming:
+    # 本仓库包名自上游起就是 com.RobinNotBad.BiliClient（含大写），是既定约定。
+    # 默认 pattern 只允许全小写，会让**每个新增 .kt 文件**都报一条（新文件没有 baseline 可依），
+    # 属于纯噪声 → 放宽为允许大写字母，保留“不能以数字开头/不能有空段”的基本约束。
+    packagePattern: '[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*'
+  FunctionNaming:
+    # 大量 @JvmStatic 的 Java 风格函数（onCreate/initView/getData…）已存在；
+    # 新增代码统一用驼峰，这里只是不因历史命名风格把整文件判黑
+    active: false
+
+exceptions:
+  TooGenericExceptionCaught:
+    # catch (e: Exception) 是本项目既有兜底风格（网络/解析层），新增代码不强制
+    active: false

@@ -16,6 +16,8 @@
 
 package master.flame.danmaku.danmaku.model;
 
+import android.util.SparseArray;
+
 public abstract class BaseDanmaku {
 
     public final static String DANMAKU_BR_CHAR = "/n";
@@ -42,7 +44,12 @@ public abstract class BaseDanmaku {
     /**
      * 显示时间(毫秒)
      */
-    public long time;
+    private long time;
+
+    /**
+     * 偏移时间
+     */
+    public long timeOffset;
 
     /**
      * 文本
@@ -55,9 +62,16 @@ public abstract class BaseDanmaku {
     public String[] lines;
 
     /**
-     * 可保存一些数据的引用
+     * 保存一些数据的引用(库内部使用, 外部使用请用tag)
      */
     public Object obj;
+
+    /**
+     * 可保存一些自定义数据的引用(外部使用).
+     * 除非主动set null,否则不会自动释放引用.
+     * 确定你会主动set null, 否则不要使用这个字段引用大内存的对象实例.
+     */
+    public Object tag;
 
     /**
      * 文本颜色
@@ -78,18 +92,11 @@ public abstract class BaseDanmaku {
      * 阴影/描边颜色
      */
     public int textShadowColor;
-    
-    /**
-     * 背景颜色
-     */
-    public int backgroundColor = 0;
-    public int backgroundRadius = 10;
-    
 
     /**
      * 下划线颜色,0表示无下划线
      */
-    public final int underlineColor = 0;
+    public int underlineColor = 0;
 
     /**
      * 字体大小
@@ -99,7 +106,17 @@ public abstract class BaseDanmaku {
     /**
      * 框的颜色,0表示无框
      */
-    public final int borderColor = 0;
+    public int borderColor = 0;
+
+    /**
+     * 背景颜色，0 表示无背景（BiliClient 本地补丁，见 SimpleTextCacheStuffer#drawBackground）
+     */
+    public int backgroundColor = 0;
+
+    /**
+     * 背景圆角半径（像素），仅 backgroundColor != 0 时生效
+     */
+    public int backgroundRadius = 10;
 
     /**
      * 内边距(像素)
@@ -147,6 +164,16 @@ public abstract class BaseDanmaku {
     public int measureResetFlag = 0;
 
     /**
+     * 重置位 offset time
+     */
+    public int syncTimeOffsetResetFlag = 0;
+
+    /**
+     * 重置位 prepare
+     */
+    public int prepareResetFlag = -1;
+
+    /**
      * 绘制用缓存
      */
     public IDrawingCache<?> cache;
@@ -164,7 +191,7 @@ public abstract class BaseDanmaku {
     /**
      * 弹幕发布者id, 0表示游客
      */
-    public final int userId = 0;
+    public int userId = 0;
 
     /**
      * 弹幕发布者id
@@ -199,6 +226,8 @@ public abstract class BaseDanmaku {
      */
     public int firstShownFlag = -1;
 
+    private SparseArray<Object> mTags = new SparseArray<>();
+
     public long getDuration() {
         return duration.value;
     }
@@ -221,8 +250,17 @@ public abstract class BaseDanmaku {
         this.measureResetFlag = flags.MEASURE_RESET_FLAG;
     }
 
-    public boolean hasDrawingCache() {
-        return cache != null && cache.get() != null;
+    public boolean isPrepared() {
+        return this.prepareResetFlag == flags.PREPARE_RESET_FLAG;
+    }
+
+    public void prepare(IDisplayer displayer, boolean fromWorkerThread) {
+        displayer.prepare(this, fromWorkerThread);
+        this.prepareResetFlag = flags.PREPARE_RESET_FLAG;
+    }
+
+    public IDrawingCache<?> getDrawingCache() {
+        return cache;
     }
 
     public boolean isShown() {
@@ -235,7 +273,7 @@ public abstract class BaseDanmaku {
     }
 
     public boolean isTimeOut(long ctime) {
-        return ctime - time >= duration.value;
+        return ctime - getActualTime() >= duration.value;
     }
 
     public boolean isOutside() {
@@ -243,12 +281,12 @@ public abstract class BaseDanmaku {
     }
 
     public boolean isOutside(long ctime) {
-        long dtime = ctime - time;
+        long dtime = ctime - getActualTime();
         return dtime <= 0 || dtime >= duration.value;
     }
 
     public boolean isLate() {
-        return mTimer == null || mTimer.currMillisecond < time;
+        return mTimer == null || mTimer.currMillisecond < getActualTime();
     }
 
     public boolean hasPassedFilter() {
@@ -307,4 +345,48 @@ public abstract class BaseDanmaku {
         return alpha;
     }
 
+    public void setTag(Object tag) {
+        this.tag = tag;
+    }
+
+    public void setTag(int key, Object tag) {
+        this.mTags.put(key, tag);
+    }
+
+    public Object getTag(int key) {
+        if (mTags == null) {
+            return null;
+        }
+        return mTags.get(key);
+    }
+
+    public void setTimeOffset(long timeOffset) {
+        this.timeOffset = timeOffset;
+        this.syncTimeOffsetResetFlag = flags.SYNC_TIME_OFFSET_RESET_FLAG;
+    }
+
+    public void setTime(long time) {
+        this.time = time;
+        this.timeOffset = 0;
+    }
+
+    public long getTime() {
+        return time;
+    }
+
+    public long getActualTime() {
+        if (flags == null || flags.SYNC_TIME_OFFSET_RESET_FLAG != this.syncTimeOffsetResetFlag) {
+            this.timeOffset = 0;
+            return time;
+        }
+        return time + timeOffset;
+    }
+
+    public boolean isOffset() {
+        if (flags == null || flags.SYNC_TIME_OFFSET_RESET_FLAG != this.syncTimeOffsetResetFlag) {
+            this.timeOffset = 0;
+            return false;
+        }
+        return timeOffset != 0;
+    }
 }
