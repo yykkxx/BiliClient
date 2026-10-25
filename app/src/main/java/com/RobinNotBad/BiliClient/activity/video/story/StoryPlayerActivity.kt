@@ -24,6 +24,7 @@ import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.api.StoryApi
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -42,6 +43,14 @@ import master.flame.danmaku.controller.IDanmakuView
  * - 补齐主播放器的常用功能：**长按倍速**、倍速菜单、清晰度切换、进度条拖动、
  *   单击显隐控制层、双击暂停、音量键、上下滑切换、自动连播、点赞/详情；
  * - 圆屏手表：顶栏/按钮/底部信息收进圆形安全区。
+ *
+ * v5.0.2-alpha7 追加（都不新增按钮，避免圆屏右侧按钮列再变长）：
+ * - **长按点赞 = 一键三连**（LikeCoinFavApi.triple：点赞 + 投币 + 收藏）；
+ * - **点 UP 名 = UP 主主页，长按 UP 名 = 关注该 UP 主**（UserInfoActivity / UserInfoApi.followUser，
+ *   mid 用 VideoInfoApi 按需解析并按 aid 缓存）；
+ * - **长按弹幕按钮 = 一键静音/取消静音**（只改 IjkMediaPlayer 音量，不动系统音量与弹幕开关）；
+ * - 下一支预取加在飞去重（原来会被「取流成功」和「开始播放」各触发一次）、
+ *   预下载目录只留最近 3 支、切清晰度/重试后弹幕时间轴跟随起播位置。
  */
 @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
 class StoryPlayerActivity : BaseActivity() {
@@ -79,6 +88,15 @@ class StoryPlayerActivity : BaseActivity() {
 
     /** 已解析过的直链缓存（索引 → 直链），切换时秒开 */
     private val playCache = HashMap<Int, StoryApi.StoryPlayInfo>()
+
+    /**
+     * 正在预取的下标。下一支视频会被「取流成功」和「开始播放」两处同时触发预取，
+     * 用这个在飞集合去重，避免同一支视频并发请求两次直链 + 下载两次（手表上很费流量和电）。
+     */
+    private val prefetchInFlight = java.util.Collections.synchronizedSet(HashSet<Int>())
+
+    /** aid → UP 主 mid 缓存（信息流卡片不带 mid，按需查一次后复用） */
+    private val upMidCache = HashMap<Long, Long>()
 
     private var currentIndex = -1
     private var currentCard: StoryApi.StoryCard? = null
@@ -170,6 +188,25 @@ class StoryPlayerActivity : BaseActivity() {
             true
         }
         likeBtn!!.setOnClickListener { likeCurrent() }
+        //长按点赞 = 一键三连（点赞 + 投币 + 收藏到默认收藏夹），复用 LikeCoinFavApi.triple
+        likeBtn?.setOnLongClickListener {
+            tripleCurrent()
+            true
+        }
+        //点 UP 名 = 看 UP 主页（复用 UserInfoActivity）；长按 UP 名 = 关注该 UP 主
+        //注意：这两个监听会让 UP 名区域自己消费触摸事件，该区域不再触发「单击显隐控制层」，
+        //其余区域的手势（单击/双击/长按 2x/上下滑）不受影响。
+        upnameView?.minHeight = ToolsUtil.dp2px(24f)
+        upnameView?.setOnClickListener { openUpSpace() }
+        upnameView?.setOnLongClickListener {
+            followCurrentUp()
+            true
+        }
+        //长按弹幕按钮 = 一键静音 / 取消静音（不改变弹幕开关）
+        danmakuBtn?.setOnLongClickListener {
+            toggleMute()
+            true
+        }
         findViewById<View>(R.id.story_btn_detail).setOnClickListener { openDetail() }
         speedBtn!!.setOnClickListener { showSpeedDialog() }
         danmakuBtn!!.setOnClickListener { toggleDanmaku() }
@@ -960,6 +997,8 @@ class StoryPlayerActivity : BaseActivity() {
                 playCache.remove(nextIndex)
             }
         }
+        //同一支视频的预取可能被两处同时触发：已经在飞就直接跳过
+        if (!prefetchInFlight.add(nextIndex)) return
         val card = storyList[nextIndex]
         CenterThreadPool.run(Runnable {
             try {
@@ -979,6 +1018,8 @@ class StoryPlayerActivity : BaseActivity() {
                 }
             } catch (e: Exception) {
                 Logu.d("story", "预取下一支失败：" + e.message)
+            } finally {
+                prefetchInFlight.remove(nextIndex)
             }
         })
     }
@@ -1032,9 +1073,18 @@ class StoryPlayerActivity : BaseActivity() {
         controller?.play(playUrl, if (local != null) HashMap() else headers, startPositionMs, hardware)
         // 播放器重建后恢复用户选择的倍速
         controller?.setSpeed(if (longPressActive) LONG_PRESS_SPEED else normalSpeed)
+        //从指定位置重新起播（切清晰度 / 失败重试）时弹幕时间轴要跟着跳，
+        //否则弹幕会停在上一次的时间点，和画面错位
+        try {
+            danmakuController?.seekTo(startPositionMs)
+        } catch (e: Exception) {
+            Logu.e("story", "弹幕时间轴同步失败：" + e.message)
+        }
 
         //播起来之后立即预取下一支（直链 + 本地预下载）
         if (currentIndex + 1 < storyList.size) preloadNext(currentIndex + 1)
+        //只留最近 3 支的预下载文件，长时间刷视频不会把缓存目录撑大
+        trimPrefetchCache()
     }
 
     private fun onPlayFailed(error: String) {
@@ -1225,6 +1275,137 @@ class StoryPlayerActivity : BaseActivity() {
         intent.putExtra("aid", card.aid)
         if (!card.bvid.isNullOrEmpty()) intent.putExtra("bvid", card.bvid)
         startActivity(intent)
+    }
+
+    // ==================== 快捷操作（不新增按钮，复用现有 API） ====================
+
+    /**
+     * 长按点赞按钮：一键三连（点赞 + 投币 + 收藏到默认收藏夹）。
+     * 复用 LikeCoinFavApi.triple（与网页端同一接口），成功后把点赞图标同步成已赞。
+     */
+    private fun tripleCurrent() {
+        val card = currentCard ?: return
+        likeBtn?.let { it.isEnabled = false }
+        CoroutineScopes.launchUi {
+            val code = try {
+                CoroutineScopes.io { com.RobinNotBad.BiliClient.api.LikeCoinFavApi.triple(card.aid) }
+            } catch (e: Exception) {
+                Logu.e("story", "一键三连失败：" + e.message)
+                -1
+            }
+            if (destroyed) return@launchUi
+            likeBtn?.let { it.isEnabled = true }
+            when {
+                code == 0 -> {
+                    liked = true
+                    likeBtn?.setImageResource(R.drawable.icon_like_1)
+                    showHint("已三连：点赞 + 投币 + 收藏")
+                }
+                code == -101 || code == -111 -> showHint("三连失败：请先登录")
+                else -> showHint("三连失败，错误码：" + code)
+            }
+        }
+    }
+
+    /** 点击 UP 名：打开 UP 主主页（Intent 参数与其它入口一致：mid） */
+    private fun openUpSpace() {
+        resolveUpMid(currentCard) { mid ->
+            if (mid <= 0) {
+                showHint("暂时拿不到 UP 主信息")
+                return@resolveUpMid
+            }
+            val intent = Intent(this, com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity::class.java)
+            intent.putExtra("mid", mid)
+            startActivity(intent)
+        }
+    }
+
+    /** 长按 UP 名：关注该 UP 主（复用 UserInfoApi.followUser，未登录先提示） */
+    private fun followCurrentUp() {
+        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
+            showHint("请先登录")
+            return
+        }
+        resolveUpMid(currentCard) { mid ->
+            if (mid <= 0) {
+                showHint("暂时拿不到 UP 主信息")
+                return@resolveUpMid
+            }
+            CoroutineScopes.launchUi {
+                val code = try {
+                    CoroutineScopes.io {
+                        com.RobinNotBad.BiliClient.api.UserInfoApi.followUser(mid, true)
+                    }
+                } catch (e: Exception) {
+                    Logu.e("story", "关注 UP 主失败：" + e.message)
+                    -1
+                }
+                if (destroyed) return@launchUi
+                showHint(if (code == 0) "已关注该 UP 主" else "关注失败，错误码：" + code)
+            }
+        }
+    }
+
+    /**
+     * 解析当前视频的 UP 主 mid。
+     * 信息流卡片不一定带 owner.mid（StoryCard 里没有该字段），所以按需用 VideoInfoApi 查一次
+     * （同 aid 结果缓存，避免重复请求）；拿不到就回调 0，由调用方提示。
+     */
+    private fun resolveUpMid(card: StoryApi.StoryCard?, onReady: (Long) -> Unit) {
+        if (card == null) {
+            onReady(0L)
+            return
+        }
+        upMidCache[card.aid]?.let { cached ->
+            onReady(cached)
+            return
+        }
+        CoroutineScopes.launchUi {
+            val mid = try {
+                CoroutineScopes.io {
+                    com.RobinNotBad.BiliClient.api.VideoInfoApi.getVideoInfo(card.aid)
+                        ?.staff?.firstOrNull()?.mid ?: 0L
+                }
+            } catch (e: Exception) {
+                Logu.e("story", "解析 UP 主 mid 失败：" + e.message)
+                0L
+            }
+            if (destroyed) return@launchUi
+            if (mid > 0) upMidCache[card.aid] = mid
+            onReady(mid)
+        }
+    }
+
+    /** 长按弹幕按钮：一键静音 / 取消静音（只改播放器音量，弹幕开关不受影响） */
+    private fun toggleMute() {
+        val c = controller ?: return
+        val muted = !c.isMuted()
+        c.setMuted(muted)
+        showHint(if (muted) "已静音（长按弹幕按钮恢复）" else "已恢复声音")
+    }
+
+    /**
+     * 预下载目录只保留最近 [keep] 支视频（当前正在播放的那支永远不删）。
+     * 旧实现只在退出页面时删整个目录，连续刷几十支后会一直堆在 cacheDir 里。
+     */
+    private fun trimPrefetchCache(keep: Int = 3) {
+        //当前正在播的本地文件可能还没被 ijk 打开（Surface 未就绪时是延迟 prepare），
+        //先把它排除掉，避免刚清完缓存就播放失败
+        val playing = currentCard?.let { localFileFor(it).absolutePath }
+        CoroutineScopes.launchIo {
+            try {
+                val files = prefetchDir().listFiles() ?: return@launchIo
+                val sorted = files.filter { it.isFile }.sortedByDescending { it.lastModified() }
+                var kept = 0
+                for (f in sorted) {
+                    if (f.absolutePath == playing) continue
+                    kept++
+                    if (kept > keep) f.delete()
+                }
+            } catch (e: Exception) {
+                Logu.d("story", "清理预下载缓存失败：" + e.message)
+            }
+        }
     }
 
     companion object {

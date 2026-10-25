@@ -1,0 +1,4 @@
+# 仅校验本目录 APK；Gitee 自动生成的源码 zip/tar.gz 不在校验范围内（每次生成可能不同）
+d30d60481369581d996ccef1682adc3534708291e1551b5504a535d07a31c254  BiliClient_v5.0.2-alpha7.apk
+5501baeef4b0e50fa245c06d9748cf39e92552500fcac15aa472555a9a275a60  com.tencent.qqmusicwatchs_20260606.apk
+ba98a0c89a64727a093ec518cfd35b4c3ff78d0442123b168f75f5e030a542d0  com.tencent.qqmusicwatchs_20260606_hidden.apk

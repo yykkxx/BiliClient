@@ -59,6 +59,15 @@ class StoryPlaybackController(
     private var pendingPlay = false
     private var prepareRetry = 0
 
+    /** 一键静音状态（长按弹幕按钮切换）：只改播放器音量，不动系统音量 */
+    private var muted = false
+
+    /** 当前是否处于缓冲中（首帧看门狗据此暂停计时，避免弱网被误判成黑屏） */
+    private var buffering = false
+
+    /** 首帧看门狗因「缓冲中」宽容的轮数：只宽容有限轮，防止弱网永远缓冲卡死 */
+    private var watchdogBufferedRounds = 0
+
     private var currentUrl: String? = null
     private var currentHeaders: HashMap<String, String> = HashMap()
     private var startPosition = 0L
@@ -90,6 +99,7 @@ class StoryPlaybackController(
         wantPlay = true
         firstFrameRendered = false
         prepared = false
+        buffering = false
         prepareRetry = 0
         //复用同一个播放器实例：每次重建 IjkMediaPlayer（native init）要几百毫秒，
         //短视频连续切换时非常明显。reset() 后重新 setDataSource 还能保留上一帧画面，
@@ -112,6 +122,8 @@ class StoryPlaybackController(
             releasePlayerInternal()
             createPlayer()
         }
+        //复用/新建播放器后都要把静音状态补回去（reset 会把音量还原成 1.0）
+        player?.let { applyVolume(it) }
         if (player != null) startPrepareWatchdog()
     }
 
@@ -163,6 +175,24 @@ class StoryPlaybackController(
     /** 目标倍速：prepare 之前设置也能生效（在 onPrepared 里补应用） */
     private var speed = 1.0f
 
+    /** 一键静音（长按弹幕按钮切换）。静音状态跨切集保留，新建/复用播放器后自动补应用 */
+    fun setMuted(value: Boolean) {
+        muted = value
+        player?.let { applyVolume(it) }
+    }
+
+    fun isMuted(): Boolean = muted
+
+    /** 把当前静音状态应用到播放器实例（新建 / 复用 / 软解重试后都要补一次） */
+    private fun applyVolume(p: IjkMediaPlayer) {
+        try {
+            val volume = if (muted) 0f else 1f
+            p.setVolume(volume, volume)
+        } catch (e: Exception) {
+            Logu.e("story", "设置音量失败：" + e.message)
+        }
+    }
+
     /** 倍速（长按倍速 / 倍速菜单共用） */
     fun setSpeed(newSpeed: Float) {
         speed = newSpeed
@@ -205,6 +235,7 @@ class StoryPlaybackController(
         }
         player = p
         applyOptions(p, hardwareCodec)
+        applyVolume(p)
 
         p.setOnPreparedListener { mp ->
             if (released) return@setOnPreparedListener
@@ -230,6 +261,7 @@ class StoryPlaybackController(
                 player?.setSpeed(speed)
             } catch (ignored: Exception) {
             }
+            player?.let { applyVolume(it) }
             if (wantPlay) {
                 try {
                     mp.start()
@@ -259,11 +291,18 @@ class StoryPlaybackController(
             when (what) {
                 IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START -> {
                     firstFrameRendered = true
+                    buffering = false
                     cancelWatchdog()
                     listener.onPlayerFirstFrame()
                 }
-                IMediaPlayer.MEDIA_INFO_BUFFERING_START -> listener.onPlayerBuffering(true)
-                IMediaPlayer.MEDIA_INFO_BUFFERING_END -> listener.onPlayerBuffering(false)
+                IMediaPlayer.MEDIA_INFO_BUFFERING_START -> {
+                    buffering = true
+                    listener.onPlayerBuffering(true)
+                }
+                IMediaPlayer.MEDIA_INFO_BUFFERING_END -> {
+                    buffering = false
+                    listener.onPlayerBuffering(false)
+                }
                 10001 /* MEDIA_INFO_VIDEO_ROTATION_CHANGED */ -> listener.onPlayerRotation(extra)
             }
             false
@@ -402,12 +441,20 @@ class StoryPlaybackController(
 
     private fun startWatchdog() {
         cancelWatchdog()
+        watchdogBufferedRounds = 0
         val task = object : Runnable {
             override fun run() {
                 if (released || firstFrameRendered || !prepared) return
                 if (!wantPlay) {
                     // 用户切到后台/暂停了，本来就不该出画面：等回来再计时，
                     // 否则会在后台被误判成"黑屏"而触发重试
+                    handler.postDelayed(this, 2000)
+                    return
+                }
+                if (buffering && watchdogBufferedRounds < MAX_BUFFERED_ROUNDS) {
+                    // 弱网正在缓冲：此时没画面是正常的，不该判黑屏去切软解打断播放。
+                    // 但只宽容 MAX_BUFFERED_ROUNDS 轮（每轮 2 秒），防止"永远缓冲"卡死。
+                    watchdogBufferedRounds++
                     handler.postDelayed(this, 2000)
                     return
                 }
@@ -508,5 +555,10 @@ class StoryPlaybackController(
             player?.setDisplay(null)
         } catch (ignored: Exception) {
         }
+    }
+
+    private companion object {
+        /** 首帧看门狗在「缓冲中」最多宽容几轮（每轮 2 秒） */
+        const val MAX_BUFFERED_ROUNDS = 5
     }
 }
