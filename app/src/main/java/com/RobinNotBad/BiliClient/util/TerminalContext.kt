@@ -43,7 +43,7 @@ import java.util.concurrent.Future
  * 本类只有 4 项职责，且**不持有任何 Activity / Context 引用**，因此不会泄漏页面：
  * 1. 转发功能的数据源：[forwardContent]；
  * 2. 详情页跳转入口：enterXxxDetailPage(...) 拼 Intent 并启动对应详情页；
- * 3. 详情页数据缓存 [contentLruCache]（容量 10）：getXxx(...) 未命中时在后台线程 fetch，
+ * 3. 详情页数据缓存 [contentLruCache]（容量 20）：getXxx(...) 未命中时在后台线程 fetch，
  *    成功后写入（key 规则见各 fetchXxx/getXxx，格式为 `typeCode + "_" + id`）；
  * 4. 详情页缓存释放：enterXxxDetailPage 把该页数据实际使用的缓存 key 压栈，
  *    详情页 onDestroy 出栈并移除缓存（见 [leaveDetailPage] 与各 leaveXxxDetailPage）。
@@ -63,7 +63,7 @@ class TerminalContext private constructor() {
     var forwardContent: Any? = null
 
     /**
-     * 详情页数据对象缓存（LruCache，容量 10，满了按 LRU 淘汰）。
+     * 详情页数据对象缓存（LruCache，容量 20，满了按 LRU 淘汰）。
      *
      * - key 格式：`typeCode + "_" + id`，具体组合见各 fetchXxx/getXxx 方法；
      * - 写入：仅当 getXxx(...) 未命中、后台 fetch 成功且 saveToCache=true（见各 fetchXxx）；
@@ -82,7 +82,9 @@ class TerminalContext private constructor() {
     private val detailPageKeysLock = Any()
 
     init {
-        contentLruCache = LruCache<String, Any>(10)
+        // 容量 20：每个视频可能同时占 aid/bvid 两个 key（见 fetchVideoInfo*），
+        // 容量过小会让缓存几乎无效；VideoInfo 对象很小，内存开销可忽略。
+        contentLruCache = LruCache<String, Any>(20)
     }
 
     // ------------------------转发功能数据源上下文 start-------------------------------
@@ -137,7 +139,7 @@ class TerminalContext private constructor() {
             videoInfo = VideoInfoApi.getVideoInfo(aid)
             if (videoInfo != null) {
                 if (saveToCache) {
-                    contentLruCache.put(ContentType.Video.getTypeCode().toString() + "_" + aid, videoInfo)
+                    cacheVideoInfo(videoInfo)
                 }
                 return Result.success(videoInfo)
             }
@@ -154,7 +156,7 @@ class TerminalContext private constructor() {
             videoInfo = VideoInfoApi.getVideoInfo(bvid!!)
             if (videoInfo != null) {
                 if (saveToCache) {
-                    contentLruCache.put(ContentType.Video.getTypeCode().toString() + "_" + videoInfo.aid, videoInfo)
+                    cacheVideoInfo(videoInfo)
                 }
                 return Result.success(videoInfo)
             }
@@ -169,6 +171,22 @@ class TerminalContext private constructor() {
             fetchVideoInfoByAid(aid, saveToCache)
         } else {
             fetchVideoInfoByBvId(bvid, saveToCache)
+        }
+    }
+
+    /**
+     * 把视频对象写入详情页缓存，**同时登记 aid 与 bvid 两个 key**（bvid 为空时只写 aid）。
+     *
+     * 为什么两个 key：getVideoInfoByAidOrBvId 的 key 选择是「aid 优先，只有 bvid 时用 Video_<bvid>」，
+     * 但用户可能先从 aid 入口进入、再从 bvid 入口进入同一个视频；只写 aid key 会让 bvid 入口永不命中。
+     * 退出详情页时 leaveVideoDetailPage(aid, bvid) 会把两个候选 key 都清掉，不会残留。
+     * 缓存容量已按「每个视频最多占 2 个 key」调整为 20。
+     */
+    private fun cacheVideoInfo(videoInfo: VideoInfo) {
+        contentLruCache.put(videoKey(videoInfo.aid), videoInfo)
+        val bvid = videoInfo.bvid
+        if (!TextUtils.isEmpty(bvid)) {
+            contentLruCache.put(videoBvKey(bvid.orEmpty()), videoInfo)
         }
     }
 
@@ -419,14 +437,19 @@ class TerminalContext private constructor() {
 
     // ---------------------------- 数据源上下文 ----------------------------------------
     fun getVideoInfoByAidOrBvId(aid: Long, bvid: String?): LiveData<Result<VideoInfo>> {
-        //注意（历史遗留，行为保持不变）：按 bvid 进入时这里读的是 `Video_<bvid>` 的 key，
-        //而 fetchVideoInfoByBvId 写入的是 `Video_<aid>` 的 key，因此 bvid 入口几乎不会命中缓存。
-        //这只影响命中率，不影响正确性；退出时 leaveVideoDetailPage 会把两个候选 key 都清掉。
+        // key 选择：aid 优先；只有 bvid 时用 Video_<bvid>。
+        // 历史 bug 已修：fetchVideoInfoByBvId 现在会同时写 aid / bvid 两个 key，bvid 入口也能命中缓存
+        // （旧实现只写 Video_<aid>，bvid 入口读 Video_<bvid> 永不命中）。
+        // aid 与 bvid 都不可用时直接返回失败结果，避免拼出 "Video_null" 这种无效 key。
         val key: String
         if (aid > 0) {
-            key = ContentType.Video.getTypeCode().toString() + "_" + aid
+            key = videoKey(aid)
+        } else if (!TextUtils.isEmpty(bvid)) {
+            key = videoBvKey(bvid.orEmpty())
         } else {
-            key = ContentType.Video.getTypeCode().toString() + "_" + bvid
+            return MutableLiveData<Result<VideoInfo>>(
+                Result.failure(IllegalTerminalStateException("video aid 与 bvid 都不可用"))
+            )
         }
         val obj = contentLruCache.get(key)
         if (obj !is VideoInfo) {
@@ -457,10 +480,10 @@ class TerminalContext private constructor() {
     }
 
     fun getOpusById(id: Long): LiveData<Result<Opus>> {
-        //注意（历史遗留，行为保持不变）：这里读的是 Dynamic 码的 key，而 fetchOpus 写入的是
-        //Opus 码的 key，所以该读取路径实际几乎不会命中、每次都会重新请求。
-        //只影响命中率，不影响正确性；退出时由 leaveDetailPage/leaveOpusDetailPage 释放 Opus key。
-        val key = ContentType.Dynamic.getTypeCode().toString() + "_" + id
+        // key 必须与 fetchOpus 写入的一致（Opus 码）。
+        // 历史 bug 已修：旧实现读的是 Dynamic 码的 key → 永不命中、每次进图文页都重新请求。
+        // 退出时由 leaveDetailPage/leaveOpusDetailPage 按同一个 Opus key 释放。
+        val key = opusKey(id)
         val obj = contentLruCache.get(key)
         if (obj !is Opus) {
             return CenterThreadPool.supplyAsyncWithLiveData { fetchOpus(id, true).getOrThrow() }
@@ -490,25 +513,6 @@ class TerminalContext private constructor() {
     }
 
 
-    fun getTerminalKey(item: Any?): String? {
-        if (item is VideoInfo) {
-            val videoInfo = item
-            if (TextUtils.isEmpty(videoInfo.bvid)) {
-                return ContentType.Video.getTypeCode().toString() + "_" + videoInfo.aid
-            } else {
-                return ContentType.Video.getTypeCode().toString() + "_" + videoInfo.bvid
-            }
-        } else if (item is ArticleInfo) {
-            return ContentType.Article.getTypeCode().toString() + "_" + item.id
-        } else if (item is Dynamic) {
-            return ContentType.Dynamic.getTypeCode().toString() + "_" + item.dynamicId
-        } else if (item is LiveInfo) {
-            return ContentType.Live.getTypeCode().toString() + "_" + item.liveRoom!!.roomid
-        } else if (item is Reply) {
-            val reply = item
-        }
-        return null
-    }
     // ------------------------- 数据源上下文 end ------------------------------------
 
 

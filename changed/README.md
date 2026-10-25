@@ -25,11 +25,17 @@ bash changed/build_flavor.sh qqmusic-hidden
 bash changed/build_flavor.sh qqmusic 20260606 "QQ音乐"
 ```
 
-产物统一输出到仓库根目录的 `releases/`：
+产物默认输出到仓库根目录的 `releases/`；**发版时请用 `FLAVOR_RELEASE_DIR` 指到版本子目录**
+（否则每次构建都会覆盖 `releases/` 根目录的历史产物，让工作区一直有未提交改动）：
+
+```bash
+FLAVOR_ENV=/data/dsh/env/env.sh FLAVOR_RELEASE_DIR=$PWD/releases/5.0.2-alpha6 \
+  bash changed/build_flavor.sh qqmusic
+```
 
 ```
-releases/com.tencent.qqmusicwatchs_20260606.apk
-releases/com.tencent.qqmusicwatchs_20260606_hidden.apk
+releases/5.0.2-alpha6/com.tencent.qqmusicwatchs_20260606.apk
+releases/5.0.2-alpha6/com.tencent.qqmusicwatchs_20260606_hidden.apk
 ```
 
 可用环境变量覆盖默认值：

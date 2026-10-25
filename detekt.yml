@@ -60,9 +60,11 @@ complexity:
     # 历史回调/构造器参数普遍多；对新增代码强制拆分收益低
     active: false
   TooManyFunctions:
-    # 关闭原因：本仓库 Activity/Fragment 巨型类是常态（TerminalContext/PlayerActivity 等），
-    # 且该规则的 baseline 条目对「函数个数」敏感——别人在大文件里加一个函数就会让基线失配，
-    # 变成误报（不是真正的“新增债务”）。类体积债务改由 LongMethod / ComplexMethod 兜。
+    # 关闭原因（与事实一致）：本仓库 Activity/Fragment 巨型类是历史常态
+    # （PlayerActivity 4005 行、TerminalContext 等），该规则会对这些文件产生大量逐条噪声，
+    # 收益低。注意：detekt 的 baseline 里当前**没有** TooManyFunctions 条目，
+    # 并不存在“加一个函数就让基线失配”的问题（旧注释写错了，已修正）。
+    # 类体积债务由 LongMethod(threshold=150) / ComplexMethod 兜底。
     active: false
 
 naming:

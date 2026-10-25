@@ -2168,8 +2168,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private val hideVolume = Runnable { text_volume!!.visibility = View.GONE }
 
     /**
-     * 软件旋屏，给某些特殊设备用的。
-     * 终端屎山又增高啦
+     * 软件旋屏：不依赖系统 onConfigurationChanged，直接读 DisplayMetrics 计算宽高。
+     * 用于部分表盘/特殊设备（orientation 传感器不触发或横竖屏判断错乱）的兜底。
      */
     private fun softwareRotate() {
         val displayMetrics = DisplayMetrics()

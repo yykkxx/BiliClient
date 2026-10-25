@@ -55,6 +55,10 @@ bash tools/quality/check_new_code.sh
 bash tools/quality/check_new_code.sh --base origin/shortvideo
 bash tools/quality/check_new_code.sh --base HEAD~3
 
+# 2b) 发版前固定用「上一个 release tag」做基线：
+#     --base HEAD 在已提交的工作区里 diff 为空 → 永远 PASS，等于没检查
+bash tools/quality/check_new_code.sh --base v5.0.2-alpha5
+
 # 3) 走 Gradle 任务（等价，参数名不同）
 ./gradlew checkNewCode                                  # base=HEAD
 ./gradlew checkNewCode -PbaseRef=origin/shortvideo

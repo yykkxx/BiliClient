@@ -12,9 +12,11 @@
 #   versionCode 可选，默认 20260606
 #   versionName 可选，默认 QQ音乐
 #
-# 产物：
-#   releases/com.tencent.qqmusicwatchs_20260606.apk
-#   releases/com.tencent.qqmusicwatchs_20260606_hidden.apk
+# 产物（建议用 FLAVOR_RELEASE_DIR 指到版本子目录，避免污染 releases/ 根目录）：
+#   FLAVOR_RELEASE_DIR=$PWD/releases/5.0.2-alpha6 bash changed/build_flavor.sh qqmusic
+#   releases/5.0.2-alpha6/com.tencent.qqmusicwatchs_20260606.apk
+#   releases/5.0.2-alpha6/com.tencent.qqmusicwatchs_20260606_hidden.apk
+#   （不指定时的历史默认值仍是 releases/ 根目录，会覆盖根目录旧产物）
 #
 # 设计原则（务必遵守，避免污染主线）：
 #   1. 不修改 app/build.gradle、AndroidManifest.xml、资源等任何被 git 跟踪的文件；
