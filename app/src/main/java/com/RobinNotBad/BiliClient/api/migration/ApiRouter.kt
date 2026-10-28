@@ -4,6 +4,7 @@ import com.RobinNotBad.BiliClient.api.AppRcmdApi
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Response
 import java.net.URLDecoder
@@ -145,10 +146,7 @@ object ApiRouter {
         val httpUrl = originalUrl.toHttpUrlOrNull() ?: return null
         val host = httpUrl.host.lowercase(Locale.ROOT)
         val path = httpUrl.encodedPath
-        val rule = ApiMigrationRules.find(host, path)
-        if (rule != null && rule.kind == ApiMigrationRules.Kind.KEEP_WEB) return null
-        // 未命中显式规则时，只对默认 APP 主机做尝试（「尽量覆盖所有 API」）
-        if (rule == null && !ApiMigrationRules.allowsDefaultAppParams(host)) return null
+        val rule = migratableRule(host, path) ?: return null
 
         val endpoint = endpointOf(host, path)
         if (isSuspended(endpoint)) {
@@ -160,17 +158,13 @@ object ApiRouter {
         // 原因见 ApiMigrationRules.Rule.isLoginRequired：匿名 APP 请求对收藏/历史/动态等
         // 可能返回 code=0 但数据为空，这种「静默空数据」无法靠回退检测兜住。
         val accessToken = AppRcmdApi.getAccessToken()
-        if (accessToken.isEmpty() && (rule == null || rule.isLoginRequired)) return null
+        if (accessToken.isEmpty() && rule.isLoginRequired) return null
 
-        val targetPath = if (rule != null && rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE) {
+        val targetPath = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE) {
             rule.targetPath ?: path
         } else path
 
-        val params = LinkedHashMap<String, String>()
-        for (name in httpUrl.queryParameterNames) {
-            if (DROPPED_PARAMS.contains(name.lowercase(Locale.ROOT))) continue
-            params[name] = httpUrl.queryParameter(name) ?: ""
-        }
+        val params = queryParams(httpUrl)
         addIdentityParams(params, accessToken)
 
         val formData = NetWorkUtil.FormData().setUrlParam(true)
@@ -180,6 +174,29 @@ object ApiRouter {
 
         val appUrl = "https://" + host + targetPath + formData.toString()
         return Plan("GET", originalUrl, appUrl, AppRcmdApi.appHeaders(), null, null, endpoint)
+    }
+
+    /**
+     * 解析该请求应使用的迁移规则。
+     *
+     * 返回 null 表示「不要走 APP 通道」；返回 [ApiMigrationRules.DEFAULT_GUEST_RULE] 表示
+     * 未命中显式规则、但该 host 允许按默认策略尝试（只对默认 APP 主机开放）。
+     */
+    private fun migratableRule(host: String, path: String): ApiMigrationRules.Rule? {
+        val rule = ApiMigrationRules.find(host, path)
+        if (rule != null && rule.kind == ApiMigrationRules.Kind.KEEP_WEB) return null
+        if (rule != null) return rule
+        return if (ApiMigrationRules.allowsDefaultAppParams(host)) ApiMigrationRules.DEFAULT_GUEST_RULE else null
+    }
+
+    /** URL query 参数（保序），剔除会让 APP 签名/语义混乱的键 */
+    private fun queryParams(httpUrl: HttpUrl): LinkedHashMap<String, String> {
+        val params = LinkedHashMap<String, String>()
+        for (name in httpUrl.queryParameterNames) {
+            if (DROPPED_PARAMS.contains(name.lowercase(Locale.ROOT))) continue
+            params[name] = httpUrl.queryParameter(name) ?: ""
+        }
+        return params
     }
 
     private fun buildPostPlan(url: String?, body: String?): Plan? {
@@ -201,10 +218,7 @@ object ApiRouter {
         if (rule.isLoginRequired && accessToken.isEmpty()) return null
 
         val params = parseFormBody(body)
-        for (name in httpUrl.queryParameterNames) {
-            if (DROPPED_PARAMS.contains(name.lowercase(Locale.ROOT))) continue
-            params[name] = httpUrl.queryParameter(name) ?: ""
-        }
+        params.putAll(queryParams(httpUrl))
         addIdentityParams(params, accessToken)
 
         val formData = NetWorkUtil.FormData().setUrlParam(false)
@@ -269,7 +283,11 @@ object ApiRouter {
         if (!response.isSuccessful) return Verdict(isOk = false, reason = "HTTP " + response.code)
         val contentType = response.header("Content-Type") ?: ""
         if (!contentType.contains("json", ignoreCase = true)) return Verdict(isOk = false, reason = "非JSON响应")
+        return classifyJsonBody(response)
+    }
 
+    /** 读取响应体并按 code 判定（与 [classify] 拆开，避免单个函数返回点过多） */
+    private fun classifyJsonBody(response: Response): Verdict {
         val text = try {
             response.peekBody(PEEK_BYTES).string()
         } catch (e: Exception) {
@@ -277,13 +295,11 @@ object ApiRouter {
         }
         val trimmed = text.trim()
         if (!trimmed.startsWith("{")) return Verdict(isOk = false, reason = "响应不是JSON对象")
-        val match = CODE_REGEX.find(trimmed) ?: return Verdict(isOk = false, reason = "响应缺少code字段")
-        val code = match.groupValues[1].toIntOrNull() ?: return Verdict(isOk = false, reason = "code解析失败")
-        if (code == 0) return Verdict(isOk = true, reason = "")
-        for (retryCode in RETRY_CODES) {
-            if (code == retryCode) return Verdict(isOk = false, reason = "code=" + code)
-        }
-        return Verdict(isOk = true, reason = "")
+        val match = CODE_REGEX.find(trimmed)
+        val code = match?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (code == null) return Verdict(isOk = false, reason = "响应缺少 code 字段")
+        val retryable = RETRY_CODES.contains(code)
+        return Verdict(isOk = !retryable, reason = if (retryable) "code=" + code else "")
     }
 
     // ==================== 统计 ====================

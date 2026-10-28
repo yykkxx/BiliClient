@@ -56,7 +56,7 @@ object ApiMigrationRules {
      * 一条映射规则。
      *
      * @param host 精确 host（小写）
-     * @param path 精确路径；`"*"` 表示该 host 全部路径；`"前缀/*"` 表示前缀匹配
+     * @param path 精确路径；`"*"` 表示该 host 全部路径；以「斜杠 + 星号」结尾表示前缀匹配（Kotlin 注释里不能直接写那个符号，会嵌套注释）
      * @param kind 迁移方式
      * @param targetPath PATH_OVERRIDE 的目标路径（host 不变）
      * @param isPostSafe POST 是否允许迁移（只有幂等写操作可置 true）
@@ -300,6 +300,17 @@ object ApiMigrationRules {
             Rule(API_HOST, "/x/v2/reply/action", Kind.APP_PARAMS, isPostSafe = true,
                     note = "评论点赞/点踩；curl 实测 -101（按 action 设置状态，幂等）")
     )
+
+    /**
+     * 未命中显式规则、但允许按默认策略尝试 APP 通道时使用的占位规则。
+     *
+     * 只会被 [com.RobinNotBad.BiliClient.api.migration.ApiRouter] 内部使用：
+     * kind=APP_PARAMS（保留原路径）、isLoginRequired=true（未登录不迁移，避免匿名空数据），
+     * host/path 用通配符只是为了语义完整，不参与匹配。
+     */
+    @JvmField
+    val DEFAULT_GUEST_RULE = Rule("*", "*", Kind.APP_PARAMS,
+            note = "默认策略：显式规则未命中时，仅默认 APP 主机按同路径 APP 参数化尝试")
 
     /**
      * 查找规则（按声明顺序，第一个命中者生效）。
