@@ -42,7 +42,7 @@ class StoryPlaybackController(
         /** 解码方式自动切换（true=硬解 false=软解），页面可提示用户 */
         fun onPlayerCodecChanged(hardware: Boolean)
         /** 视频宽高（画面按真实比例摆放，避免 ijk 拉伸变形） */
-        fun onPlayerVideoSize(width: Int, height: Int)
+        fun onPlayerVideoSize(width: Int, height: Int, sarNum: Int = 1, sarDen: Int = 1)
         /** 视频旋转角度（0/90/180/270，部分竖屏视频用旋转元数据表示） */
         fun onPlayerRotation(degrees: Int)
     }
@@ -71,6 +71,16 @@ class StoryPlaybackController(
     private var currentUrl: String? = null
     private var currentHeaders: HashMap<String, String> = HashMap()
     private var startPosition = 0L
+
+    /**
+     * 最近一次收到的视频像素宽高比（SAR），默认 1:1。
+     *
+     * v5.0.2-alpha8（bug1）：画面比例要用「显示宽高 = 像素宽高 * SAR」，
+     * 只在 onVideoSizeChanged 里拿得到；onPrepared 里补报尺寸时要带上它，
+     * 否则重 prepare 后会用 1:1 覆盖掉真实 SAR。
+     */
+    private var videoSarNum = 1
+    private var videoSarDen = 1
 
     private var watchdog: Runnable? = null
     private var prepareWatchdog: Runnable? = null
@@ -261,6 +271,22 @@ class StoryPlaybackController(
                 player?.setSpeed(speed)
             } catch (ignored: Exception) {
             }
+            // v5.0.2-alpha8（bug1）：尺寸事件（FFP_MSG_VIDEO_SIZE_CHANGED）不一定早于
+            // prepared 到达（硬解重新配置解码器时尤其容易晚），这里用 prepared 时
+            // 已知的尺寸再补报一次，保证页面在开播前就能按真实比例摆好画面，
+            // 而不是继续沿用上一支视频的 layoutParams（那正是「所有视频同一长宽比」的来源）。
+            val preparedW = try {
+                mp.videoWidth
+            } catch (e: Exception) {
+                0
+            }
+            val preparedH = try {
+                mp.videoHeight
+            } catch (e: Exception) {
+                0
+            }
+            if (preparedW > 0 && preparedH > 0)
+                listener.onPlayerVideoSize(preparedW, preparedH, videoSarNum, videoSarDen)
             player?.let { applyVolume(it) }
             if (wantPlay) {
                 try {
@@ -270,8 +296,12 @@ class StoryPlaybackController(
             }
         }
 
-        p.setOnVideoSizeChangedListener { _, width, height, _, _ ->
-            if (!released) listener.onPlayerVideoSize(width, height)
+        p.setOnVideoSizeChangedListener { _, width, height, sarNum, sarDen ->
+            if (!released) {
+                videoSarNum = if (sarNum > 0) sarNum else 1
+                videoSarDen = if (sarDen > 0) sarDen else 1
+                listener.onPlayerVideoSize(width, height, videoSarNum, videoSarDen)
+            }
         }
 
         p.setOnCompletionListener {
@@ -380,7 +410,13 @@ class StoryPlaybackController(
         //start 由 onPrepared 自己控制，否则暂停状态会被 start-on-prepared 覆盖
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 0L)
+        // v5.0.2-alpha8（bug2）：这里必须和 PlayerActivity#setDisplay 一样是 1。
+        // 旧代码注释写着「与 PlayerActivity 保持一致」，实际却写了 0 ——
+        // 关掉 SoundTouch 后，倍速（长按 2x / 倍速菜单）会让音频走「改采样率」的变速路径：
+        // 声音变调、并且听感上像某一段音频被吞掉了，正是用户反馈的「倍速音频很怪」。
+        // 打开后 ijk 用 SoundTouch 做时间伸缩（保音调），这也是一直以来主播放器的做法。
+        // 必须在 prepare 之前设置：applyOptions 在新建/复用（reset 后）时都会调一次。
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1L)

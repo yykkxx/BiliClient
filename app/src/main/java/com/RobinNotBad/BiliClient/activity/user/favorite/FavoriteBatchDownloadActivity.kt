@@ -49,6 +49,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
 
     private var mid: Long = 0
     private var folderId: Long = 0
+    private var folderMediaId: Long = 0
     private var folderName: String = ""
 
     private val videoList = ArrayList<VideoCard>()
@@ -65,6 +66,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
 
         mid = SharedPreferencesUtil.getLong("mid", 0)
         folderId = intent.getLongExtra("fid", 0)
+        folderMediaId = intent.getLongExtra("media_id", 0)
         folderName = intent.getStringExtra("name") ?: ""
 
         emptyView = findViewById(R.id.emptyTip)
@@ -167,6 +169,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
             holder.itemView.setOnClickListener {
                 val intent = android.content.Intent(activity, FavoriteBatchDownloadActivity::class.java)
                 intent.putExtra("fid", folder.id)
+                intent.putExtra("media_id", folder.mediaId)
                 intent.putExtra("name", folder.name)
                 startActivity(intent)
             }
@@ -188,7 +191,7 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
         CenterThreadPool.run(Runnable {
             var result = -1
             try {
-                result = FavoriteApi.getFolderVideos(mid, folderId, page, videoList)
+                result = FavoriteApi.getFolderVideos(mid, folderId, page, videoList, folderMediaId)
             } catch (e: Exception) {
                 CenterThreadPool.runOnUiThread(Runnable {
                     if (isDestroyed) return@Runnable

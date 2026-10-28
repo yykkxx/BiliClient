@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 收藏夹列表顶部的提示条（未登录 / 接口失败 / 没有视频收藏夹时显示），见 FavoriteFolderAdapter TYPE_NOTICE -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/text_notice"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/activity_padding_horizontal"
+    android:layout_marginVertical="@dimen/list_margin_vertical"
+    android:alpha="0.75"
+    android:gravity="center"
+    android:lineSpacingExtra="2sp"
+    android:padding="4dp"
+    android:textSize="11sp" />

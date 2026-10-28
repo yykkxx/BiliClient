@@ -233,6 +233,23 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var video_width = 0
     private var video_height = 0
 
+    /**
+     * 视频的像素宽高比（SAR，sample aspect ratio）。
+     *
+     * v5.0.2-alpha8（bug1）：画面框要按「显示」宽高算，而不是解码像素数。
+     * SAR 不是 1:1 的片源（anamorphic），像素宽高直接相除会横向压扁。
+     * ijk 通过 onVideoSizeChanged/OnVideoSizeChangedListener 把 SAR 一并带回来。
+     */
+    private var videoSarNum = 1
+    private var videoSarDen = 1
+
+    /**
+     * changeVideoSize 在 prepare 后拿不到尺寸时的延迟重试次数（v5.0.2-alpha8，bug1）。
+     * 见 changeVideoSize() 里的说明：拿不到尺寸时不能就这么放弃，
+     * 否则画面框会停在上一支视频的长宽比上。
+     */
+    private var videoSizeRetry = 0
+
     private var audioManager: AudioManager? = null
 
     private var scaleGestureDetector: ScaleGestureDetector? = null
@@ -1030,6 +1047,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 4L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
+        // v5.0.2-alpha8（bug2）：倍速变速必须打开 SoundTouch。
+        // 这里是全项目「历史正确实现」：只有 soundtouch=1 时 ijk 才会用 SoundTouch
+        // 做时间伸缩（保音调），否则变速走的是改变采样率的路径，
+        // 声音会变调、听感上像「被吞掉一部分」。短视频播放器曾经写成 0，
+        // 本轮按这里统一回 1（见 StoryPlaybackController#applyOptions）。
+        // 该选项必须在 prepare 之前设置，两个播放器都在 prepare 前设置，符合要求。
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_clear", 1L)
 
@@ -1150,7 +1173,27 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private fun MPPrepare(nowurl: String?) {
         if (destroyed || ijkPlayer == null)
             return
+        // v5.0.2-alpha8（bug1）：每个视频重新 prepare 时都要允许重新等待尺寸，
+        // 否则上一支视频把重试次数用完后，后面换源再拿不到尺寸就再也不重试了。
+        videoSizeRetry = 0
         ijkPlayer!!.setOnPreparedListener(this)
+
+        // v5.0.2-alpha8（bug1）：画面尺寸不能只在 onPrepared 里取一次。
+        // IjkMediaPlayer.getVideoWidth()/getVideoHeight() 只是 Java 层缓存
+        // （ijkplayer-java/.../IjkMediaPlayer.java:655-661），由 native 的
+        // FFP_MSG_VIDEO_SIZE_CHANGED 事件更新，reset() 时还会被清成 0（同文件 719-720）。
+        // 硬解、切清晰度、mediacodec-handle-resolution-change 重新配置解码器时，
+        // 尺寸/分辨率事件常常晚于 onPrepared 才到；本类此前**完全没有**尺寸监听，
+        // 于是画面框会一直停在上一支视频算出来的长宽比上 ——
+        // 用户看到的就是「不同长宽比的视频都被压成同一个比例」（左右或上下压缩）。
+        // 这里挂上权威尺寸回调：尺寸/SAR 一变就重算画面框。
+        ijkPlayer?.setOnVideoSizeChangedListener { _, width, height, sarNum, sarDen ->
+            if (!destroyed && width > 0 && height > 0) {
+                videoSarNum = if (sarNum > 0) sarNum else 1
+                videoSarDen = if (sarDen > 0) sarDen else 1
+                changeVideoSize()
+            }
+        }
 
         if (isLiveMode) {
             runOnUiThread { loading_text0!!.text = "载入直播中" }
@@ -1326,6 +1369,21 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
 
         changeVideoSize()
+
+        // v5.0.2-alpha8（bug2）：切清晰度 / 切P / 卡死自动恢复都会重建 IjkMediaPlayer 再 prepare，
+        // 播放速率不会跨实例保留（新实例默认 1.0x），而倍速条还停在用户选的档位上 ——
+        // 结果是 UI 显示 x2.0、实际却按 1x 播，或者声音变速状态和界面不一致。
+        // prepare 完成后按倍速条当前档位补应用一次（长按倍速是临时态，不在此恢复）。
+        val speedProgress = seekbar_speed?.progress ?: -1
+        if (speedProgress in speed_values.indices) {
+            val preparedSpeed = speed_values[speedProgress]
+            if (preparedSpeed != 1.0f) {
+                ijkPlayer?.setSpeed(preparedSpeed)
+                if (danmakuReady())
+                    danmakuController?.setSpeed(preparedSpeed)
+                Logu.v("倍速", "prepare 完成，补应用倍速 x$preparedSpeed")
+            }
+        }
 
         if ((isLiveMode || hasDanmaku()) && danmakuReady()) {
             danmakuController!!.start()
@@ -1509,34 +1567,60 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     private fun changeVideoSize() {
-        if (!isPrepared || ijkPlayer == null)
+        val player = ijkPlayer
+        if (!isPrepared || player == null)
             return
-        val width = ijkPlayer!!.getVideoWidth()
-        val height = ijkPlayer!!.getVideoHeight()
+        val width = player.getVideoWidth()
+        val height = player.getVideoHeight()
         Logu.v("screen", "$screen_width x$screen_height")
-        Logu.v("video", "$width x$height")
+        // v5.0.2-alpha8（bug1）：把 SAR 一起打出来，方便真机确认「比例算的是不是对」
+        Logu.v("video", "$width x$height (sar $videoSarNum/$videoSarDen)")
 
-        // 在听视频模式下，视频宽高可能为0，跳过尺寸调整
-        if (width == 0 || height == 0) {
-            Logu.v("视频尺寸", "视频宽高为0，跳过尺寸调整（可能处于听视频模式）")
+        if (width <= 0 || height <= 0) {
+            // v5.0.2-alpha8（bug1）：听视频模式本来就没有视频轨，宽高必为 0，直接跳过。
+            // 其它情况（硬解在 prepare 之后才上报尺寸、换源后 Java 层缓存被 reset() 清 0）
+            // 不能就此返回：返回就意味着画面框一直沿用上一支视频的尺寸，
+            // 所有视频都按同一个长宽比显示。这里做有限次延迟重试，等尺寸上报。
+            if (isAudioOnlyMode) {
+                Logu.v("视频尺寸", "视频宽高为0，跳过尺寸调整（听视频模式）")
+                return
+            }
+            if (videoSizeRetry < 5) {
+                videoSizeRetry++
+                Logu.v("视频尺寸", "尚未拿到视频尺寸，200ms 后重试（第 $videoSizeRetry 次）")
+                mainHandler?.postDelayed({
+                    if (!destroyed && isPrepared)
+                        changeVideoSize()
+                }, 200)
+            }
             return
         }
+        videoSizeRetry = 0
+
+        // v5.0.2-alpha8（bug1）：长宽比必须用「显示」宽高 —— 解码像素宽高 * SAR。
+        // 旧实现直接用像素宽高，非方形像素片源会被横向压扁；
+        // 同时把计算过程改成 Double，避免整型除法在极端分辨率下丢精度。
+        val sarNum = if (videoSarNum > 0) videoSarNum else 1
+        val sarDen = if (videoSarDen > 0) videoSarDen else 1
+        val dispW = width.toDouble() * sarNum
+        val dispH = height.toDouble() * sarDen
 
         if (SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
-            val video_mul = height.toFloat() / width.toFloat()
-            val sqrt = Math.sqrt(screen_width * screen_width / ((height * height).toDouble() / (width * width) + 1))
-            video_height = (sqrt * video_mul + 0.5).toInt()
+            //圆屏：按「圆内接矩形」等比缩放，比例只由视频自身的显示宽高决定
+            val sqrt = Math.sqrt(screen_width.toDouble() * screen_width / ((dispH * dispH) / (dispW * dispW) + 1.0))
             video_width = (sqrt + 0.5).toInt()
+            video_height = (sqrt * (dispH / dispW) + 0.5).toInt()
         } else {
-            val width_case1 = width * screen_height / height
-            val height_case2 = height * screen_width / width
+            //非圆屏：等比放进屏幕，缺的一边留黑边（宽高比始终等于视频自身）
+            val widthCase1 = (dispW * screen_height / dispH).toInt()
+            val heightCase2 = (dispH * screen_width / dispW).toInt()
 
-            if (width_case1 <= screen_width) {
-                video_width = width_case1
+            if (widthCase1 <= screen_width) {
+                video_width = widthCase1
                 video_height = screen_height
             } else {
                 video_width = screen_width
-                video_height = height_case2
+                video_height = heightCase2
             }
         }
 

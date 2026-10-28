@@ -137,6 +137,15 @@ class StoryPlayerActivity : BaseActivity() {
     private var videoW = 0
     private var videoH = 0
 
+    /**
+     * 视频像素宽高比（SAR），1/1 = 方形像素。
+     *
+     * v5.0.2-alpha8（bug1）：画面比例按「显示宽高」（像素宽高 * SAR）来算。
+     * 之前只用像素宽高，遇到 SAR 非 1:1 的片源会被横向压扁。
+     */
+    private var videoSarNum = 1
+    private var videoSarDen = 1
+
     /** 手动旋转角度（0/90/180/270） */
     private var userRotation = 0
 
@@ -470,8 +479,12 @@ class StoryPlayerActivity : BaseActivity() {
             cw = dm.widthPixels
             ch = dm.heightPixels
         }
-        var vw = videoW.toFloat()
-        var vh = videoH.toFloat()
+        // v5.0.2-alpha8（bug1）：用「显示宽高」= 像素宽高 * SAR 计算比例。
+        // 旧实现直接拿像素宽高，像素不是方形（SAR≠1:1）的片源会被横向压扁。
+        // 每个视频切换时 onPlayerVideoSize 都会重新进来算一次，
+        // 保证不同长宽比的视频各自按自己的比例摆放，不会共用同一个比例。
+        var vw = videoW.toDouble() * videoSarNum
+        var vh = videoH.toDouble() * videoSarDen
         if (userRotation == 90 || userRotation == 270) {
             val t = vw
             vw = vh
@@ -499,6 +512,9 @@ class StoryPlayerActivity : BaseActivity() {
         lp.gravity = Gravity.CENTER
         surfaceView?.layoutParams = lp
         surfaceView?.rotation = userRotation.toFloat()
+        //v5.0.2-alpha8（bug1）：真机排查用——显示宽高与最终画面框尺寸，比例对不上时一眼看出
+        Logu.d("story", "画面比例 " + videoW + "x" + videoH + " sar " + videoSarNum + "/" + videoSarDen
+                + " -> " + lp.width + "x" + lp.height + "（模式 " + fitMode + "）")
     }
 
     private fun showDisplayDialog() {
@@ -1068,6 +1084,9 @@ class StoryPlayerActivity : BaseActivity() {
         val hardware = SharedPreferencesUtil.getBoolean("player_codec", true)
         videoW = 0
         videoH = 0
+        //v5.0.2-alpha8（bug1）：换视频时把 SAR 也复位，避免上一支的 SAR 影响新视频的比例
+        videoSarNum = 1
+        videoSarDen = 1
         val playUrl = local?.absolutePath ?: info.url
         Logu.d("story", "播放源：" + (if (local != null) "本地预下载 " else "直链 ") + playUrl.take(90))
         controller?.play(playUrl, if (local != null) HashMap() else headers, startPositionMs, hardware)
@@ -1191,6 +1210,10 @@ class StoryPlayerActivity : BaseActivity() {
             failCount = 0
             switching = false
             setLoading(false)
+            //v5.0.2-alpha8（bug1）：首帧出来时再按当前尺寸摆一次画面。
+            //部分片源/硬解的尺寸事件晚于首帧，之前只会沿用上一支视频的 layoutParams，
+            //看起来就像「不同长宽比都被压成同一个比例」。
+            applyVideoLayout()
             playBtn?.setImageResource(
                 if (userPaused) R.drawable.btn_player_play else R.drawable.btn_player_pause
             )
@@ -1221,10 +1244,12 @@ class StoryPlayerActivity : BaseActivity() {
             setLoading(true, "缓冲中…")
         }
 
-        override fun onPlayerVideoSize(width: Int, height: Int) {
+        override fun onPlayerVideoSize(width: Int, height: Int, sarNum: Int, sarDen: Int) {
             if (destroyed || width <= 0 || height <= 0) return
             videoW = width
             videoH = height
+            videoSarNum = if (sarNum > 0) sarNum else 1
+            videoSarDen = if (sarDen > 0) sarDen else 1
             applyVideoLayout()
         }
 
