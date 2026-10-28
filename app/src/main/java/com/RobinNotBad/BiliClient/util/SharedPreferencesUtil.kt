@@ -25,6 +25,13 @@ object SharedPreferencesUtil {
     @JvmField
     val APP_RCMD_IDENTITY = "app_rcmd_identity"
 
+    // 全 API 迁移（实验性，默认关）：开启后 NetWorkUtil 的 bilibili 请求先尝试
+    // APP 通道（复用上面的三身份 appkey / token 槽位），失败自动回退 web 原请求。
+    // 统计与最近失败端点由 api/migration/ApiRouter 自己维护（api_migration_stat_* 等键）。
+    // 用 const 而非 @JvmField：字符串常量用 const 更准确（detekt MayBeConst），
+    // 对 Java 端同样是 public static final，可直接访问。
+    const val API_MIGRATION_ENABLED = "api_migration_enabled"
+
     // ==================== 三端独立登录（v5.0.0 重构） ====================
     // 每个身份（hd / tv / phone）各有一套独立 token，可同时登录、互不干扰；
     // 禁止跨端转移：web Cookie 不再能转换成任何端 token，三端之间也不共用。

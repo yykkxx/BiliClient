@@ -35,6 +35,18 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 Runnable {
                     startActivity(Intent(this, SettingAppRcmdActivity::class.java))
                 }))
+        //全 API 迁移（实验性，默认关）：所有 bilibili 接口先尝试 APP 通道（HD/TV/手机），
+        //失败自动回退 web；身份与登录复用上面的「移动端推荐逻辑」，不另起一套 token。
+        sectionList.add(SettingSection("switch", "全 API 迁移（实验）",
+                SharedPreferencesUtil.API_MIGRATION_ENABLED,
+                "所有接口先尝试走 APP 通道（身份/签名/登录复用移动端推荐逻辑），失败自动回退 web 原请求；" +
+                        "未登录当前身份时只迁移公共接口。默认关闭，关闭时行为与原来完全一致。",
+                "false"))
+        sectionList.add(SettingSection("click", "全 API 迁移状态", "",
+                "查看当前身份/登录、APP 命中次数、回退次数、最近失败端点，并可清空统计", "false",
+                Runnable {
+                    startActivity(Intent(this, SettingApiMigrationActivity::class.java))
+                }))
 
         sectionList.add(SettingSection("title", "可用性", "", "", ""))
         sectionList.add(SettingSection("switch", "新版弹幕获取方式", "new_danmaku_api",

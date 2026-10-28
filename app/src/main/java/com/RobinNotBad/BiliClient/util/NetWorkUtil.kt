@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.util
 
+import com.RobinNotBad.BiliClient.api.migration.ApiRouter
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -150,12 +151,55 @@ object NetWorkUtil {
     @JvmStatic
     @Throws(IOException::class)
     fun get(url: String?, headers: ArrayList<String>?, redirectHandler: RedirectHandler?): Response {
-        Logu.d("get-url", url ?: "")
+        // 全 API 迁移（实验）：开关关闭时 planGet 直接返回 null，这里保持原行为不变。
+        // 命中 APP 通道后若响应不可用（-101/-352/非 JSON/HTTP 错误等），回退 web 原请求一次。
+        val plan = ApiRouter.planGet(url)
+        if (plan != null) {
+            val appResponse = try {
+                executeGet(plan.appUrl, plan.headers, redirectHandler)
+            } catch (e: IOException) {
+                ApiRouter.recordFallback(plan, "网络异常：" + e.javaClass.simpleName)
+                null
+            } catch (e: RuntimeException) {
+                ApiRouter.recordFallback(plan, "请求异常：" + e.javaClass.simpleName)
+                null
+            }
+            if (appResponse != null) {
+                val verdict = ApiRouter.classify(appResponse)
+                if (verdict.isOk) {
+                    ApiRouter.recordHit(plan)
+                    return appResponse
+                }
+                ApiRouter.recordFallback(plan, verdict.reason)
+                appResponse.close()
+            }
+        }
+        return executeGet(url, headers, redirectHandler)
+    }
+
+    /**
+     * 日志脱敏：APP 通道会把 access_key 放在 query / body 里，
+     * 任何日志都不能打印 token / cookie（全 API 迁移的硬性要求）。
+     * 只影响 Logu 的输出，不改变真正发送的数据。
+     */
+    private fun maskSensitive(text: String): String {
+        return text.replace(SENSITIVE_PARAM_REGEX, "${'$'}1=***")
+    }
+
+    private val SENSITIVE_PARAM_REGEX =
+            Regex("(access_key|refresh_token|csrf|SESSDATA|bili_jct)=[^&]*")
+
+    /** 真正发起 GET 的原始实现（迁移层只在外面包一层，行为保持与历史版本一致） */
+    @Throws(IOException::class)
+    private fun executeGet(url: String?, headers: List<String>?, redirectHandler: RedirectHandler?): Response {
+        Logu.d("get-url", maskSensitive(url ?: ""))
+        val safeUrl = url ?: throw IOException("请求 URL 为空")
+        val headerList = headers ?: emptyList()
         val client = getOkHttpInstance()
-        val requestBuilder = Request.Builder().url(url!!).get()
+        val requestBuilder = Request.Builder().url(safeUrl).get()
         var i = 0
-        while (i < headers!!.size) {
-            requestBuilder.addHeader(headers[i], headers[i + 1])
+        while (i + 1 < headerList.size) {
+            requestBuilder.addHeader(headerList[i], headerList[i + 1])
             i += 2
         }
         if (redirectHandler != null) requestBuilder.tag(RedirectHandler::class.java, redirectHandler)
@@ -166,18 +210,50 @@ object NetWorkUtil {
     @JvmStatic
     @Throws(IOException::class)
     fun post(url: String?, data: String?, headers: List<String>?, contentType: String?): Response {
-        Logu.d("post-url", url ?: "")
-        Logu.d("post-data", data ?: "")
+        // 全 API 迁移（实验）：只迁移 ApiMigrationRules 里标记 isPostSafe 的幂等写操作，
+        // 其余写操作（投币/发评论/发动态/发私信等）保持 web，避免回退造成重复副作用。
+        val plan = ApiRouter.planPost(url, data, contentType)
+        if (plan != null) {
+            val appResponse = try {
+                executePost(plan.appUrl, plan.body, plan.headers, plan.contentType)
+            } catch (e: IOException) {
+                ApiRouter.recordFallback(plan, "网络异常：" + e.javaClass.simpleName)
+                null
+            } catch (e: RuntimeException) {
+                ApiRouter.recordFallback(plan, "请求异常：" + e.javaClass.simpleName)
+                null
+            }
+            if (appResponse != null) {
+                val verdict = ApiRouter.classify(appResponse)
+                if (verdict.isOk) {
+                    ApiRouter.recordHit(plan)
+                    return appResponse
+                }
+                ApiRouter.recordFallback(plan, verdict.reason)
+                appResponse.close()
+            }
+        }
+        return executePost(url, data, headers, contentType)
+    }
+
+    /** 真正发起 POST 的原始实现（迁移层只在外面包一层，行为保持与历史版本一致） */
+    @Throws(IOException::class)
+    private fun executePost(url: String?, data: String?, headers: List<String>?, contentType: String?): Response {
+        Logu.d("post-url", maskSensitive(url ?: ""))
+        Logu.d("post-data", maskSensitive(data ?: ""))
+        val safeUrl = url ?: throw IOException("请求 URL 为空")
+        val safeContentType = contentType ?: "application/json"
+        val headerList = headers ?: emptyList()
         val client = getOkHttpInstance()
-        val mediaType = ((contentType ?: "application/json") + "; charset=utf-8").toMediaTypeOrNull()
+        val mediaType = (safeContentType + "; charset=utf-8").toMediaTypeOrNull()
         val body = (data ?: "").toRequestBody(mediaType)
-        val requestBuilder = Request.Builder().url(url!!).post(body)
+        val requestBuilder = Request.Builder().url(safeUrl).post(body)
         var i = 0
-        while (i < headers!!.size) {
-            val key = headers[i]
-            val `val` = headers[i + 1]
-            if (key.equals("Content-Type", ignoreCase = true)) requestBuilder.addHeader(key, contentType!!)
-            else requestBuilder.addHeader(key, `val`)
+        while (i + 1 < headerList.size) {
+            val key = headerList[i]
+            val value = headerList[i + 1]
+            if (key.equals("Content-Type", ignoreCase = true)) requestBuilder.addHeader(key, safeContentType)
+            else requestBuilder.addHeader(key, value)
             i += 2
         }
         val request = requestBuilder.build()
