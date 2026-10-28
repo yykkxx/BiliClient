@@ -232,6 +232,11 @@
             android:label="移动端推荐逻辑"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.SettingApiMigrationActivity"
+            android:exported="false"
+            android:label="全 API 迁移"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.login.AppRcmdLoginActivity"
             android:exported="false"
             android:label="移动端登录"
