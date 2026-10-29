@@ -4,6 +4,7 @@ import android.os.Bundle
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
+import com.RobinNotBad.BiliClient.activity.player.PlayerAudioPolicy
 import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
@@ -59,6 +60,13 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
                 arrayOf("OpenSles", "AudioTrack")))
         sectionList.add(SettingSection("switch", "低延迟优先", "player_low_latency",
                 getString(R.string.desc_low_latency), "false"))
+        // v5.0.2-alpha10：durl（单文件混流）内嵌的音轨恒为 44kbps HE-AAC，
+        // 这是「声音沉闷」的根因；打开后改播 DASH 高音质音轨（最高 204kbps），
+        // 不可用时会自动回退原音轨，不会没声音。
+        sectionList.add(SettingSection("switch", "高音质音轨（DASH）",
+                PlayerAudioPolicy.PREF_DASH_AUDIO,
+                "在线视频改用 DASH 高音质音轨播放（durl 内嵌音轨只有 44kbps）。不可用时自动回退，默认开启。",
+                "true"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 

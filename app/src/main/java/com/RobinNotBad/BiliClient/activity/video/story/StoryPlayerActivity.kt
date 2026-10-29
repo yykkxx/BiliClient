@@ -21,6 +21,7 @@ import androidx.appcompat.app.AlertDialog
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
+import com.RobinNotBad.BiliClient.activity.player.PlayerAudioPolicy
 import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.api.StoryApi
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -1434,8 +1435,10 @@ class StoryPlayerActivity : BaseActivity() {
     }
 
     companion object {
-        private val SPEED_VALUES = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 3.0f)
-        private val SPEED_LABELS = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "1.75x", "2.0x", "3.0x")
+        // v5.0.2-alpha10：倍速档位/文案改为与主播放器共用 PlayerAudioPolicy 里的同一份，
+        // 上限 2.0（3.0x 超出 SoundTouch 稳定区间，倍速时会成段吞掉音节）。
+        private val SPEED_VALUES: FloatArray = PlayerAudioPolicy.SPEED_VALUES
+        private val SPEED_LABELS: Array<String> = PlayerAudioPolicy.SPEED_LABELS
         // 6 = 最低（服务端会回落到该视频支持的最低档，手表上够用且最省流）
         private val QUALITY_VALUES = intArrayOf(6, 16, 32, 64, 80)
         private val QUALITY_LABELS = arrayOf("最低", "360P", "480P", "720P", "1080P")

@@ -16,7 +16,6 @@ import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
 
 //关注列表
 //2023-08-29
@@ -50,7 +49,7 @@ open class UserListAdapter(val context: Context, private val userList: List<User
             Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(user.avatar!!))
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(R.mipmap.akari)
-                .apply(RequestOptions.circleCropTransform())
+                .apply(GlideUtil.circleOptions())
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .into(holder.avatar)
             holder.avatar.visibility = View.VISIBLE

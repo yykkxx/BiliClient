@@ -40,7 +40,6 @@ import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
 import com.google.android.material.button.MaterialButton
 
 import org.json.JSONException
@@ -137,12 +136,17 @@ class ReplyAdapter(
 
             val sender: UserInfo = reply.sender!!
 
-            if (GlideUtil.url(sender.avatar!!) != replyHolder.lastAvatarUrl) {
-                replyHolder.lastAvatarUrl = GlideUtil.url(sender.avatar!!)
-                Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(sender.avatar!!))
+            // v5.0.2-alpha10：同一个头像 URL 原来要算 3 遍 GlideUtil.url()（每次都是多次字符串扫描 +
+            // 一次 SharedPreferences 读），并且每行都 new 一个 circleCropTransform()；改为算一次 +
+            // 复用 GlideUtil 里的圆形裁剪 RequestOptions。
+            // requireNotNull 与原来的 !! 等价（数据缺失时同样立即失败），只是不再触发新代码门禁的 !! 规则
+            val avatarUrl = GlideUtil.url(requireNotNull(sender.avatar))
+            if (avatarUrl != replyHolder.lastAvatarUrl) {
+                replyHolder.lastAvatarUrl = avatarUrl
+                Glide.with(BiliTerminal.context).asDrawable().load(avatarUrl)
                         .transition(GlideUtil.getTransitionOptions())
                         .placeholder(R.mipmap.akari)
-                        .apply(RequestOptions.circleCropTransform())
+                        .apply(GlideUtil.circleOptions())
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
                         .into(replyHolder.replyAvatar)
             }
@@ -197,7 +201,7 @@ class ReplyAdapter(
 
             replyHolder.message.setText(reply.message)
             StringUtil.setCopy(replyHolder.message)
-            replyHolder.message.setOnTouchListener(StringUtil.ClickableSpanTouchListener())
+            replyHolder.message.setOnTouchListener(StringUtil.SHARED_TOUCH_LISTENER)
 
             replyHolder.likeCount.setText(StringUtil.toWan(reply.likeCount.toLong()))
 

@@ -29,7 +29,7 @@ bash changed/build_flavor.sh qqmusic 20260606 "QQ音乐"
 （否则每次构建都会覆盖 `releases/` 根目录的历史产物，让工作区一直有未提交改动）：
 
 ```bash
-FLAVOR_ENV=/data/dsh/env/env.sh FLAVOR_RELEASE_DIR=$PWD/releases/5.0.2-alpha6 \
+FLAVOR_ENV=/root/workspaces/BiliClient/env/env.sh FLAVOR_RELEASE_DIR=$PWD/releases/5.0.2-alpha6 \
   bash changed/build_flavor.sh qqmusic
 ```
 
@@ -45,7 +45,7 @@ releases/5.0.2-alpha6/com.tencent.qqmusicwatchs_20260606_hidden.apk
 | `FLAVOR_WORK_ROOT` | `/tmp/biliflavorsrc` | 临时副本目录 |
 | `FLAVOR_RELEASE_DIR` | `<repo>/releases` | 产物输出目录 |
 | `FLAVOR_PACKAGE` | `com.tencent.qqmusicwatchs` | 渠道包包名 |
-| `FLAVOR_ENV` | 空 | 构建环境脚本，如 `/data/dsh/env/env.sh`（设置 `JAVA_HOME` / SDK / `GRADLE_USER_HOME`） |
+| `FLAVOR_ENV` | 空 | 构建环境脚本，如 `/root/workspaces/BiliClient/env/env.sh`（设置 `JAVA_HOME` / SDK / `GRADLE_USER_HOME`） |
 | `FLAVOR_WORKERS` | `1` | Gradle 并行 worker 数 |
 | `FLAVOR_XMX` | `1280m` | 构建 JVM 最大堆 |
 | `FLAVOR_DAEMON` | `0` | `1` = 常驻 Gradle daemon（更快，但更吃内存） |

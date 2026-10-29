@@ -29,7 +29,6 @@ import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
 
 import org.json.JSONException
 
@@ -93,7 +92,7 @@ class PrivateMsgSessionsAdapter(context: Context?, sessionsList: ArrayList<Priva
                 Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(user.avatar ?: ""))
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
                         .placeholder(R.mipmap.akari)
-                        .apply(RequestOptions.circleCropTransform())
+                        .apply(GlideUtil.circleOptions())
                         .into(holder.avatarView)
             }
 

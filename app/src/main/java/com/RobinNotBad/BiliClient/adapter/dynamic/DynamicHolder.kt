@@ -38,7 +38,6 @@ import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
 
 import java.io.IOException
 import java.util.ArrayList
@@ -235,7 +234,7 @@ class DynamicHolder(@NonNull itemView: View, @JvmField val mActivity: BaseActivi
             content.visibility = View.VISIBLE
             content.text = dynamic.content
             StringUtil.setCopy(content)
-            content.setOnTouchListener(StringUtil.ClickableSpanTouchListener())
+            content.setOnTouchListener(StringUtil.SHARED_TOUCH_LISTENER)
         } else
             content.visibility = View.GONE
 
@@ -244,7 +243,7 @@ class DynamicHolder(@NonNull itemView: View, @JvmField val mActivity: BaseActivi
             Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(info.avatar ?: ""))
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
-                    .apply(RequestOptions.circleCropTransform())
+                    .apply(GlideUtil.circleOptions())
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .into(avatar)
         }

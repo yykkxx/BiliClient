@@ -249,12 +249,30 @@ object AppRcmdApi {
     }
 
     /**
+     * 按身份 id 取 [RcmdIdentity]（全 API 迁移的 preferredIdentity 用）。
+     * 未知 / 空 id 一律退回当前身份，保证不会出现「规则写错 → 没有身份」的空指针。
+     */
+    @JvmStatic
+    fun getIdentityById(identityId: String?): RcmdIdentity {
+        if (identityId == null || identityId.isEmpty()) return getIdentity()
+        return when (identityId.trim().lowercase()) {
+            IDENTITY_TV -> TV_IDENTITY
+            IDENTITY_PHONE -> PHONE_IDENTITY
+            IDENTITY_HD -> HD_IDENTITY
+            else -> getIdentity()
+        }
+    }
+
+    /**
      * 移动端请求公共头（按当前身份生成）。
      * 不带 web Cookie：登录态由 access_key 表达。
      */
     @JvmStatic
-    fun appHeaders(): ArrayList<String> {
-        val identity = getIdentity()
+    fun appHeaders(): ArrayList<String> = appHeaders(getIdentity())
+
+    /** 指定身份的请求公共头（全 API 迁移按规则身份取用） */
+    @JvmStatic
+    fun appHeaders(identity: RcmdIdentity): ArrayList<String> {
         return arrayListOf(
             "buvid", getBuvid(),
             "env", "prod",
@@ -273,7 +291,13 @@ object AppRcmdApi {
     @Throws(UnsupportedEncodingException::class, NoSuchAlgorithmException::class)
     @JvmStatic
     fun sign(formData: NetWorkUtil.FormData): NetWorkUtil.FormData {
-        val identity = getIdentity()
+        return sign(formData, getIdentity())
+    }
+
+    /** 指定身份的签名（全 API 迁移按规则身份取用） */
+    @Throws(UnsupportedEncodingException::class, NoSuchAlgorithmException::class)
+    @JvmStatic
+    fun sign(formData: NetWorkUtil.FormData, identity: RcmdIdentity): NetWorkUtil.FormData {
         return signWith(formData, identity.feedAppKey, identity.feedAppSec)
     }
 

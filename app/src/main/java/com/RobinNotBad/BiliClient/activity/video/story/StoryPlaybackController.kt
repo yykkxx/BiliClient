@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 
+import com.RobinNotBad.BiliClient.activity.player.PlayerAudioPolicy
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 
@@ -205,9 +206,12 @@ class StoryPlaybackController(
 
     /** 倍速（长按倍速 / 倍速菜单共用） */
     fun setSpeed(newSpeed: Float) {
-        speed = newSpeed
+        // v5.0.2-alpha10：倍速上限由共享策略约束（SoundTouch 稳定区间 0.5~2.0），
+        // 超过 2.0x 时 TDStretch 会把音节成段丢掉，听感就是「吞字」。
+        val clamped = PlayerAudioPolicy.clampSpeed(newSpeed)
+        speed = clamped
         try {
-            player?.setSpeed(newSpeed)
+            player?.setSpeed(clamped)
         } catch (e: Exception) {
             Logu.e("story", "设置倍速失败：" + e.message)
         }
@@ -410,19 +414,18 @@ class StoryPlaybackController(
         //start 由 onPrepared 自己控制，否则暂停状态会被 start-on-prepared 覆盖
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-        // v5.0.2-alpha8（bug2）：这里必须和 PlayerActivity#setDisplay 一样是 1。
-        // 旧代码注释写着「与 PlayerActivity 保持一致」，实际却写了 0 ——
-        // 关掉 SoundTouch 后，倍速（长按 2x / 倍速菜单）会让音频走「改采样率」的变速路径：
-        // 声音变调、并且听感上像某一段音频被吞掉了，正是用户反馈的「倍速音频很怪」。
-        // 打开后 ijk 用 SoundTouch 做时间伸缩（保音调），这也是一直以来主播放器的做法。
-        // 必须在 prepare 之前设置：applyOptions 在新建/复用（reset 后）时都会调一次。
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1L)
+        // v5.0.2-alpha10：音频策略统一走 PlayerAudioPolicy（与主播放器同一份实现，
+        // 避免 alpha8 那种「注释说一致、实际写反」的分叉）。
+        // soundtouch 恒 1：1.0x 时上游守卫让它根本不进 SoundTouch（不会发闷），
+        // >1.0x 时它是唯一保音调的变速实现。必须在 prepare 之前设置。
+        PlayerAudioPolicy.applySoundtouch(p)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_at_eof", 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 5L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L)
+        // 短视频没有脉冲拉流策略，恒用连续缓冲；仍走共享策略以便与主播放器同一判定
+        PlayerAudioPolicy.applyBufferingPolicy(p, speed, false)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 20L * 1024 * 1024)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 1L)
         // UA 必须换掉 ijk 自带的，否则部分 CDN 403

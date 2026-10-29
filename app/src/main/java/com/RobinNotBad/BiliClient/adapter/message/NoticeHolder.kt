@@ -28,7 +28,6 @@ import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
 
 import java.text.SimpleDateFormat
 
@@ -51,7 +50,7 @@ class NoticeHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.akari)
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
-                    .apply(RequestOptions.circleCropTransform())
+                    .apply(GlideUtil.circleOptions())
                     .into(imageView)
             imageView.setLayoutParams(ViewGroup.LayoutParams(ToolsUtil.dp2px(32f), ToolsUtil.dp2px(32f)))
             imageView.left = ToolsUtil.dp2px(3f)

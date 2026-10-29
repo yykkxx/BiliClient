@@ -15,11 +15,8 @@ import com.RobinNotBad.BiliClient.model.Opus
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
-import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
-import com.bumptech.glide.request.RequestOptions
 
 import java.util.ArrayList
 
@@ -44,7 +41,7 @@ class OpusAdapter(val context: Context, val opusList: ArrayList<Opus>) : Recycle
             Glide.with(BiliTerminal.context!!).load(coverUrl)
                     .transition(GlideUtil.getTransitionOptions())
                     .placeholder(R.mipmap.placeholder)
-                    .apply(RequestOptions.bitmapTransform(RoundedCorners(ToolsUtil.dp2px(5f))))
+                    .apply(GlideUtil.roundOptions(5))
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .into(holder.coverView)
         }

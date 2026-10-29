@@ -18,13 +18,10 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
-import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
-import com.bumptech.glide.request.RequestOptions
 
 class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     @JvmField
@@ -39,6 +36,14 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
     /** 当前绑定的视频卡片（长按稍后再看用） */
     private var boundCard: VideoCard? = null
+
+    /**
+     * 最近一次 bind 的位置（v5.0.2-alpha10）。
+     * 点击/长按监听器已经提到 onCreateViewHolder 里只挂一次，靠这个 int 字段拿位置，
+     * 语义与原来「在 bind 的闭包里捕获 position」完全一致，但省掉了每次 bind 的两次 lambda 分配。
+     */
+    @JvmField
+    var boundPosition: Int = RecyclerView.NO_POSITION
 
     /** 该卡片是否已知在稍后再看列表里（避免每次长按都全量拉列表） */
     private var watchLaterKnown = false
@@ -75,8 +80,10 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
                         .placeholder(R.mipmap.placeholder)
                         .format(DecodeFormat.PREFER_RGB_565)
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .apply(RequestOptions.bitmapTransform(RoundedCorners(ToolsUtil.dp2px(5f)))
-                                .sizeMultiplier(0.85f))
+                        // v5.0.2-alpha10：圆角 RequestOptions 改为进程内缓存复用
+                        // （原来每次 bind 都 new RoundedCorners + new RequestOptions，
+                        //  fling 时每秒几十次；参数与原来完全一致：圆角 5dp + 0.85 解码系数）
+                        .apply(GlideUtil.roundOptions(5, 85))
                         .into(cover!!)
             }
         } catch (e: Exception) {

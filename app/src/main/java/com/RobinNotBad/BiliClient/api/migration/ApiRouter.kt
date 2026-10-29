@@ -40,6 +40,7 @@ object ApiRouter {
     private const val KEY_HITS = "api_migration_stat_hits"
     private const val KEY_FALLBACKS = "api_migration_stat_fallbacks"
     private const val KEY_SKIPS = "api_migration_stat_skips"
+    private const val KEY_NO_REPLAY = "api_migration_stat_no_replay"
     private const val KEY_FAILURES = "api_migration_recent_failures"
 
     /** 最近失败端点最多保留条数（设置页展示用） */
@@ -57,8 +58,13 @@ object ApiRouter {
     /** 只读前 16KB 判断 code，够覆盖正常 JSON 的头部（code 字段总在最前面） */
     private const val PEEK_BYTES = 16L * 1024L
 
-    /** 这些 code 代表「APP 通道没走通」，需要回退 web */
-    private val RETRY_CODES = intArrayOf(-101, -352, -400, -401, -403, -404, -412, -500, -504)
+    /**
+     * 这些 code 代表「APP 通道没走通」，需要回退 web。
+     *
+     * - -799：请求过于频繁。APP 通道被限流时回退 web 才是用户想要的结果
+     *   （实测 UP 主相关端点连查几次就会 -799，不回退会把限流错误直接抛给用户）。
+     */
+    private val RETRY_CODES = intArrayOf(-101, -352, -400, -401, -403, -404, -412, -500, -504, -799)
 
     /**
      * 迁移时需要丢弃的参数：
@@ -66,13 +72,16 @@ object ApiRouter {
      * - mobi_app/platform/build/device_name 由身份覆盖；
      * - w_rid/wts 是 web 的 WBI 签名参数，APP 参数下会让服务端校验失配；
      * - csrf 是 web Cookie 登录的 CSRF，APP 通道用 access_key；
-     * - jsonp/web_location/gaia_source/isGaiaAvoided 是 web 专用装饰参数。
+     * - jsonp/web_location/gaia_source/isGaiaAvoided 是 web 专用装饰参数；
+     * - dm_img_list/dm_img_str/dm_cover_img_str/dm_img_inter 是 `DmImgParamUtil` 给 web
+     *   补的浏览器指纹参数（配合 WBI 使用），带到 APP 端点反而像伪造请求，一并丢弃。
      */
     private val DROPPED_PARAMS = hashSetOf(
             "appkey", "ts", "sign", "access_key", "buvid",
             "mobi_app", "platform", "build", "device", "device_name",
             "w_rid", "wts", "csrf", "jsonp", "web_location",
-            "gaia_source", "isgaiaavoided"
+            "gaia_source", "isgaiaavoided",
+            "dm_img_list", "dm_img_str", "dm_cover_img_str", "dm_img_inter"
     )
 
     private const val TAG = "api-migrate"
@@ -97,7 +106,15 @@ object ApiRouter {
         val headers: ArrayList<String>,
         val body: String?,
         val contentType: String?,
-        val endpoint: String
+        val endpoint: String,
+        /**
+         * 失败后是否允许回退 web **重发一次**。
+         * - GET：[ApiMigrationRules.Rule] 里全是幂等读，恒为 true；
+         * - 幂等写操作（isPostSafe）：true；
+         * - 非幂等写操作（isPostWrite）：false —— 一旦请求可能已经发出，重放会造成
+         *   重复投币 / 重复发评论 / 重复发私信这类不可撤销的副作用，宁可报错也不重发。
+         */
+        val replayable: Boolean = true
     )
 
     /** 响应判定结果：ok=true 表示 APP 通道可用，false 时 reason 说明为什么要回退 */
@@ -154,26 +171,51 @@ object ApiRouter {
             return null
         }
 
+        // 规则可以定点指定身份（preferredIdentity）；默认跟随用户在设置里选的当前身份。
+        val identity = AppRcmdApi.getIdentityById(rule.preferredIdentity)
+        val accessToken = AppRcmdApi.getAccessToken(identity.id)
         // 未登录当前客户端身份时：只有明确标记为公共接口的规则才迁移。
         // 原因见 ApiMigrationRules.Rule.isLoginRequired：匿名 APP 请求对收藏/历史/动态等
         // 可能返回 code=0 但数据为空，这种「静默空数据」无法靠回退检测兜住。
-        val accessToken = AppRcmdApi.getAccessToken()
         if (accessToken.isEmpty() && rule.isLoginRequired) return null
 
+        val targetHost = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE && rule.targetHost != null) {
+            rule.targetHost
+        } else host
         val targetPath = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE) {
             rule.targetPath ?: path
         } else path
 
         val params = queryParams(httpUrl)
-        addIdentityParams(params, accessToken)
+        applyParamRewrite(params, rule)
+        addIdentityParams(params, accessToken, identity)
 
         val formData = NetWorkUtil.FormData().setUrlParam(true)
         for ((key, value) in params) formData.put(key, value)
-        // 复用 AppRcmdApi 的签名算法（当前身份的 appkey / appsec / ts / sign）
-        AppRcmdApi.sign(formData)
+        // 复用 AppRcmdApi 的签名算法（身份的 appkey / appsec / ts / sign）
+        AppRcmdApi.sign(formData, identity)
 
-        val appUrl = "https://" + host + targetPath + formData.toString()
-        return Plan("GET", originalUrl, appUrl, AppRcmdApi.appHeaders(), null, null, endpoint)
+        val appUrl = "https://" + targetHost + targetPath + formData.toString()
+        return Plan("GET", originalUrl, appUrl, AppRcmdApi.appHeaders(identity), null, null, endpoint)
+    }
+
+    /**
+     * 按规则做参数改名与额外参数注入（PATH_OVERRIDE 换 APP 专用端点时经常需要）：
+     * - `mid` → `vmid`（app.bilibili.com/x/v2/space/archive）
+     * - `id` → `room_id`（直播 getDanmuInfo）
+     */
+    private fun applyParamRewrite(params: LinkedHashMap<String, String>, rule: ApiMigrationRules.Rule) {
+        val rename = rule.renameParams
+        if (rename != null) {
+            for ((from, to) in rename) {
+                val value = params.remove(from) ?: continue
+                params[to] = value
+            }
+        }
+        val extra = rule.extraParams
+        if (extra != null) {
+            for ((key, value) in extra) params[key] = value
+        }
     }
 
     /**
@@ -205,7 +247,7 @@ object ApiRouter {
         val host = httpUrl.host.lowercase(Locale.ROOT)
         val path = httpUrl.encodedPath
         val rule = ApiMigrationRules.find(host, path) ?: return null
-        if (rule.kind == ApiMigrationRules.Kind.KEEP_WEB || !rule.isPostSafe) return null
+        if (rule.kind == ApiMigrationRules.Kind.KEEP_WEB || !rule.isPostRule()) return null
 
         val endpoint = endpointOf(host, path)
         if (isSuspended(endpoint)) {
@@ -213,25 +255,40 @@ object ApiRouter {
             return null
         }
 
-        // 写操作全部要求已登录（幂等清单里的接口都依赖账号身份）
-        val accessToken = AppRcmdApi.getAccessToken()
+        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份）
+        val identity = AppRcmdApi.getIdentityById(rule.preferredIdentity)
+        val accessToken = AppRcmdApi.getAccessToken(identity.id)
         if (rule.isLoginRequired && accessToken.isEmpty()) return null
+
+        val targetHost = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE && rule.targetHost != null) {
+            rule.targetHost
+        } else host
+        val targetPath = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE) {
+            rule.targetPath ?: path
+        } else path
 
         val params = parseFormBody(body)
         params.putAll(queryParams(httpUrl))
-        addIdentityParams(params, accessToken)
+        applyParamRewrite(params, rule)
+        addIdentityParams(params, accessToken, identity)
 
         val formData = NetWorkUtil.FormData().setUrlParam(false)
         for ((key, value) in params) formData.put(key, value)
-        AppRcmdApi.sign(formData)
+        AppRcmdApi.sign(formData, identity)
 
-        return Plan("POST", originalUrl, "https://" + host + path, AppRcmdApi.appHeaders(),
-                formData.toString(), "application/x-www-form-urlencoded", endpoint)
+        // 只有幂等写操作允许失败回退重发；非幂等写操作（isPostWrite）绝不重放。
+        return Plan("POST", originalUrl, "https://" + targetHost + targetPath,
+                AppRcmdApi.appHeaders(identity),
+                formData.toString(), "application/x-www-form-urlencoded", endpoint,
+                replayable = rule.isPostSafe)
     }
 
-    /** 按当前客户端身份补 APP 公共参数（appkey/ts/sign 由 [AppRcmdApi.sign] 追加） */
-    private fun addIdentityParams(params: LinkedHashMap<String, String>, accessToken: String) {
-        val identity = AppRcmdApi.getIdentity()
+    /** 按身份补 APP 公共参数（appkey/ts/sign 由 [AppRcmdApi.sign] 追加） */
+    private fun addIdentityParams(
+        params: LinkedHashMap<String, String>,
+        accessToken: String,
+        identity: AppRcmdApi.RcmdIdentity
+    ) {
         params["mobi_app"] = identity.feedMobiApp
         params["platform"] = "android"
         params["build"] = identity.feedBuild.toString()
@@ -352,6 +409,31 @@ object ApiRouter {
         }
     }
 
+    /**
+     * 记录一次「非幂等写操作走 APP 通道但响应不可用」的失败。
+     *
+     * 与 [recordFallback] 的区别：**没有回退**，也不会暂停该端点的 APP 通道
+     * （暂停会让写操作全部退回 web，反而把非幂等写操作放到老通道上，逻辑上无益）。
+     * 上层会收到 APP 通道的错误响应/异常，由业务层提示用户，绝不重放造成重复副作用。
+     */
+    @JvmStatic
+    fun recordNoReplay(plan: Plan, reason: String) {
+        bumpLong(KEY_NO_REPLAY)
+        Logu.d(TAG, "不重放 " + plan.endpoint + "：" + reason)
+        synchronized(STAT_LOCK) {
+            attemptedEndpoints.add(plan.endpoint)
+            val now = System.currentTimeMillis()
+            val recent = loadRecentFailures().toMutableList()
+            recent.add(0, formatFailure(plan.endpoint, reason, now))
+            while (recent.size > MAX_FAILURES) recent.removeAt(recent.size - 1)
+            SharedPreferencesUtil.putString(KEY_FAILURES, recent.joinToString("\n"))
+        }
+    }
+
+    /** 非幂等写操作「不重放」次数（设置页展示） */
+    @JvmStatic
+    fun noReplayCount(): Long = SharedPreferencesUtil.getLong(KEY_NO_REPLAY, 0L)
+
     private fun formatFailure(endpoint: String, reason: String, time: Long): String {
         val timeText = synchronized(TIME_FORMAT) { TIME_FORMAT.format(Date(time)) }
         return timeText + "  " + endpoint + "  · " + reason
@@ -434,6 +516,7 @@ object ApiRouter {
             SharedPreferencesUtil.putLong(KEY_HITS, 0L)
             SharedPreferencesUtil.putLong(KEY_FALLBACKS, 0L)
             SharedPreferencesUtil.putLong(KEY_SKIPS, 0L)
+            SharedPreferencesUtil.putLong(KEY_NO_REPLAY, 0L)
             SharedPreferencesUtil.putString(KEY_FAILURES, "")
             failureStates.clear()
             suspendedUntil.clear()

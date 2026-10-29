@@ -207,19 +207,37 @@ object NetWorkUtil {
         return client.newCall(request).execute()
     }
 
+    /**
+     * POST 请求。迁移层对写操作分两类处理（**安全设计的核心**）：
+     *
+     * - [com.RobinNotBad.BiliClient.api.migration.ApiRouter.Plan.replayable] = true
+     *   （幂等写操作，如点赞/收藏/关注/稍后再看）：APP 通道失败可以安全回退 web 重发一次。
+     * - replayable = false（非幂等写操作，如投币/发评论/发动态/发弹幕/发私信）：
+     *   **绝不重放**。只有「连接根本没建立」这种铁定没发出去的异常
+     *   （ConnectException / UnknownHostException / NoRouteToHostException）才回退 web；
+     *   一旦请求可能已经发出（读超时、连接被重置、HTTP 非 2xx、非 JSON、业务错误码），
+     *   就直接把 APP 通道的响应/异常交给上层报错，宁可失败也不制造重复副作用。
+     */
     @JvmStatic
     @Throws(IOException::class)
     fun post(url: String?, data: String?, headers: List<String>?, contentType: String?): Response {
-        // 全 API 迁移（实验）：只迁移 ApiMigrationRules 里标记 isPostSafe 的幂等写操作，
-        // 其余写操作（投币/发评论/发动态/发私信等）保持 web，避免回退造成重复副作用。
         val plan = ApiRouter.planPost(url, data, contentType)
         if (plan != null) {
             val appResponse = try {
                 executePost(plan.appUrl, plan.body, plan.headers, plan.contentType)
             } catch (e: IOException) {
+                if (!plan.replayable && !isDefinitelyNotSent(e)) {
+                    // 可能已发送：不重放，异常原样抛给上层
+                    ApiRouter.recordNoReplay(plan, "网络异常(不重放)：" + e.javaClass.simpleName)
+                    throw e
+                }
                 ApiRouter.recordFallback(plan, "网络异常：" + e.javaClass.simpleName)
                 null
             } catch (e: RuntimeException) {
+                if (!plan.replayable) {
+                    ApiRouter.recordNoReplay(plan, "请求异常(不重放)：" + e.javaClass.simpleName)
+                    throw e
+                }
                 ApiRouter.recordFallback(plan, "请求异常：" + e.javaClass.simpleName)
                 null
             }
@@ -229,11 +247,28 @@ object NetWorkUtil {
                     ApiRouter.recordHit(plan)
                     return appResponse
                 }
+                if (!plan.replayable) {
+                    // 已发出且响应不可用：不重放，把响应交给上层按 code 报错
+                    ApiRouter.recordNoReplay(plan, "响应不可用(不重放)：" + verdict.reason)
+                    return appResponse
+                }
                 ApiRouter.recordFallback(plan, verdict.reason)
                 appResponse.close()
             }
         }
         return executePost(url, data, headers, contentType)
+    }
+
+    /**
+     * 判断 IOException 是否「铁定没发出去」——只有这几类才允许对非幂等写操作回退重试：
+     * 连接都没建立起来，服务端不可能已经处理过这个请求。
+     * 其余（读超时 SocketTimeoutException、连接重置、SSL 失败等）都按「可能已发送」处理。
+     */
+    private fun isDefinitelyNotSent(e: IOException): Boolean {
+        return e is java.net.ConnectException ||
+                e is java.net.UnknownHostException ||
+                e is java.net.NoRouteToHostException ||
+                e is javax.net.ssl.SSLHandshakeException
     }
 
     /** 真正发起 POST 的原始实现（迁移层只在外面包一层，行为保持与历史版本一致） */

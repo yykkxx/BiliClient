@@ -103,6 +103,10 @@ object StringUtil {
 
     @JvmStatic
     fun htmlToString(html: String): String {
+        // v5.0.2-alpha10：9 个待替换实体全部以 '&' 开头，串里没有 '&' 时这 9 次 replace 必然全部
+        // 无匹配（String.replace 无匹配时返回自身，但每遍仍要扫全串）。标题/简介里带实体的只是少数，
+        // 加这一个短路判断可省掉 9 遍扫描，输出与原来逐字相同。
+        if (html.indexOf('&') < 0) return html
         return html.replace("&lt;", "<")
                 .replace("&gt;", ">")
                 .replace("&quot;", "\"")
@@ -169,8 +173,16 @@ object StringUtil {
 
         val text = spannableString.toString()
 
-        val urlPattern = Pattern.compile("(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]")
-        val urlMatcher = urlPattern.matcher(text)
+        // v5.0.2-alpha10：先做一次「有没有可能命中」的廉价预判，再跑 4 个正则。
+        // 4 个模式都要求文本里出现 http/ftp/file/BV/av/cv 之一（模式本身大小写敏感、逐字如此），
+        // 所以不含这些子串时四个 matcher 必然零命中 —— 而 6 次 String.contains 比跑 4 遍正则便宜得多。
+        // 简介/评论这类长文本在详情页主线程上会走这里，绝大多数内容其实没有任何链接。
+        if (!mayContainLink(text)) return
+
+        // 正则改为常量复用。原来每次调用都 Pattern.compile() 一遍，
+        // 而 setLink 会在评论/简介/动态内容的 bind 里被反复调用（尤其长简介在详情页主线程里），
+        // 正则编译是这里最贵的一步（解析表达式 + 构建匹配器状态）。
+        val urlMatcher = LinkUrlUtil.WEB_URL_PATTERN.matcher(text)
         while (urlMatcher.find()) {
             val start = urlMatcher.start()
             val end = urlMatcher.end()
@@ -203,6 +215,15 @@ object StringUtil {
         }
     }
 
+    /**
+     * setLink 的廉价预判（v5.0.2-alpha10）：四个模式都要求出现下面某个子串才可能命中，
+     * 所以不含这些子串时直接跳过 4 遍正则，输出完全一致。
+     */
+    private fun mayContainLink(text: String): Boolean {
+        return text.contains("http") || text.contains("ftp") || text.contains("file") ||
+                text.contains("BV") || text.contains("av") || text.contains("cv")
+    }
+
     @JvmStatic
     fun setLink(vararg textViews: TextView) {
         if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LINK_ENABLE, true)) return
@@ -211,7 +232,7 @@ object StringUtil {
             val spannableString = SpannableStringBuilder(textView.text)
             setLink(spannableString)
             textView.text = spannableString
-            textView.setOnTouchListener(ClickableSpanTouchListener())
+            textView.setOnTouchListener(SHARED_TOUCH_LISTENER)
         }
     }
 
@@ -249,7 +270,7 @@ object StringUtil {
             }
 
             textView.text = spannableString
-            textView.setOnTouchListener(ClickableSpanTouchListener())
+            textView.setOnTouchListener(SHARED_TOUCH_LISTENER)
         }
     }
 
@@ -276,11 +297,25 @@ object StringUtil {
 
     @JvmStatic
     fun getTextHeightWithSize(context: Context): Float {
+        // v5.0.2-alpha10：该值只取决于「12sp 在当前 scaledDensity 下的像素高度」，
+        // 但原来每次调用都要 new Paint() + TypedValue 换算 + 取 fontMetrics，
+        // 而 getLevelBadge 在每条评论/回复 bind 时都会调用它。
+        // 这里按 scaledDensity 做单槽缓存：设置里改字号/密度（scale 变化）时会自动重算，输出不变。
+        val metrics = context.resources.displayMetrics
+        val scale = metrics.scaledDensity
+        if (cachedTextHeightScale == scale) return cachedTextHeight
         val paint = Paint()
-        paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f, context.resources.displayMetrics)
+        paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f, metrics)
         val fontMetrics = paint.fontMetrics
-        return fontMetrics.descent - fontMetrics.ascent
+        val height = fontMetrics.descent - fontMetrics.ascent
+        cachedTextHeightScale = scale
+        cachedTextHeight = height
+        return height
     }
+
+    /** 徽章文字高度缓存（见 getTextHeightWithSize 说明；多线程并发下最坏只是重算一次，结果不变） */
+    private var cachedTextHeightScale = -1f
+    private var cachedTextHeight = 0f
 
     @JvmStatic
     fun getDrawable(context: Context, @DrawableRes res: Int): Drawable {
@@ -364,4 +399,14 @@ object StringUtil {
             R.mipmap.level_6,
             R.mipmap.level_h
     )
+
+    /**
+     * 共享的链接触摸监听器（v5.0.2-alpha10）。
+     *
+     * ClickableSpanTouchListener 本身**没有任何状态**（onTouch 只用入参 view/event），
+     * 但 setLink / setAtLink 与 ReplyAdapter 原来每设置一次就 new 一个对象 ——
+     * 评论列表每条 bind 一次，属于可以完全省掉的短命对象。共用同一实例行为不变。
+     */
+    @JvmField
+    val SHARED_TOUCH_LISTENER: ClickableSpanTouchListener = ClickableSpanTouchListener()
 }

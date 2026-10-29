@@ -26,12 +26,9 @@ import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
-import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
-import com.bumptech.glide.request.RequestOptions
 import com.google.android.material.card.MaterialCardView
 
 import java.util.ArrayList
@@ -127,7 +124,7 @@ class OpusContentAdapter(val context: Activity, val article: Opus) : RecyclerVie
                         Glide.with(BiliTerminal.context!!).asDrawable().load(coverUrl)
                                 .placeholder(R.mipmap.placeholder)
                                 .transition(GlideUtil.getTransitionOptions())
-                                .apply(RequestOptions.bitmapTransform(RoundedCorners(ToolsUtil.dp2px(4f))))
+                                .apply(GlideUtil.roundOptions(4))
                                 .format(DecodeFormat.PREFER_RGB_565)
                                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                                 .into(topImage)
@@ -141,7 +138,7 @@ class OpusContentAdapter(val context: Activity, val article: Opus) : RecyclerVie
                         Glide.with(BiliTerminal.context!!).asDrawable().load(firstImageUrl)
                                 .placeholder(R.mipmap.placeholder)
                                 .transition(GlideUtil.getTransitionOptions())
-                                .apply(RequestOptions.bitmapTransform(RoundedCorners(ToolsUtil.dp2px(4f))))
+                                .apply(GlideUtil.roundOptions(4))
                                 .format(DecodeFormat.PREFER_RGB_565)
                                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                                 .into(topImage)
@@ -167,7 +164,7 @@ class OpusContentAdapter(val context: Activity, val article: Opus) : RecyclerVie
                     Glide.with(BiliTerminal.context!!).asDrawable().load(avatarUrl)
                             .placeholder(R.mipmap.akari)
                             .transition(GlideUtil.getTransitionOptions())
-                            .apply(RequestOptions.circleCropTransform())
+                            .apply(GlideUtil.circleOptions())
                             .diskCacheStrategy(DiskCacheStrategy.NONE)
                             .into(upIcon)
                 }

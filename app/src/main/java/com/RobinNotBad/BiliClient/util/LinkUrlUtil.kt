@@ -55,6 +55,15 @@ object LinkUrlUtil {
     @JvmField
     val UID_PATTERN: Pattern = Pattern.compile("^(?i)uid\\d+$")
 
+    /**
+     * 网页链接匹配（v5.0.2-alpha10 提取为常量）。
+     * 原实现有两处各自 `Pattern.compile(...)`：StringUtil.setLink(...) 里每调用一次编一次，
+     * parseId(...) 里每解析一条文本编一次。re2/java.util.regex 的编译要解析表达式并建 AST，
+     * 属于热路径上最贵的一步，表达式本身固定不变，因此提取为单例常量。
+     */
+    @JvmField
+    val WEB_URL_PATTERN: Pattern = Pattern.compile("(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]")
+
     @JvmStatic
     fun handleWebURL(context: Context, text: String) {
         var text = text
@@ -186,7 +195,7 @@ object LinkUrlUtil {
             return Pair<String, Int>(matcher.group(), TYPE_UID)
         }
 
-        matcher = Pattern.compile("(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]").matcher(item)
+        matcher = WEB_URL_PATTERN.matcher(item)
         if (matcher.find()) {
             return Pair<String, Int>(matcher.group(), TYPE_WEB_URL)
         }

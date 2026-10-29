@@ -39,6 +39,8 @@ import java.io.Serializable
 import java.util.Arrays
 import java.util.HashMap
 import java.util.Map
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 object PlayerApi {
     /**
@@ -189,14 +191,7 @@ object PlayerApi {
             return
         }
 
-        playerData.cidHistory = data.optLong("last_play_cid", 0)
-        playerData.progress = data.optInt("last_play_time", 0)
-
-        if (playerData.cidHistory == 0L) {
-            playerData.cidHistory = playerData.cid
-            playerData.progress = 0
-        }
-        Logu.d("history", playerData.progress.toString() + "," + playerData.cidHistory)
+        applyHistoryAnchor(playerData, data)
 
         val accept_description = data.getJSONArray("accept_description")
         val accept_quality = data.getJSONArray("accept_quality")
@@ -213,6 +208,33 @@ object PlayerApi {
     }
 
     /**
+     * 把响应里的 `last_play_cid` / `last_play_time` 落到 [PlayerData]，**两者必须成对使用**。
+     *
+     * 背景（完整证据链见 `notes/api_full_migration_alpha10.md` D.6）：
+     * 开启全 API 迁移后，这两个字段来自 APP 通道那个账号的播放历史
+     * （HD / TV / 手机身份与 web Cookie 是**两套独立账号体系**，见 AppRcmdApi 注释），
+     * 可能指向**另一个分 P**。而 [buildPlayerIntent] 会把 `cid` 与 `progress`
+     * 分别塞进 Intent，`PlayerActivity` 直接 `seekTo(progress_history)` ——
+     * 于是画面被 seek 到「别的 P 的时间轴位置」，而字幕是按当前 cid 取的（时间轴正确），
+     * 表现出来就是「视频与字幕不对应」。
+     *
+     * 规则：只有 `last_play_cid == 本次请求的 cid` 时才采信 `last_play_time`；
+     * 指向别的 P 时 `progress` 归零（`cidHistory` 仍保留，用于「上次看到 Px」的展示与归位）。
+     * 自检日志脱敏：只打 cid 与是否采信，不打 URL / token。
+     */
+    private fun applyHistoryAnchor(playerData: PlayerData, data: JSONObject) {
+        val lastPlayCid = data.optLong("last_play_cid", 0)
+        val lastPlayTime = data.optInt("last_play_time", 0)
+        val samePage = lastPlayCid != 0L && lastPlayCid == playerData.cid
+        playerData.cidHistory = if (lastPlayCid != 0L) lastPlayCid else playerData.cid
+        playerData.progress = if (samePage) lastPlayTime else 0
+        Logu.d("player-cid-check", "reqCid=" + playerData.cid +
+                " lastPlayCid=" + lastPlayCid +
+                " keepProgress=" + samePage +
+                " progress=" + playerData.progress)
+    }
+
+    /**
      * 解析视频
      *
      * @param playerData 传入aid、cid、qn等必要数据，可以使用VideoInfo.toPlayerData
@@ -226,6 +248,21 @@ object PlayerApi {
             return
 
         playerData.timeStamp = System.currentTimeMillis()
+
+        // v5.0.2-alpha10（音频沉闷）：durl（fnval=1）内嵌的音轨恒为 44kbps HE-AAC，
+        // 这就是「主播放器声音沉闷」的根因（证据见 notes/player_audio_alpha10.md 第五节）。
+        // 这里**并行**再请求一次 fnval=16，只为了拿 DASH 里最高带宽的 AAC 音轨；
+        // 失败/超时都不影响主流程（audioUrl 留空 → 播放器走 durl 原声）。
+        val dashAudioLatch = CountDownLatch(1)
+        CenterThreadPool.run(Runnable {
+            try {
+                fetchDashAudioUrl(playerData)
+            } catch (t: Throwable) {
+                Logu.d("player-audio", "DASH 音轨解析失败（忽略，走原声）：" + t.message)
+            } finally {
+                dashAudioLatch.countDown()
+            }
+        })
 
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml"
 
@@ -250,14 +287,7 @@ object PlayerApi {
         val durl = data.getJSONArray("durl")
         val video_url = durl.getJSONObject(0)
         playerData.videoUrl = video_url.getString("url")
-        playerData.cidHistory = data.optLong("last_play_cid", 0)
-        playerData.progress = data.optInt("last_play_time", 0)
-
-        if (playerData.cidHistory == 0L) {
-            playerData.cidHistory = playerData.cid
-            playerData.progress = 0
-        }
-        Logu.d("history", playerData.progress.toString() + "," + playerData.cidHistory)
+        applyHistoryAnchor(playerData, data)
 
         val accept_description = data.getJSONArray("accept_description")
         val accept_quality = data.getJSONArray("accept_quality")
@@ -272,6 +302,57 @@ object PlayerApi {
         playerData.qnStrList = qnStrList
         playerData.qnValueList = qnValueList
 
+        // 等并行那一路音轨解析（最多 3s）。拿不到就算了，走 durl 原声。
+        try {
+            dashAudioLatch.await(3, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            Logu.d("player-audio", "等待 DASH 音轨被中断：" + e.message)
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    /**
+     * 解析 DASH 里**最高带宽的 AAC 音轨**并写进 `playerData.audioUrl`。
+     *
+     * 为什么不用 [DashData.getBestAudioStream]：那个方法优先 flac → 杜比 → 带宽，
+     * 而本机 ijkplayer 的 ffmpeg 只编了 aac/pcm/flac/mp3 等解码器，**没有 ac3/eac3**，
+     * 一旦选中杜比（30250）就会彻底没声音。所以这里只挑 `codecs` 以 `mp4a` 开头的
+     * AAC 流（30216=44k / 30232=103k / 30280=204k）里带宽最大的那一条。
+     *
+     * 任何异常都由调用方吞掉：音频只是「加分项」，绝不能因为它导致播放失败。
+     */
+    @JvmStatic
+    fun fetchDashAudioUrl(playerData: PlayerData) {
+        var url = "https://api.bilibili.com/x/player/wbi/playurl?" +
+                "avid=" + playerData.aid +
+                "&cid=" + playerData.cid +
+                "&qn=" + playerData.qn +
+                "&fnval=16&fnver=0" +
+                "&platform=pc" +
+                "&voice_balance=1" +
+                "&gaia_source=pre-load" +
+                "&isGaiaAvoided=true"
+        url = ConfInfoApi.signWBI(url)
+
+        val body = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders)
+        val dash = body.optJSONObject("data")?.optJSONObject("dash") ?: return
+        val audioArray = dash.optJSONArray("audio") ?: return
+
+        val best = (0 until audioArray.length())
+                .mapNotNull { audioArray.optJSONObject(it) }
+                // 只要 AAC：ijkplayer 没有 ac3/eac3 解码器，选杜比就是静音
+                .filter { it.optString("codecs", "").startsWith("mp4a") }
+                .filter { it.optString("baseUrl", it.optString("base_url", "")).isNotEmpty() }
+                .maxByOrNull { it.optLong("bandwidth", 0L) }
+
+        if (best == null) {
+            Logu.d("player-audio", "没有可用的 AAC 音轨")
+            return
+        }
+        playerData.audioUrl = best.optString("baseUrl", best.optString("base_url", ""))
+        Logu.d("player-audio", "DASH 音轨 id=" + best.optInt("id", 0) +
+                " codecs=" + best.optString("codecs", "") +
+                " bandwidth=" + best.optLong("bandwidth", 0L))
     }
 
     /**
@@ -336,6 +417,9 @@ object PlayerApi {
         val intent = Intent()
         intent.setClass(context, PlayerActivity::class.java)
         intent.putExtra("url", playerData.videoUrl)
+        // v5.0.2-alpha10：DASH 高音质音轨（durl 内嵌音轨只有 44kbps），
+        // PlayerActivity 会用它做「伴音轨」或听视频模式的唯一音源。为空表示不启用。
+        intent.putExtra("audio_url", playerData.audioUrl)
         intent.putExtra("danmaku", playerData.danmakuUrl)
         intent.putExtra("title", playerData.title)
         intent.putExtra("aid", playerData.aid)
@@ -411,6 +495,18 @@ object PlayerApi {
     }
 
     /**
+     * 「空字幕列表」：只有一项「不显示字幕」（id=-1）。
+     *
+     * 调用方（`PlayerActivity.downSubtitle` / `DownloadService.downSubtitles`）用
+     * `size == 1` / `size <= 1` 判定「本视频无字幕」，所以这里必须是 1 项而不是 0 项。
+     */
+    private fun emptySubtitleLinks(): Array<SubtitleLink?> {
+        val links = arrayOfNulls<SubtitleLink>(1)
+        links[0] = SubtitleLink(-1, "不显示字幕", "null", false)
+        return links
+    }
+
+    /**
      * 获取视频的字幕链接列表
      *
      * @param aid aid
@@ -420,12 +516,33 @@ object PlayerApi {
     @Throws(JSONException::class, IOException::class)
     @JvmStatic
     fun getSubtitleLinks(aid: Long, cid: Long): Array<SubtitleLink?> {
+        // 播放地址与字幕必须来自同一组 (aid, cid)：这里的 cid 由调用方传入
+        // （PlayerActivity 的 cid 来自 Intent / 分 P 切换，与 getVideoDash 请求的 cid 一致）。
         var url = "https://api.bilibili.com/x/player/wbi/v2?aid=" + aid +
                 "&cid=" + cid
         url = ConfInfoApi.signWBI(url)
-        val data = NetWorkUtil.getJson(url).getJSONObject("data")
+        val response = NetWorkUtil.getJson(url)
+        if (!response.has("data") || response.isNull("data")) {
+            Logu.d("subtitle-cid-check", "reqCid=" + cid + " respCid=- node=data 缺失，按无字幕处理")
+            return emptySubtitleLinks()
+        }
+        val data = response.getJSONObject("data")
 
-        val subtitles = data.getJSONObject("subtitle").getJSONArray("subtitles")
+        // ---- 字幕必须与正在播放的流是同一个 cid（本函数的存在理由）----
+        // 实测（notes/api_full_migration_alpha10.md D.5）：服务端**不校验** aid/bvid 与 cid
+        // 的一致性，参数一旦错位就会把两个视频的东西混着返回；而 APP 通道的
+        // /x/player/v2 与 web 的 /x/player/wbi/v2 行为完全相同，改正路径救不了。
+        // 所以这里自己校验回包 cid：不一致就当作「无字幕」——
+        // 宁可字幕暂时为空，也绝不显示别的视频的字幕。
+        val respCid = data.optLong("cid", -1L)
+        // respCid <= 0 表示回包没有 cid 字段（无法判断，按信任处理）；> 0 且不等于请求 cid 才拒绝。
+        val accepted = respCid <= 0L || respCid == cid
+        Logu.d("subtitle-cid-check", "reqCid=" + cid + " respCid=" + respCid + " accepted=" + accepted)
+        if (!accepted) return emptySubtitleLinks()
+
+        // 有些账号 / 番剧不回 subtitle 节点，按「无字幕」处理，不要抛 JSONException 打断播放
+        val subtitleNode = data.optJSONObject("subtitle") ?: return emptySubtitleLinks()
+        val subtitles = subtitleNode.optJSONArray("subtitles") ?: return emptySubtitleLinks()
         Log.d("subtitle", subtitles.toString())
 
         val links = arrayOfNulls<SubtitleLink>(subtitles.length() + 1)

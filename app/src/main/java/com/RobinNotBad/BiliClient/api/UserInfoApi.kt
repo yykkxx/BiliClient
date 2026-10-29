@@ -5,6 +5,7 @@ import com.RobinNotBad.BiliClient.model.LiveRoom
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.DmImgParamUtil
+import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
@@ -96,9 +97,104 @@ object UserInfoApi {
         var url = "https://api.bilibili.com/x/space/wbi/acc/info?"
         url += "mid=" + mid
         val all = NetWorkUtil.getJson(ConfInfoApi.signWBI(DmImgParamUtil.getDmImgParamsUrl(url)))
-        if (all.has("data") && !all.isNull("data")) {
-            return all.getJSONObject("data")
+        if (!all.has("data") || all.isNull("data")) return null
+        val data = all.getJSONObject("data")
+        // 未开启全 API 迁移时拿到的是 web 形状，原样返回（零回归）。
+        // 开启后这条请求会被改写到 app.bilibili.com/x/v2/space，回包是 data.card 结构，
+        // 在这里归一化成 web 形状，让上层（UserDynamicAdapter / PrivateMsgApi /
+        // TerminalContext）一行都不用改。
+        if (!data.has("card") || data.isNull("card")) return data
+        return normalizeAppSpace(data, mid)
+    }
+
+    /**
+     * 把 `app.bilibili.com/x/v2/space` 的 `data.card` 归一化成 web
+     * `/x/space/wbi/acc/info` 的 `data` 形状。
+     *
+     * 实测字段对照（2026-10-29，`vmid=2`，见 notes/api_full_migration_alpha10.md 的 H 节）：
+     * | web `data` | APP `data.card` |
+     * |---|---|
+     * | `mid`(数字) | `mid`(**字符串**，需转数字) |
+     * | `name` / `sign` / `face` | 同名；另有 `avatar` 同值 |
+     * | `level`(数字) | `level_info.current_level` |
+     * | `official{role,title,desc}` | `official_verify{type,desc,role,title}` |
+     * | `fans` / `attention` / `friend` / `vip` / `pendant` / `nameplate` | 同名同构 |
+     * | `live_room{roomStatus,liveStatus,title,cover,roomid}` | **无**（改用直播域公开接口补，见 [fetchLiveRoom]） |
+     * | `sys_notice` / `contract` | **无**（上层用 isNull 判断跳过，天然兼容） |
+     *
+     * @param data APP 回包的 data（含 card）
+     * @param mid 请求用的 mid，card.mid 缺失时兜底
+     */
+    private fun normalizeAppSpace(data: JSONObject, mid: Long): JSONObject {
+        val card = data.optJSONObject("card") ?: return data
+        val out = JSONObject()
+        out.put("mid", card.optLong("mid", mid))
+        out.put("name", card.optString("name", ""))
+        out.put("sex", card.optString("sex", "保密"))
+        out.put("face", card.optString("face", card.optString("avatar", "")))
+        out.put("sign", card.optString("sign", ""))
+        val levelInfo = card.optJSONObject("level_info")
+        out.put("level", levelInfo?.optInt("current_level", 0) ?: 0)
+        if (levelInfo != null) out.put("level_info", levelInfo)
+        out.put("rank", card.optString("rank", ""))
+        out.put("fans", card.optInt("fans", 0))
+        out.put("attention", card.optInt("attention", 0))
+        out.put("friend", card.optInt("friend", 0))
+        out.put("is_senior_member", card.optInt("is_senior_member", 0))
+        copyIfPresent(card, out, "pendant")
+        copyIfPresent(card, out, "nameplate")
+        copyIfPresent(card, out, "vip")
+        // web 叫 official，APP 叫 official_verify：两个键都放，消费方读哪个都在
+        val official = card.optJSONObject("official_verify")
+        if (official != null) {
+            out.put("official", official)
+            out.put("official_verify", official)
         }
+        val liveRoom = fetchLiveRoom(mid)
+        if (liveRoom != null) out.put("live_room", liveRoom)
+        return out
+    }
+
+    /** 从 source 里复制一个对象字段到 target（不存在就跳过，绝不写 null） */
+    private fun copyIfPresent(source: JSONObject, target: JSONObject, key: String) {
+        val value = source.optJSONObject(key) ?: return
+        target.put(key, value)
+    }
+
+    /**
+     * 补出 web `acc/info` 里的 `live_room` 字段（APP 空间接口不带）。
+     *
+     * 用直播域公开接口 `api.live.bilibili.com/room/v1/Room/getRoomInfoOld?mid=`：
+     * 实测 APP 参数下 code=0，`data` 里 `roomStatus/liveStatus/title/cover/roomid`
+     * 与 web `live_room` 完全同名同义，上层 `if (roomStatus==1 && liveStatus==1)` 直接可用。
+     *
+     * 这是「有就显示」的装饰数据，失败只能影响直播角标，绝不影响空间信息主流程。
+     */
+    private fun fetchLiveRoom(mid: Long): JSONObject? {
+        return try {
+            val url = "https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld?mid=" + mid
+            val all = NetWorkUtil.getJson(url)
+            if (all.optInt("code", -1) != 0 || all.isNull("data")) null else all.getJSONObject("data")
+        } catch (e: Exception) {
+            Logu.d("live-room", "补直播状态失败：" + e.javaClass.simpleName)
+            null
+        }
+    }
+
+    /**
+     * 从 UP 主投稿响应里取出视频数组，兼容两种结构：
+     * - web：`data.list.vlist[]`
+     * - APP：`data.item[]`（开启全 API 迁移后走 app.bilibili.com/x/v2/space/archive）
+     *
+     * @return null 表示响应结构不认识（调用方按「加载失败」处理）
+     */
+    private fun resolveArchiveArray(data: JSONObject): JSONArray? {
+        if (data.has("list") && !data.isNull("list")) {
+            val list = data.getJSONObject("list")
+            if (!list.has("vlist") || list.isNull("vlist")) return null
+            return list.getJSONArray("vlist")
+        }
+        if (data.has("item") && !data.isNull("item")) return data.optJSONArray("item")
         return null
     }
 
@@ -156,24 +252,25 @@ object UserInfoApi {
         val all = NetWorkUtil.getJson(ConfInfoApi.signWBI(DmImgParamUtil.getDmImgParamsUrl(url)))
         if (all.has("data") && !all.isNull("data")) {
             val data = all.getJSONObject("data")
-            val list = data.getJSONObject("list")
-            if (list.has("vlist") && !list.isNull("vlist")) {
-                val vlist = list.getJSONArray("vlist")
-                if (vlist.length() == 0) return 1
-                for (i in 0 until vlist.length()) {
-                    val card = vlist.getJSONObject(i)
-                    val cover = card.getString("pic")
-                    val play = card.getLong("play")
-                    val playStr = StringUtil.toWan(play) + "观看"
-                    val aid = card.getLong("aid")
-                    val bvid = card.getString("bvid")
-                    val upName = card.getString("author")
-                    val title = card.getString("title")
+            // 两种结构都要认（全 API 迁移会把这条请求改写到 app.bilibili.com/x/v2/space/archive）：
+            // - web：data.list.vlist[]（pic/play/aid/bvid/author/title）
+            // - APP：data.item[]（cover/play/bvid/author/title，aid 在 param 里且是字符串）
+            val vlist = resolveArchiveArray(data) ?: return -1
+            if (vlist.length() == 0) return 1
+            for (i in 0 until vlist.length()) {
+                val card = vlist.getJSONObject(i)
+                val cover = card.optString("pic", card.optString("cover", ""))
+                val play = card.optLong("play", 0L)
+                val playStr = StringUtil.toWan(play) + "观看"
+                val aid = if (card.has("aid")) card.optLong("aid", 0L)
+                else card.optString("param", "0").toLongOrNull() ?: 0L
+                val bvid = card.optString("bvid", "")
+                val upName = card.optString("author", "")
+                val title = card.optString("title", "")
 
-                    videoList.add(VideoCard(title, upName, playStr, cover, aid, bvid))
-                }
-                return 0
-            } else return -1
+                videoList.add(VideoCard(title, upName, playStr, cover, aid, bvid))
+            }
+            return 0
         } else return -1
     }
 

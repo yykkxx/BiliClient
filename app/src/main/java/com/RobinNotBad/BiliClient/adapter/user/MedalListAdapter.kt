@@ -15,7 +15,6 @@ import com.RobinNotBad.BiliClient.model.MedalInfo
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
 
 class MedalListAdapter(val context: Context, private val medalList: List<MedalInfo>?) :
     RecyclerView.Adapter<MedalListAdapter.Holder>() {
@@ -48,7 +47,7 @@ class MedalListAdapter(val context: Context, private val medalList: List<MedalIn
             Glide.with(BiliTerminal.context).asDrawable().load(GlideUtil.url(medal.target_icon!!))
                 .transition(GlideUtil.getTransitionOptions())
                 .placeholder(R.mipmap.akari)
-                .apply(RequestOptions.circleCropTransform())
+                .apply(GlideUtil.circleOptions())
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .into(holder.avatar)
             holder.avatar.visibility = View.VISIBLE

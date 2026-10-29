@@ -89,21 +89,11 @@ class SettingApiMigrationActivity : BaseActivity() {
         val suspended = ApiRouter.suspendedEndpoints()
         statsSb.append("\n连续失败暂停中：").append(suspended.size).append(" 个（暂停 10 分钟）")
         statsSb.append("\n因暂停直接走 web：").append(ApiRouter.skipCount()).append(" 次")
+        // 非幂等写操作（投币/发评论/发弹幕…）在 APP 通道响应不可用时不回退重发，单独计数
+        statsSb.append("\n写操作不重放：").append(ApiRouter.noReplayCount()).append(" 次")
         statsText?.text = statsSb.toString()
 
-        val coverageSb = StringBuilder()
-        coverageSb.append("已验证可 APP 参数化：")
-        coverageSb.append(ApiMigrationRules.verifiedAppParamsCount()).append(" 条")
-        coverageSb.append("\nAPP 专用路径改写：")
-        coverageSb.append(ApiMigrationRules.pathOverrideCount()).append(" 条")
-        coverageSb.append("\n明确保持 web：")
-        coverageSb.append(ApiMigrationRules.keepWebCount()).append(" 条")
-        coverageSb.append("\n未列出的 api.bilibili.com JSON 接口也会尝试 APP 通道；")
-        coverageSb.append("WBI 签名接口（搜索/UP主投稿/UP主信息/评论区主接口）、登录、")
-        coverageSb.append("直播/私信/通知等未验证域保持 web。")
-        coverageSb.append("\n未登录当前身份时只迁移公共接口（视频信息/评论/番剧等），")
-        coverageSb.append("收藏/历史/动态/播放地址等保持 web，避免匿名空数据。")
-        coverageText?.text = coverageSb.toString()
+        coverageText?.text = buildCoverageText()
 
         val failures = ApiRouter.recentFailures()
         if (failures.isEmpty()) {
@@ -119,6 +109,45 @@ class SettingApiMigrationActivity : BaseActivity() {
             switch.isChecked = ApiRouter.isEnabled()
             switch.setOnCheckedChangeListener(switchListener)
         }
+    }
+
+    /**
+     * 覆盖情况文案。
+     *
+     * 手表圆屏太窄，所以做成「总览 + 按分类一行一条 + 保留项清单」的纯文本，
+     * 不再加列表控件；内容全部来自 [ApiMigrationRules]，改规则表这里自动跟着变。
+     */
+    @SuppressLint("SetTextI18n")
+    private fun buildCoverageText(): String {
+        val sb = StringBuilder()
+        sb.append("已迁移端点：").append(ApiMigrationRules.migratedCount()).append(" 条")
+        sb.append("\n  · 同路径 APP 参数化：").append(ApiMigrationRules.appParamsCount())
+        sb.append("\n  · 路径/主机改写：").append(ApiMigrationRules.pathOverrideCount())
+        sb.append("\n  · 写操作：").append(ApiMigrationRules.writeCount())
+        sb.append("（幂等 ").append(ApiMigrationRules.postSafeCount())
+        sb.append(" / 不重放 ").append(ApiMigrationRules.postWriteCount()).append("）")
+        sb.append("\n明确保持 web：").append(ApiMigrationRules.keepWebCount()).append(" 条（见下方清单）")
+
+        val categories = ApiMigrationRules.countsByCategory()
+        if (categories.isNotEmpty()) {
+            sb.append("\n\n按分类：")
+            for ((name, count) in categories) {
+                sb.append("\n  ").append(name).append(" ").append(count)
+            }
+        }
+
+        val keeps = ApiMigrationRules.keepWebItems()
+        if (keeps.isNotEmpty()) {
+            sb.append("\n\n保留 web（协议层无 APP 等价）：")
+            for (item in keeps) {
+                sb.append("\n  ").append(item)
+            }
+        }
+
+        sb.append("\n\n未列出的 api.bilibili.com JSON 接口也会尝试 APP 通道；")
+        sb.append("未登录当前身份时只迁移公共接口（视频信息/评论/番剧/搜索等），")
+        sb.append("收藏/历史/动态/播放地址等保持 web，避免匿名空数据。")
+        return sb.toString()
     }
 
     private fun confirmClear() {
