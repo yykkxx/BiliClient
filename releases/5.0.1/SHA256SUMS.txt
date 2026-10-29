@@ -1,0 +1,2 @@
+7147fc1c919058f6de06826b1d0a8f832e4e7a6f9e07befbe2f91286c5de8c8c  com.tencent.qqmusicwatchs_20260606_hidden_sign.apk
+e1aa175931ac0e563de93d98d9e2a775e272016f8344102a143f99181501df21  com.tencent.qqmusicwatchs_20260606_sign.apk
