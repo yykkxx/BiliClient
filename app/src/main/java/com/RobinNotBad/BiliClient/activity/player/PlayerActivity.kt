@@ -286,30 +286,26 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private var timestamp_click: Long = 0
     private var onLongClick = false
 
-    // v5.0.2-alpha10：倍速档位与文案改由 PlayerAudioPolicy 统一提供，主播放器与短视频共用
-    // 一份，避免再出现 alpha8 那种「注释说与主播放器一致、实际写反」的分叉。
-    // 档位上限收到 2.0：3.0x 超出 SoundTouch 的稳定区间（0.5~2.0），
-    // 倍速音频会被成段吞掉（证据见 notes/player_audio_alpha10.md）。
+    // v5.0.3-alpha11：倍速档位与文案仍由 PlayerAudioPolicy 统一提供（主播放器与短视频共用一份），
+    // 档位恢复 8 档、末尾重新带回 3.0x（用户明确要求）。3.0x 的「咬字糊」由引擎判定兜住：
+    // 超过 2.0x 时 prepare 会选 SoundTouch（系统变速在 3.0x 上不可靠），≤2.0x 默认走系统变速。
+    // 证据见 notes/player_audio_alpha11.md 第一节。
     private val speedValues: FloatArray = PlayerAudioPolicy.SPEED_VALUES
     private val speedStrs: Array<String> = PlayerAudioPolicy.SPEED_TEXTS
 
-    /** 当前倍速条档位对应的倍速（越界自动夹到上限，永不返回 3.0） */
+    /** 当前倍速条档位对应的倍速（越界自动夹到合法范围） */
     private fun currentSpeedValue(): Float = PlayerAudioPolicy.speedAt(seekbar_speed?.progress ?: 2)
 
     /** 当前倍速档位的文案（"x 1.5" 风格） */
     private fun currentSpeedText(): String = speedStrs[PlayerAudioPolicy.clampIndex(seekbar_speed?.progress ?: 2)]
 
     /**
-     * 长按倍速结束，恢复倍速条档位（v5.0.2-alpha10：两个手势分支原来各抄了一份，
-     * 这里合成一处；顺带把那几行的非空断言换成安全调用，逻辑不变）。
+     * 长按倍速结束，恢复倍速条档位（两个手势分支都走这里）。
+     *
+     * v5.0.3-alpha11：切速统一走 [applySpeedToPlayers]，它会按目标倍速判定是否需要换变速引擎。
      */
     private fun restoreNormalSpeed() {
-        val speed = currentSpeedValue()
-        ijkPlayer?.setSpeed(speed)
-        // 伴音轨同步倍速（否则长按 2x 后声音会回到 1x，音画不同步）
-        dashAudio?.setSpeed(speed)
-        if (danmakuReady())
-            danmakuController?.setSpeed(speed)
+        applySpeedToPlayers(currentSpeedValue())
         text_speed?.text = currentSpeedText()
     }
 
@@ -805,10 +801,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     !isLiveMode) {
                 if (!onLongClick && !gesture_click_disabled) {
                     hidecon.run()
-                    ijkPlayer?.setSpeed(longClickSpeed)
-                    dashAudio?.setSpeed(longClickSpeed)
-                    if (danmakuReady())
-                        danmakuController?.setSpeed(longClickSpeed)
+                    // 长按 2x 是临时态：统一入口会同时转发伴音轨与弹幕层，并按目标倍速判定引擎
+                    applySpeedToPlayers(longClickSpeed)
                     text_speed?.text = "x " + longClickSpeed
                     // 长按倍速时在视频上方显示半透明提示框（#7）
                     showSpeedHint(longClickSpeed)
@@ -1091,10 +1085,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         return url != null && url.isNotEmpty()
     }
 
-    /** 听视频模式能否直接把 DASH 音轨当唯一数据源（拆出来是为了条件复杂度不超限） */
+    /**
+     * 听视频模式能否直接把 DASH 音轨当唯一数据源（拆出来是为了条件复杂度不超限）。
+     *
+     * v5.0.3-alpha11：这条路**不受伴音轨实验开关影响**。
+     * 听视频模式下主播放器改播 DASH 音轨（单文件、单音轨、204kbps），
+     * 比 durl 混流里的 44kbps 音轨更好听，而且**没有额外带宽**（还是只下一份音轨、不下一份视频），
+     * 正是用户要求的「单音轨单文件」。所以开关关掉时它照旧生效。
+     */
     private fun canUseDashAudioForAudioOnly(): Boolean {
         if (!isAudioOnlyMode || isLocalAudioFile) return false
-        if (!PlayerAudioPolicy.dashAudioEnabled()) return false
         val url = dashAudioUrl
         return url != null && url.isNotEmpty()
     }
@@ -1122,6 +1122,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             player.setVolume(0f, 0f)
             mainMutedByDash = true
             existed.seekTo(position)
+            // 伴音轨自己按策略类的统一入口下发倍速（引擎/档位与主播放器一致）
             existed.setSpeed(speed)
             if (isPlaying) existed.resume() else existed.pause()
             Logu.v("伴音轨", "复用伴音轨并按主播放器对齐：pos=" + position)
@@ -1207,6 +1208,165 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             releaseDashAudio("换分P/换视频")
     }
 
+    // ==================== 倍速引擎（v5.0.3-alpha11） ====================
+    // 背景与证据见 notes/player_audio_alpha11.md 第一节：
+    //   soundtouch=1 → App 层 SoundTouch TDStretch 时间拉伸，任何倍速都咬字不清（主因，3.0x 尤甚）；
+    //   soundtouch=0 + AudioTrack → 交给系统 PlaybackParams（Sonic），App 层不丢样本，咬字清楚；
+    //   OpenSL ES 后端没有 playback-rate 钩子，所以系统变速必须强制 AudioTrack；
+    //   引擎只能在 prepare 之前决定（选项只在 ffp_prepare_async_l 里被消费一次），
+    //   因此运行中要换引擎只能重建播放器（只在跨 2.0x 边界时才发生）。
+
+    /** 主播放器这次 prepare 用的是哪个引擎（[PlayerAudioPolicy.ENGINE_SYSTEM] / ENGINE_SOUNDTOUCH） */
+    private var mainSpeedEngine = PlayerAudioPolicy.ENGINE_SYSTEM
+
+    /** 系统变速的运行期校验器（只创建一次，退出时 cancel） */
+    private var speedVerifier: SpeedRateVerifier? = null
+
+    /** 是否需要按新引擎重建播放器（避免同一个倍速反复重建） */
+    private var speedEngineReloading = false
+
+    /**
+     * 所有「切倍速」的唯一入口：更新主播放器、伴音轨与弹幕层，必要时切引擎。
+     *
+     * 不能只调 setSpeed 的原因：`soundtouch` 是**只在 prepare 时生效**的选项，
+     * 运行中把 2.0x 切到 3.0x（或反向）必须重载播放器才能真的换引擎，
+     * 否则用户会看到「3.0x 档位却还是系统变速」这种静默失效。
+     */
+    private fun applySpeedToPlayers(speed: Float, fromUser: Boolean = false) {
+        val target = PlayerAudioPolicy.clampSpeed(speed)
+        // 伴音轨与主播放器同策略（伴音轨同样是 IjkMediaPlayer，也吃得住同样的档位）
+        dashAudio?.setSpeed(target)
+        if (danmakuReady())
+            danmakuController?.setSpeed(target)
+
+        val player = ijkPlayer ?: return
+        if (!isPrepared) {
+            // 还没 prepare：引擎会在 MPPrepare 前按目标倍速重新判定，这里只下发倍速
+            PlayerAudioPolicy.applySpeed(player, target)
+            return
+        }
+
+        // 只有用户主动切档位才允许换引擎重载：长按 2x / 松手恢复都是临时态，
+        // 每次重载都要重新缓冲，不能因为「长按时引擎不同」就抖一下
+        // （例如正在 3.0x（SoundTouch）时长按 2x，若重载会白卡一次）。
+        if (fromUser && PlayerAudioPolicy.needsEngineRebuild(mainSpeedEngine, target) &&
+                !speedEngineReloading) {
+            reloadForSpeedEngine(target, true)
+            return
+        }
+        PlayerAudioPolicy.applySpeed(player, target)
+        if (fromUser && mainSpeedEngine == PlayerAudioPolicy.ENGINE_SYSTEM)
+            verifySystemSpeed(target)
+    }
+
+    /**
+     * 跨 2.0x 边界切速时重载播放器（换变速引擎）。
+     *
+     * 代价是一次重缓冲，收益是「3.0x 真的按 3.0x 播且不静默失效」。只在用户主动切档位时触发；
+     * 长按 2x（临时态）与 onPrepared 补应用不会走到这里（它们的目标引擎与当前一致）。
+     */
+    private fun reloadForSpeedEngine(target: Float, showHint: Boolean) {
+        val position = try {
+            ijkPlayer?.getCurrentPosition() ?: 0L
+        } catch (e: Exception) {
+            Logu.d("倍速引擎", "读取位置失败：" + e.message)
+            0L
+        }
+        val engine = PlayerAudioPolicy.engineFor(target)
+        Logu.v("倍速引擎", "切换到 " + PlayerAudioPolicy.engineName(engine) +
+                "（x" + target + "），重载播放器 @" + position)
+        speedEngineReloading = true
+        // 保音轨不重建：伴音轨也按同一策略切速（它的引擎同理只在 prepare 生效，
+        // 但它是纯音频、重连成本低，这里直接重建它以保证策略一致）
+        releaseDashAudio("切倍速引擎")
+        progress_history = if (position > 0) position else progress_history
+        pendingRecoverySeek = if (position > 0) position else -1L
+        recreatePlayerForReload()
+        if (showHint) {
+            mainHandler?.post {
+                if (!destroyed)
+                    MsgUtil.showMsg("已切换到" + PlayerAudioPolicy.engineName(engine) + "倍速")
+            }
+        }
+    }
+
+    /** 释放旧播放器并重建（与卡死恢复同一套流程，只是不弹「网络波动」提示） */
+    private fun recreatePlayerForReload() {
+        CenterThreadPool.run(Runnable {
+            if (destroyed)
+                return@Runnable
+            try {
+                releaseAndRecreatePlayer()
+            } catch (e: Exception) {
+                Logu.e("倍速引擎", "重载失败：" + e.message)
+            }
+        })
+    }
+
+    /** 主线程侧的重建动作（stop/release → new → setDisplay 重新 prepare） */
+    private fun releaseAndRecreatePlayer() {
+        val position = progress_history
+        val wasPlaying = isPlaying
+        mainHandler?.post {
+            if (destroyed)
+                return@post
+            try {
+                ijkPlayer?.stop()
+            } catch (ignored: Exception) {
+            }
+            try {
+                ijkPlayer?.release()
+            } catch (ignored: Exception) {
+            }
+            ijkPlayer = IjkMediaPlayer()
+            isPrepared = false
+            isPlaying = false
+            if (playbackWatchdog != null) {
+                playbackWatchdog?.setPrepared(false)
+                playbackWatchdog?.setUserWantsPlay(false)
+            }
+            loading_info?.visibility = View.VISIBLE
+            anim_loading?.start()
+            loading_text0?.text = "切换倍速引擎"
+            pendingRecoverySeek = if (position > 0) position else -1L
+            setDisplay()
+            if (wasPlaying) {
+                // start-on-prepared=1 会自己起播，这里只恢复「用户想播」的意图
+                playbackWatchdog?.setUserWantsPlay(true)
+            }
+        }
+    }
+
+    /**
+     * 校验「系统变速」是否真的生效（该机 AudioTrack/PlaybackParams 是否响应）。
+     *
+     * 不生效就标记本进程改用 SoundTouch，并立即重载一次 —— 否则用户会以为「3.0x 以外也没变速」。
+     */
+    private fun verifySystemSpeed(speed: Float) {
+        val verifier = speedVerifier ?: SpeedRateVerifier().also { speedVerifier = it }
+        verifier.verify(
+                speed,
+                positionProvider = {
+                    if (!isPrepared || !isPlaying || isSeeking) -1L
+                    else try {
+                        ijkPlayer?.getCurrentPosition() ?: -1L
+                    } catch (e: Exception) {
+                        -1L
+                    }
+                },
+                onResult = { ok ->
+                    if (!ok && !destroyed) {
+                        PlayerAudioPolicy.markSystemEngineBroken()
+                        mainHandler?.post {
+                            if (!destroyed) {
+                                MsgUtil.showMsg("此设备不支持系统变速，已改用 SoundTouch")
+                                applySpeedToPlayers(currentSpeedValue())
+                            }
+                        }
+                    }
+                })
+    }
+
     /**
      * 应用拉流/缓冲策略（v5.0.2-alpha10 从 setDisplay 抽出来的）。
      *
@@ -1222,6 +1382,26 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         // 触底后立刻高速回填（只有真的启用了脉冲式才需要）
         if (pulseUsed)
             player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 1L)
+    }
+
+    /**
+     * 设置音频输出后端与变速引擎（v5.0.3-alpha11，从 setDisplay 抽出来避免复杂度爆表）。
+     *
+     * 引擎在 prepare 之前一次定死：
+     * - 系统变速 ⇒ `soundtouch=0` + 强制 `opensles=0`（OpenSL ES 没有 playback-rate 钩子）；
+     * - SoundTouch ⇒ `soundtouch=1`，输出后端仍按用户设置（OpenSles/AudioTrack 都行）。
+     *
+     * 引擎按倍速条**当前**档位算：跨 2.0x 切速时用户拖动的瞬间倍速条就已经是新档位了，
+     * 所以重载后这里算出来的一定是刚切过去的那个引擎。
+     */
+    private fun applyAudioEngineOptions() {
+        val player = ijkPlayer ?: return
+        val openslesPref = SharedPreferencesUtil.getBoolean("player_audio", false)
+        mainSpeedEngine = PlayerAudioPolicy.applyPrepareOptions(
+                player, currentSpeedValue(), openslesPref)
+        // 新播放器的引擎已经按目标倍速配置好了，解除「正在重载」的锁
+        // （放在这里而不是 onPrepared：即使这次 prepare 失败/超时也不会永久卡住后续切速）
+        speedEngineReloading = false
     }
 
     private fun setDisplay() {
@@ -1240,20 +1420,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
         }
 
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "opensles",
-                (if (SharedPreferencesUtil.getBoolean("player_audio", false)) 1L else 0L))
+        // v5.0.3-alpha11：音频输出后端与「倍速引擎」联动（抽成函数，保持 setDisplay 的复杂度不变）。
+        // 引擎=系统变速时必须 AudioTrack（OpenSL ES 没有 playback-rate 钩子），详见策略类注释。
+        applyAudioEngineOptions()
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 4L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-        // v5.0.2-alpha10（音质/沉闷）更正 alpha8 的说法：soundtouch 常开是**无害**的，
-        // 因为上游 ff_ffplay.c 的守卫是「soundtouch_enable 且 pf_playback_rate != 1.0f」
-        // 才会调用 ijk_soundtouch_translate —— 1.0x 根本不进 SoundTouch，
-        // 所以「1.0x 声音发闷」与它无关（本轮不再围绕它做文章）。
-        // 反过来，>1.0x 时它是唯一保音调的变速实现，关掉必然变调。恒为 1，统一走策略类。
-        // 该选项必须在 prepare 之前设置，两个播放器都在 prepare 前设置，符合要求。
-        ijkPlayer?.let { PlayerAudioPolicy.applySoundtouch(it) }
+        // 上面 applyAudioEngineOptions() 已按本轮的引擎判定设置了 soundtouch / opensles，
+        // 这里不再重复设置（重复设置会与策略类的判定打架，alpha10 就是在这里留下的旧注释）。
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_clear", 1L)
 
         ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
@@ -1350,6 +1526,28 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 startPrepareIfNeeded()
             }
         }
+    }
+
+    /**
+     * prepare 完成后补应用倍速（从 onPrepared 抽出来，避免那个长函数继续膨胀）。
+     *
+     * 注意一种真实存在的边界：用户在**缓冲/切源期间**改了档位，而引擎是 prepare 那一刻定死的。
+     * 例如起播在 1.5x（系统变速）、缓冲时被拖到 3.0x，若只 setSpeed 会出现
+     * 「档位显示 3.0x、实际仍是系统变速（多半还哑火在 3.0x）」的静默失效，
+     * 所以这里比对引擎，必要时重载一次（重载只做一次即收敛：setDisplay 会按当前档位重新算引擎）。
+     */
+    private fun applyPreparedSpeed(preparedSpeed: Float) {
+        if (preparedSpeed == 1.0f) return
+        if (!speedEngineReloading &&
+                PlayerAudioPolicy.needsEngineRebuild(mainSpeedEngine, preparedSpeed)) {
+            Logu.v("倍速引擎", "prepare 期间档位变化，按 x" + preparedSpeed + " 重载引擎")
+            reloadForSpeedEngine(preparedSpeed, false)
+            return
+        }
+        ijkPlayer?.let { PlayerAudioPolicy.applySpeed(it, preparedSpeed) }
+        if (danmakuReady())
+            danmakuController?.setSpeed(preparedSpeed)
+        Logu.v("倍速", "prepare 完成，补应用倍速 x" + preparedSpeed)
     }
 
     /**
@@ -1571,17 +1769,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         // 播放速率不会跨实例保留（新实例默认 1.0x），而倍速条还停在用户选的档位上 ——
         // 结果是 UI 显示 x2.0、实际却按 1x 播，或者声音变速状态和界面不一致。
         // prepare 完成后按倍速条当前档位补应用一次（长按倍速是临时态，不在此恢复）。
-        // v5.0.2-alpha10：改用 speedAt() 取档位，历史越界进度（旧的第 8 档 3.0x）
-        // 会被夹到上限 2.0，而不是被 indices 判断直接跳过、变成按 1.0x 播放。
+        // v5.0.3-alpha11：档位回到 8 档（含 3.0x），越界进度仍会被夹取到合法范围。
+        // 引擎已经在 prepare 之前按这个档位定好了，所以这里不会触发重载，只补下发倍速。
         val speedProgress = seekbar_speed?.progress ?: -1
         if (speedProgress >= 0) {
-            val preparedSpeed = PlayerAudioPolicy.speedAt(speedProgress)
-            if (preparedSpeed != 1.0f) {
-                ijkPlayer?.setSpeed(preparedSpeed)
-                if (danmakuReady())
-                    danmakuController?.setSpeed(preparedSpeed)
-                Logu.v("倍速", "prepare 完成，补应用倍速 x$preparedSpeed")
-            }
+            applyPreparedSpeed(PlayerAudioPolicy.speedAt(speedProgress))
         }
 
         // v5.0.2-alpha10：主播放器就绪后再拉起 DASH 高音质伴音轨（durl 内嵌音轨只有 44kbps）。
@@ -2652,6 +2844,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         // v5.0.2-alpha10：先放掉伴音轨（它自己会停/释放，不阻塞主线程）再撤销定时器
         releaseDashAudio("退出播放器")
+        // v5.0.3-alpha11：停掉倍速引擎的采样校验，避免回调打到已销毁的页面
+        speedVerifier?.cancel()
+        speedVerifier = null
 
         cancelAllTimers()
 
@@ -3146,11 +3341,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 if (fromUser) {
                     text_newspeed?.text = speedStrs[position]
                     text_speed?.text = speedStrs[position]
-                    ijkPlayer?.setSpeed(speedValues[position])
-                    // 伴音轨同步倍速（伴音轨同样走 PlayerAudioPolicy 的上限/音调策略）
-                    dashAudio?.setSpeed(speedValues[position])
-                    if (danmakuReady())
-                        danmakuController?.setSpeed(speedValues[position])
+                    // v5.0.3-alpha11：所有切速走同一入口（内部会处理引擎切换/伴音轨/弹幕层）
+                    applySpeedToPlayers(speedValues[position], fromUser = true)
                 }
             }
 
@@ -3250,7 +3442,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      */
     private fun swapUrlForAudioOnlyMode() {
         val dashUrl = dashAudioUrl
-        if (dashUrl.isNullOrEmpty() || isLocalAudioFile || !PlayerAudioPolicy.dashAudioEnabled())
+        // v5.0.3-alpha11：听视频模式与「伴音轨实验开关」解耦（单音轨单文件、无额外带宽，
+        // 见 canUseDashAudioForAudioOnly 的说明）；本地音频仍然没有第二路可选。
+        if (dashUrl.isNullOrEmpty() || isLocalAudioFile)
             return
         if (isAudioOnlyMode) {
             // 切进听视频模式：伴音轨没必要再单独播（主播放器自己就是音轨）

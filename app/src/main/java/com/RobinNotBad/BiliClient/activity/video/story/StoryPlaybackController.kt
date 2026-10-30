@@ -8,6 +8,7 @@ import android.view.SurfaceView
 import com.RobinNotBad.BiliClient.activity.player.PlayerAudioPolicy
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 import tv.danmaku.ijk.media.player.IMediaPlayer
 import tv.danmaku.ijk.media.player.IjkMediaPlayer
@@ -206,15 +207,13 @@ class StoryPlaybackController(
 
     /** 倍速（长按倍速 / 倍速菜单共用） */
     fun setSpeed(newSpeed: Float) {
-        // v5.0.2-alpha10：倍速上限由共享策略约束（SoundTouch 稳定区间 0.5~2.0），
-        // 超过 2.0x 时 TDStretch 会把音节成段丢掉，听感就是「吞字」。
+        // v5.0.3-alpha11：档位恢复到 3.0x，切速统一走策略类入口。
+        // 短视频播放器与主播放器不同：一次 play() 之后不会为变速重建播放器
+        // （切换卡片本身就是重 prepare），所以跨 2.0x 的引擎变化会在下一次 play() 生效，
+        // 这里只保证「已经 prepare 完的情况下 setSpeed 不抛异常、数值被夹取」。
         val clamped = PlayerAudioPolicy.clampSpeed(newSpeed)
         speed = clamped
-        try {
-            player?.setSpeed(clamped)
-        } catch (e: Exception) {
-            Logu.e("story", "设置倍速失败：" + e.message)
-        }
+        player?.let { PlayerAudioPolicy.applySpeed(it, clamped) }
     }
 
     /** 拖动进度条跳转 */
@@ -270,11 +269,8 @@ class StoryPlaybackController(
                 } catch (ignored: Exception) {
                 }
             }
-            //prepare 前设置的倍速在这里补上（ijk 在未 prepare 时 setSpeed 可能不生效）
-            try {
-                player?.setSpeed(speed)
-            } catch (ignored: Exception) {
-            }
+            // prepare 前设置的倍速在这里补上（ijk 在未 prepare 时 setSpeed 可能不生效）
+            player?.let { PlayerAudioPolicy.applySpeed(it, speed) }
             // v5.0.2-alpha8（bug1）：尺寸事件（FFP_MSG_VIDEO_SIZE_CHANGED）不一定早于
             // prepared 到达（硬解重新配置解码器时尤其容易晚），这里用 prepared 时
             // 已知的尺寸再补报一次，保证页面在开播前就能按真实比例摆好画面，
@@ -414,11 +410,11 @@ class StoryPlaybackController(
         //start 由 onPrepared 自己控制，否则暂停状态会被 start-on-prepared 覆盖
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-        // v5.0.2-alpha10：音频策略统一走 PlayerAudioPolicy（与主播放器同一份实现，
-        // 避免 alpha8 那种「注释说一致、实际写反」的分叉）。
-        // soundtouch 恒 1：1.0x 时上游守卫让它根本不进 SoundTouch（不会发闷），
-        // >1.0x 时它是唯一保音调的变速实现。必须在 prepare 之前设置。
-        PlayerAudioPolicy.applySoundtouch(p)
+        // v5.0.3-alpha11：变速引擎与主播放器同一套判定（≤2.0x 默认系统变速、>2.0x 用 SoundTouch），
+        // 避免 alpha8 那种「注释说一致、实际写反」的分叉。必须在 prepare 之前设置（选项只在
+        // ffp_prepare_async_l 里被消费一次，运行期 setOption 是哑操作）。
+        PlayerAudioPolicy.applyPrepareOptions(p, speed,
+                SharedPreferencesUtil.getBoolean("player_audio", false))
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1L)

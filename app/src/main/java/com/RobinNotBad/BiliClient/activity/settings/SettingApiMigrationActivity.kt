@@ -75,6 +75,14 @@ class SettingApiMigrationActivity : BaseActivity() {
         identitySb.append("\nAPP 通道签名：").append(identity.feedMobiApp)
         identitySb.append(" / build ").append(identity.feedBuild)
         identitySb.append("\n身份跟随「移动端推荐逻辑」页的客户端身份设置")
+        // 账号一致性：四个登录体系互相独立，app 身份和 web 账号可能不是同一个号。
+        // 不是同一个号时，收藏/历史/写操作这类账号相关接口一律保持 web（否则会串号）。
+        if (ApiRouter.isAccountMismatch(identity)) {
+            identitySb.append("\n⚠ APP 身份与 web 账号不是同一个号")
+            identitySb.append("\n账号相关接口（收藏/历史/关注/写操作）保持 web")
+        } else if (logged) {
+            identitySb.append("\n账号一致：账号相关接口也走 APP 通道")
+        }
         identityText?.text = identitySb.toString()
 
         val hits = ApiRouter.hitCount()

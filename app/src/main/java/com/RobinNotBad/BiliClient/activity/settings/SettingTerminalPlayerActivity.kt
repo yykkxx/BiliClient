@@ -58,15 +58,30 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
         sectionList.add(SettingSection("choose", "音频输出", "player_audio",
                 getString(R.string.desc_audiocodec), "false",
                 arrayOf("OpenSles", "AudioTrack")))
+        // v5.0.3-alpha11：倍速算法。默认「系统变速」——
+        // 用户实测「只要倍速就咬字不清」，取证结论是 App 层 SoundTouch 的 TDStretch 时间拉伸
+        // 会把摩擦音/爆破音拼掉（3.0x 时每帧只剩约三分之一原始波形），
+        // 而系统变速（AudioTrack PlaybackParams / Sonic）在 App 层不丢样本，咬字明显更清。
+        // 注意 choose 控件的布尔语义（SettingsAdapter.ChooseHolder）：
+        // 偏好为 true 时选中 /** 第一项 */ strings[0]，false 选中 strings[1]。
+        // 所以数组顺序必须是 [true 项, false 项] = [SoundTouch, 系统变速]，默认 false 才落在「系统变速」。
+        sectionList.add(SettingSection("choose", "倍速算法", PlayerAudioPolicy.PREF_SPEED_SOUNDTOUCH,
+                "系统变速：咬字清楚，2.0x 以内最佳（需要 AudioTrack 输出，勾选 OpenSles 时会被忽略）。" +
+                        "SoundTouch：App 层变速，唯一能真正跑 3.0x 的实现，但咬字略糊。",
+                "false",
+                arrayOf("SoundTouch", "系统变速")))
         sectionList.add(SettingSection("switch", "低延迟优先", "player_low_latency",
                 getString(R.string.desc_low_latency), "false"))
-        // v5.0.2-alpha10：durl（单文件混流）内嵌的音轨恒为 44kbps HE-AAC，
-        // 这是「声音沉闷」的根因；打开后改播 DASH 高音质音轨（最高 204kbps），
-        // 不可用时会自动回退原音轨，不会没声音。
-        sectionList.add(SettingSection("switch", "高音质音轨（DASH）",
+        // v5.0.2-alpha10 引入、v5.0.3-alpha11 **默认关闭**：
+        // 打开后视频与音频会分两路下载（durl 那份混流音轨 + 另一份 DASH 204kbps 音轨），
+        // 同一段音轨被下载两遍 —— 用户明确反馈「不想为音质多付一份带宽」。
+        // 默认关闭 = durl 单文件单音轨，零额外连接、零额外带宽；
+        // 想要高音质再手动打开（听视频模式不受本开关影响，它本来就是单音轨单文件）。
+        sectionList.add(SettingSection("switch", "双流高音质音轨（实验，额外流量）",
                 PlayerAudioPolicy.PREF_DASH_AUDIO,
-                "在线视频改用 DASH 高音质音轨播放（durl 内嵌音轨只有 44kbps）。不可用时自动回退，默认开启。",
-                "true"))
+                "开启后视频和音频分两路下载：画面用 durl，声音另下一份 DASH 204kbps 音轨" +
+                        "（durl 内嵌音轨只有 44kbps）。会额外占用一份音频流量，不可用时自动回退。默认关闭。",
+                "false"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 

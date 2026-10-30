@@ -165,7 +165,7 @@ object NetWorkUtil {
                 null
             }
             if (appResponse != null) {
-                val verdict = ApiRouter.classify(appResponse)
+                val verdict = ApiRouter.classify(appResponse, plan)
                 if (verdict.isOk) {
                     ApiRouter.recordHit(plan)
                     return appResponse
@@ -242,7 +242,7 @@ object NetWorkUtil {
                 null
             }
             if (appResponse != null) {
-                val verdict = ApiRouter.classify(appResponse)
+                val verdict = ApiRouter.classify(appResponse, plan)
                 if (verdict.isOk) {
                     ApiRouter.recordHit(plan)
                     return appResponse

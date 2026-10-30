@@ -6,6 +6,7 @@ import android.os.Looper
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 import tv.danmaku.ijk.media.player.IjkMediaPlayer
 
@@ -100,8 +101,11 @@ class DashAudioCompanion(
         try {
             // 纯音频：关掉视频解码，只留音频链路
             p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vn", 1L)
-            // 倍速保音调，与主播放器同一套策略（1.0x 时上游守卫不会真正进 SoundTouch）
-            PlayerAudioPolicy.applySoundtouch(p)
+            // 变速引擎与主播放器同一套策略：≤2.0x 默认走系统变速（AudioTrack PlaybackParams），
+            // >2.0x 或用户选了 SoundTouch 才用 App 层 TDStretch（后者咬字略糊，证据见 notes）。
+            // 注意选项只在 prepare 前生效，所以要在 setDataSource/prepareAsync 之前调。
+            PlayerAudioPolicy.applyPrepareOptions(p, this.speed,
+                    SharedPreferencesUtil.getBoolean("player_audio", false))
             // 伴音轨必须连续缓冲：缺包填静音会让「音质修复」变成「吞字复现」
             PlayerAudioPolicy.applyBufferingPolicy(p, this.speed, false)
             p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
@@ -117,7 +121,7 @@ class DashAudioCompanion(
                     if (startAtMs > 0)
                         mp.seekTo(startAtMs)
                     // setSpeed 只在 IjkMediaPlayer 上有，回调参数是 IMediaPlayer 接口
-                    p.setSpeed(this.speed)
+                    PlayerAudioPolicy.applySpeed(p, this.speed)
                     ready = true
                     handler.removeCallbacks(timeoutTask)
                     // 顺序很关键：先让主播放器静音，再让伴音轨出声，
@@ -205,11 +209,7 @@ class DashAudioCompanion(
     /** 倍速转发（页面切倍速/长按恢复/onPrepared 补应用都要调） */
     fun setSpeed(newSpeed: Float) {
         speed = PlayerAudioPolicy.clampSpeed(newSpeed)
-        try {
-            player?.setSpeed(speed)
-        } catch (e: Exception) {
-            Logu.d(TAG, "设置倍速失败：" + e.message)
-        }
+        player?.let { PlayerAudioPolicy.applySpeed(it, speed) }
     }
 
     fun pause() {

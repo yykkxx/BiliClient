@@ -5,6 +5,10 @@ import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import okhttp3.HttpUrl
+// quality-allow：这里只需要在 16KB 的响应前缀里做「字段存在性」判定，
+// 不是业务数据解析（业务解析仍在各 Api 对象里）。为一次浅层路径检查引入 Gson/序列化
+// 或新建 model 得不偿失，故允许在本文件用轻量 org.json。
+import org.json.JSONObject // quality-allow：仅做 16KB 前缀里的字段存在性判定，不是业务数据解析
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Response
 import java.net.URLDecoder
@@ -114,16 +118,52 @@ object ApiRouter {
          * - 非幂等写操作（isPostWrite）：false —— 一旦请求可能已经发出，重放会造成
          *   重复投币 / 重复发评论 / 重复发私信这类不可撤销的副作用，宁可报错也不重发。
          */
-        val replayable: Boolean = true
+        val replayable: Boolean = true,
+        /** 允许当成「通道可用」的业务码（见 Rule.acceptedCodes） */
+        val acceptedCodes: IntArray? = null,
+        /** 回包 `data` 里必须存在的点号路径（见 Rule.requiredDataFields） */
+        val requiredDataFields: List<String>? = null,
+        /** 允许二进制响应（见 Rule.allowBinary） */
+        val allowBinary: Boolean = false
     )
 
     /** 响应判定结果：ok=true 表示 APP 通道可用，false 时 reason 说明为什么要回退 */
     data class Verdict(val isOk: Boolean, val reason: String)
 
-    /** 全 API 迁移开关（实验室，默认关） */
+    /**
+     * 全 API 迁移开关。
+     *
+     * **v5.0.4 起默认开启**（用户要求「尽我所能迁移所有东西」）。之所以敢默认开，是因为
+     * 三道护栏都在：① 任何端点失败（-101/-352/-400/HTTP/非JSON）自动回退 web；
+     * ② 账号相关接口只在「APP 身份与 web 账号是同一个号」时才迁移（[isAccountMismatch]）；
+     * ③ 非幂等写操作一旦可能发出就绝不重放。
+     * 用户仍可在「设置 → 实验室 → 全 API 迁移」里一键关掉，关掉后行为与老版本完全一致。
+     */
     @JvmStatic
     fun isEnabled(): Boolean {
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_MIGRATION_ENABLED, false)
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_MIGRATION_ENABLED, true)
+    }
+
+    /**
+     * 当前 APP 身份与 web 登录账号是否**不是同一个号**。
+     *
+     * `AppRcmdApi` 的四个登录体系（web Cookie / HD / TV / 手机）互相独立，用户完全可能
+     * 在 web 登 A 号、在 TV 身份登 B 号。这时如果把「收藏夹 / 历史 / 关注」这类
+     * **账号相关**接口迁到 APP 通道，就会静默返回 B 号的数据（甚至把点赞投到 B 号）——
+     * 这是回退检测兜不住的错误，比「多一个 RTT」严重得多。
+     *
+     * 规则：两边都有 mid 且不相等 → 判定为不一致，账号相关接口一律保持 web。
+     * 只要有一边没登录（mid=0）就不算不一致（登录态检查另有 isLoginRequired 把关）。
+     *
+     * @param identity 本次请求将要使用的身份
+     */
+    @JvmStatic
+    fun isAccountMismatch(identity: AppRcmdApi.RcmdIdentity): Boolean {
+        val webMid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L)
+        if (webMid <= 0L) return false
+        val appMid = AppRcmdApi.getIdentityMid(identity.id)
+        if (appMid <= 0L) return false
+        return webMid != appMid
     }
 
     /**
@@ -177,14 +217,12 @@ object ApiRouter {
         // 未登录当前客户端身份时：只有明确标记为公共接口的规则才迁移。
         // 原因见 ApiMigrationRules.Rule.isLoginRequired：匿名 APP 请求对收藏/历史/动态等
         // 可能返回 code=0 但数据为空，这种「静默空数据」无法靠回退检测兜住。
-        if (accessToken.isEmpty() && rule.isLoginRequired) return null
+        // 未登录 / 串号两种情况下，账号相关接口一律保持 web（见 mustKeepWebForAccount）
+        if (mustKeepWebForAccount(rule, identity, accessToken)) return null
 
-        val targetHost = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE && rule.targetHost != null) {
-            rule.targetHost
-        } else host
-        val targetPath = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE) {
-            rule.targetPath ?: path
-        } else path
+        val target = resolveTarget(host, path, rule)
+        val targetHost = target.first
+        val targetPath = target.second
 
         val params = queryParams(httpUrl)
         applyParamRewrite(params, rule)
@@ -196,7 +234,34 @@ object ApiRouter {
         AppRcmdApi.sign(formData, identity)
 
         val appUrl = "https://" + targetHost + targetPath + formData.toString()
-        return Plan("GET", originalUrl, appUrl, AppRcmdApi.appHeaders(identity), null, null, endpoint)
+        return Plan("GET", originalUrl, appUrl, AppRcmdApi.appHeaders(identity), null, null, endpoint,
+                acceptedCodes = rule.acceptedCodes,
+                requiredDataFields = rule.requiredDataFields,
+                allowBinary = rule.allowBinary)
+    }
+
+    /**
+     * 按规则解析目标 host + path。只有 [ApiMigrationRules.Kind.PATH_OVERRIDE] 才换端点，
+     * 且 `targetHost`/`targetPath` 为 null 时保持原值。
+     */
+    private fun resolveTarget(host: String, path: String, rule: ApiMigrationRules.Rule): Pair<String, String> {
+        if (rule.kind != ApiMigrationRules.Kind.PATH_OVERRIDE) return Pair(host, path)
+        return Pair(rule.targetHost ?: host, rule.targetPath ?: path)
+    }
+
+    /**
+     * 账号相关接口是否必须保持 web（两个理由之一即保持）：
+     * 1. `isLoginRequired` 但当前 APP 身份没登录 —— 匿名 APP 请求可能返回 code=0 却是空数据；
+     * 2. APP 身份与 web 账号**不是同一个号** —— 否则会静默读写另一个账号的数据。
+     */
+    private fun mustKeepWebForAccount(
+        rule: ApiMigrationRules.Rule,
+        identity: AppRcmdApi.RcmdIdentity,
+        accessToken: String
+    ): Boolean {
+        if (!rule.isLoginRequired) return false
+        if (accessToken.isEmpty()) return true
+        return isAccountMismatch(identity)
     }
 
     /**
@@ -255,17 +320,14 @@ object ApiRouter {
             return null
         }
 
-        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份）
+        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份），且不能串号
         val identity = AppRcmdApi.getIdentityById(rule.preferredIdentity)
         val accessToken = AppRcmdApi.getAccessToken(identity.id)
-        if (rule.isLoginRequired && accessToken.isEmpty()) return null
+        if (mustKeepWebForAccount(rule, identity, accessToken)) return null
 
-        val targetHost = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE && rule.targetHost != null) {
-            rule.targetHost
-        } else host
-        val targetPath = if (rule.kind == ApiMigrationRules.Kind.PATH_OVERRIDE) {
-            rule.targetPath ?: path
-        } else path
+        val target = resolveTarget(host, path, rule)
+        val targetHost = target.first
+        val targetPath = target.second
 
         val params = parseFormBody(body)
         params.putAll(queryParams(httpUrl))
@@ -280,7 +342,10 @@ object ApiRouter {
         return Plan("POST", originalUrl, "https://" + targetHost + targetPath,
                 AppRcmdApi.appHeaders(identity),
                 formData.toString(), "application/x-www-form-urlencoded", endpoint,
-                replayable = rule.isPostSafe)
+                replayable = rule.isPostSafe,
+                acceptedCodes = rule.acceptedCodes,
+                requiredDataFields = rule.requiredDataFields,
+                allowBinary = rule.allowBinary)
     }
 
     /** 按身份补 APP 公共参数（appkey/ts/sign 由 [AppRcmdApi.sign] 追加） */
@@ -336,15 +401,37 @@ object ApiRouter {
      *   直接把 APP 响应交给上层，由原有逻辑处理，不浪费一次 web 请求。
      */
     @JvmStatic
-    fun classify(response: Response): Verdict {
+    fun classify(response: Response): Verdict = classify(response, null)
+
+    /**
+     * 判断 APP 通道响应是否可用（带规则上下文版）。
+     *
+     * 相比无参版本多三件事：
+     * 1. [Plan.allowBinary]：二进制端点只看 HTTP 状态 + 响应体非空（弹幕 seg.so 的 protobuf）；
+     * 2. [Plan.acceptedCodes]：规则允许的业务码（如 nav 的 -101）不再算失败；
+     * 3. [Plan.requiredDataFields]：放行之后再做内容校验，字段缺失照样回退 web。
+     */
+    @JvmStatic
+    fun classify(response: Response, plan: Plan?): Verdict {
         if (!response.isSuccessful) return Verdict(isOk = false, reason = "HTTP " + response.code)
+        if (plan != null && plan.allowBinary) return classifyBinary(response)
         val contentType = response.header("Content-Type") ?: ""
         if (!contentType.contains("json", ignoreCase = true)) return Verdict(isOk = false, reason = "非JSON响应")
-        return classifyJsonBody(response)
+        return classifyJsonBody(response, plan)
+    }
+
+    /** 二进制响应判定：只要拿到非空 body 就算通道可用 */
+    private fun classifyBinary(response: Response): Verdict {
+        val size = try {
+            response.peekBody(PEEK_BYTES).bytes().size
+        } catch (e: Exception) {
+            return Verdict(isOk = false, reason = "响应读取失败：" + e.javaClass.simpleName)
+        }
+        return if (size > 0) Verdict(isOk = true, reason = "") else Verdict(isOk = false, reason = "空响应体")
     }
 
     /** 读取响应体并按 code 判定（与 [classify] 拆开，避免单个函数返回点过多） */
-    private fun classifyJsonBody(response: Response): Verdict {
+    private fun classifyJsonBody(response: Response, plan: Plan?): Verdict {
         val text = try {
             response.peekBody(PEEK_BYTES).string()
         } catch (e: Exception) {
@@ -355,8 +442,52 @@ object ApiRouter {
         val match = CODE_REGEX.find(trimmed)
         val code = match?.groupValues?.getOrNull(1)?.toIntOrNull()
         if (code == null) return Verdict(isOk = false, reason = "响应缺少 code 字段")
-        val retryable = RETRY_CODES.contains(code)
-        return Verdict(isOk = !retryable, reason = if (retryable) "code=" + code else "")
+        val accepted = plan != null && plan.acceptedCodes != null && plan.acceptedCodes.contains(code)
+        val retryable = RETRY_CODES.contains(code) && !accepted
+        if (retryable) return Verdict(isOk = false, reason = "code=" + code)
+        if (accepted && plan != null) {
+            // 放行了业务码，必须再确认「该拿到的数据真的在」，避免静默空数据被当成成功
+            val missing = firstMissingField(trimmed, plan.requiredDataFields)
+            if (missing != null) return Verdict(isOk = false, reason = "缺少字段 " + missing)
+        }
+        return Verdict(isOk = true, reason = "")
+    }
+
+    /**
+     * 检查 [fields] 里每个「点号路径」是否都能在回包的 `data` 里找到。
+     * @return 第一个缺失的路径；全部存在返回 null
+     */
+    private fun firstMissingField(jsonText: String, fields: List<String>?): String? {
+        if (fields == null || fields.isEmpty()) return null
+        val root = try {
+            JSONObject(jsonText)
+        } catch (e: Exception) {
+            // 只读到前缀时 JSON 可能被截断，这时无法做字段校验 → 按「缺字段」回退 web
+            return "响应不是完整JSON(" + e.javaClass.simpleName + ")"
+        }
+        if (!root.has("data") || root.isNull("data")) return "data"
+        return firstMissingSubField(root.getJSONObject("data"), fields)
+    }
+
+    /** 逐段下钻检查点号路径 */
+    private fun firstMissingSubField(data: JSONObject, fields: List<String>): String? {
+        for (field in fields) {
+            if (!hasJsonPath(data, field)) return field
+        }
+        return null
+    }
+
+    /** 检查 `a.b.c` 形式的路径在 obj 里是否存在且非 null */
+    private fun hasJsonPath(obj: JSONObject, path: String): Boolean {
+        var current: JSONObject = obj
+        val parts = path.split(".")
+        for (i in parts.indices) {
+            val key = parts[i]
+            if (!current.has(key) || current.isNull(key)) return false
+            if (i == parts.lastIndex) return true
+            current = current.optJSONObject(key) ?: return false
+        }
+        return true
     }
 
     // ==================== 统计 ====================

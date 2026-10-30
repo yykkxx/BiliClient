@@ -103,6 +103,29 @@ object ApiMigrationRules {
         @JvmField val isPostWrite: Boolean = false,
         @JvmField val isLoginRequired: Boolean = true,
         @JvmField val preferredIdentity: String? = null,
+        /**
+         * 允许把哪些业务码当成「通道可用」。
+         *
+         * 默认情况下 classify 遇到 -101/-352/-400… 一律回退 web；但有的端点
+         * **匿名也返回正确数据**，只是顺带回一个 -101（典型：`x/web-interface/nav`
+         * 会带完整的 `wbi_img`，只是 `isLogin=false`）。这种端点用本字段放行。
+         * 放行不等于盲信 —— 必须配合 [requiredDataFields] 做内容校验。
+         */
+        @JvmField val acceptedCodes: IntArray? = null,
+        /**
+         * 内容校验：这些「点号路径」必须都能在回包的 `data` 里找到，找不到就回退 web。
+         *
+         * 用途：`acceptedCodes` 放行了 -101 之后，还要确认「该拿到的数据真的在」，
+         * 否则一旦服务端行为变化，会把「静默空数据」当成成功。
+         */
+        @JvmField val requiredDataFields: List<String>? = null,
+        /**
+         * 允许二进制响应（protobuf / deflate 等非 JSON）。
+         *
+         * 弹幕分片 `seg.so` 返回的就是 protobuf；它只是**响应格式**不是 JSON，
+         * 不影响走 APP 通道，但 `classify` 的「非 JSON 即失败」会误判。
+         */
+        @JvmField val allowBinary: Boolean = false,
         @JvmField val category: String = "其他",
         @JvmField val note: String = ""
     ) {
@@ -138,6 +161,29 @@ object ApiMigrationRules {
     /** 创作中心（APP 通道实测 -101 = 通道被接受） */
     const val MEMBER_HOST = "member.bilibili.com"
 
+    /**
+     * 直播 APP feed 端点的固定客户端参数。
+     *
+     * 实测：`xlive/app-interface/v2/index/feed` 只带 `page`/`platform` 会 **-400**，
+     * 必须补齐 PiliPlus `Api.liveFeedIndex` 那套客户端参数才 code=0。
+     * 这些值与 `AppRcmdApi.PHONE_IDENTITY`（android / 8.43.0 / 8430300）对齐。
+     */
+    private val LIVE_FEED_PARAMS = mapOf(
+            "channel" to "master",
+            "actionKey" to "appkey",
+            "version" to "8.43.0",
+            "c_locale" to "zh_CN",
+            "s_locale" to "zh_CN",
+            "device" to "android",
+            "device_name" to "android",
+            "device_type" to "0",
+            "fnval" to "912",
+            "disable_rcmd" to "0",
+            "https_url_req" to "1",
+            "network" to "wifi",
+            "scale" to "2"
+    )
+
     private val RULES: List<Rule> = keepWebRules() + pathOverrideRules() +
             publicGetRules() + loginGetRules() + writeRules()
 
@@ -151,60 +197,59 @@ object ApiMigrationRules {
      * 4. 保留·实测被拒 —— B 站 REST 业务接口里实测拿不到 APP 等价的（**只有 3 条**）。
      */
     private fun keepWebRules(): List<Rule> = listOf(
-            // —— 1. 登录协议：扫码登录本身就是 APP 协议（passport-tv-login），没有第二套 ——
-            Rule("passport.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "登录协议（web qrcode/cookie refresh + APP passport-tv-login auth_code/poll）。" +
-                            "扫码登录本身就是 APP 协议，套 appkey 二次签只会被拒，协议层无「APP 版登录」"),
-            Rule("passport.snm0516.aisee.tv", "*", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "登录备用域（PiliPala 同款），同上"),
-            // —— WBI / 指纹 / 风控引导：这些是 web 独有机制，APP 侧用另一套（appkey+access_key）——
-            Rule(API_HOST, "/x/web-interface/nav", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "WBI 密钥引导（wbi_img）+ web 登录态。实测 APP 参数 → -101 账号未登录，" +
-                            "拿不到完整 nav；而 ConfInfoApi.getWBIRawKey 依赖它，必须保持 web"),
-            Rule(API_HOST, "/x/web-interface/nav/*", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "nav 子接口（nav/stat 等）同样依赖 web 登录态"),
-            Rule(API_HOST, "/x/frontend/finger/*", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "buvid 指纹（CookiesApi），web 独有指纹协议；APP 侧直接用 buvid 头，不需要它"),
-            Rule(API_HOST, "/x/web-frontend/getbuvid", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "buvid 获取，web 独有"),
-            Rule(API_HOST, "/x/internal/*", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "gaia 风控网关（ExClimbWuzhi），依赖 web 指纹上报，APP 侧不走这个网关"),
-            Rule(API_HOST, "/x/safecenter/*", Kind.KEEP_WEB, category = "保留·协议",
-                    note = "登录记录 / 安全中心，纯 web 账号安全页接口，APP 无对应"),
-            // —— 2. 非 REST 通道 ——
-            Rule(API_HOST, "/bapis/*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "gRPC-Web 网关（表情包 AllPackages/MyPackages 等），请求/响应是 protobuf 帧，" +
-                            "塞 appkey 参数会破坏帧格式。APP 侧同一能力走 grpc.biliapi.net，本仓库未接 gRPC"),
-            Rule(API_HOST, "/x/v2/dm/wbi/web/seg.so", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "弹幕分片 seg.so 是二进制 protobuf 分段下载，无 JSON 等价（APP 也下同一个 seg.so）"),
-            Rule("comment.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "旧版弹幕 XML，纯静态文件，不是 API"),
-            Rule("s.search.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "搜索联想返回 JSONP（window.baidu.sug({...})），不是 JSON；" +
-                            "实测带 APP 参数仍返回 JSONP，会被 classify 判成「非JSON」而回退。" +
-                            "APP 等价 /x/web-interface/suggest 结构不同（result[] vs tags[]），换过去要改解析"),
-            Rule("www.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "网页 / 分享页面地址，不是 API"),
-            Rule("live.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "直播页地址 / 开播引导，不是 API"),
-            Rule("bvc.bilivideo.com", "*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "播放统计上报（pbp/data），非 JSON 埋点协议，APP 走另一条统计链路"),
-            Rule(API_HOST, "/x/click-interface/*", Kind.KEEP_WEB, category = "保留·非REST",
-                    note = "web 心跳上报（含播放埋点），参数是 web 专用字段，APP 用 bvc pbp"),
-            // —— 3. 非 B 站自有服务器 ——
+            // —— 1. 登录握手本身（APP 侧是另一套协议，不是「没迁」）——
+            Rule("passport.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·登录协议",
+                    note = "登录握手。扫码登录本身就是 APP 协议（passport-tv-login auth_code/poll，已在用），" +
+                            "web Cookie 登录（passport-login/web/qrcode/*、cookie/refresh、sso/list、exit/v2）" +
+                            "只能由 web 协议签发 —— web 登录态没有 APP 等价物"),
+            Rule("passport.snm0516.aisee.tv", "*", Kind.KEEP_WEB, category = "保留·登录协议",
+                    note = "passport-tv-login/auth_code 的备用域（AppRcmdApi.AUTH_CODE_URL_BAK），同一条协议"),
+            // —— 2. web 独有的指纹/风控机制（APP 侧不用这套）——
+            Rule(API_HOST, "/x/internal/*", Kind.KEEP_WEB, category = "保留·web独有机制",
+                    note = "gaia 网关 ExClimbWuzhi。实测 APP 参数下 code=130212（通道有响应），" +
+                            "但它的用途是**激活 web Cookie**：payload 是照抄 log-reporter.js 的浏览器指纹" +
+                            "（USER_AGENT_WEB / WebGL 渲染器 / 插件列表 / 屏幕分辨率 / _uuid）。" +
+                            "换成 APP 通道等于自我否认，功能上不存在等价物。APP 侧用 access_key 登录，不需要激活"),
+            // —— 3. gRPC-Web 独有语义（无 REST 等价）——
+            Rule(API_HOST, "/bapis/main.community.interface.emote.EmoteService/AllPackages", Kind.KEEP_WEB,
+                    category = "保留·gRPC独有",
+                    note = "「全站可添加表情包」分页搜索。实测 REST 候选只有 /x/emote/user/panel，" +
+                            "返回的是「我已拥有的表情包」且不支持 pn/ps/search 分页 → 语义不等价。" +
+                            "PiliPlus 也没有 REST 版（只用 myEmote = /x/emote/user/panel/web）"),
+            Rule(API_HOST, "/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket", Kind.KEEP_WEB,
+                    category = "保留·gRPC独有",
+                    note = "生成 web 风控 ticket（bili_ticket），与 gaia 同性质：服务 web 通道的指纹体系，" +
+                            "APP 通道用 appkey+access_key，不需要 ticket"),
+            // —— 4. 非 API（静态文件 / 页面地址 / 埋点）——
+            Rule("comment.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非API",
+                    note = "https://comment.bilibili.com/<cid>.xml 是**静态 XML 文件**（deflate），" +
+                            "CDN 直出、无签名、无登录态、无 appkey 概念 → 不是 API。" +
+                            "现役弹幕链路已是 x/v2/dm/web/seg.so（protobuf），XML 只是兜底"),
+            Rule("www.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非API",
+                    note = "页面 / 分享地址拼接（video/BV…、read/cv…、opus/…、bangumi/play/ep…），" +
+                            "没有任何 www.bilibili.com/x/… 形态的真实 API 调用"),
+            Rule("live.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非API",
+                    note = "直播间页面地址（live.bilibili.com/<roomid>），不是 API"),
+            Rule("bvc.bilivideo.com", "*", Kind.KEEP_WEB, category = "保留·非API",
+                    note = "pbp/data 高能进度条数据。实测 REST 侧无等价（/x/v2/coin* 全 404；" +
+                            "x/player/v2 只有 elec_high_level=充电等级，不是高能进度；PiliPlus 也无替代）。" +
+                            "只影响「高能进度条」这一装饰功能，调用方已 try/catch"),
+            // —— 5. B 站 API 里确实拿不到 APP 等价的 ——
+            Rule("account.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·无APP等价",
+                    note = "硬币余额 site/getCoin。实测候选全 404：x/v2/coin/user/coin、x/v2/coin/balance、" +
+                            "x/v2/coin、x/v2/account/mine；PiliPlus 的 /x/v2/view/coin/add 是**投币**不是余额；" +
+                            "nav.money 在 APP 通道下不回 money（data 只剩 isLogin/wbi_img/ip_region）"),
+            Rule("s.search.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·无APP等价",
+                    note = "搜索联想。**更正 alpha10 的说法：它返回的是纯 JSON 不是 JSONP**" +
+                            "（{\"exp_str\":\"\",\"code\":0,\"result\":{\"tag\":[{value,term,name}]}}）。" +
+                            "仍无法迁：APP 侧只有卡片式 /x/v2/search/suggest3（code=0 但 list[] 是" +
+                            "uri/goto/card_style 富卡片，无纯词条文本，匿名下 card_style 为空），" +
+                            "而 /x/v2/search/suggest?term=&main_ver=v1&func=suggest 只回 trackid、无联想词"),
+            // —— 6. 非 B 站服务器 ——
             Rule("api.biliterminal.cn", "*", Kind.KEEP_WEB, category = "保留·非B站",
                     note = "本软件自有服务器，不是 B 站接口"),
             Rule("api.deepseek.com", "*", Kind.KEEP_WEB, category = "保留·非B站",
-                    note = "第三方 AI 接口，不是 B 站接口"),
-            Rule("account.bilibili.com", "*", Kind.KEEP_WEB, category = "保留·非B站",
-                    note = "硬币余额旧接口（site/getCoin）。APP 等价是 nav.money，而 nav 必须保持 web" +
-                            "（WBI 引导），走同一条 web 通道反而一致；单独迁会引入两套余额来源"),
-            // —— 4. B 站 REST 业务接口里实测拿不到 APP 等价的（共 3 条）——
-            Rule(LIVE_HOST, "/xlive/web-interface/v1/second/getUserRecommend", Kind.KEEP_WEB,
-                    category = "保留·实测被拒",
-                    note = "直播「为你推荐」。实测 APP 参数、platform=web+web_location 均 -352；" +
-                            "APP 专用 xlive/app-interface/* 在本机 404（PiliPlus 用 v2/search_live，" +
-                            "本仓库没有承接该结构）")
+                    note = "第三方 AI 接口，不是 B 站接口")
     )
 
     // ==================== 路径 / 主机改写 ====================
@@ -256,6 +301,29 @@ object ApiMigrationRules {
                             "app.bilibili.com/x/v2/space?vmid= 实测 code=0（data.card）。" +
                             "回包在 UserInfoApi.normalizeAppSpace 里归一化成 web 形状，" +
                             "消费方零改动；缺的 live_room 由直播域 getRoomInfoOld 补齐"),
+            // 弹幕分片：web wbi 路径 → APP 的非 wbi 路径。响应是 protobuf，不是 JSON
+            Rule(API_HOST, "/x/v2/dm/wbi/web/seg.so", Kind.PATH_OVERRIDE,
+                    targetPath = "/x/v2/dm/web/seg.so", allowBinary = true, category = "弹幕",
+                    note = "弹幕分片 seg.so。protobuf 只是**响应格式**，不阻碍走 APP 通道。" +
+                            "实测 wbi 路径与非 wbi 路径带 APP 参数都返回同样结构的 protobuf，首字节 \\nT\\x08…；" +
+                            "allowBinary 让 classify 只看 HTTP 状态与响应体非空"),
+            // 表情包：gRPC-Web 的「我的表情包」有 REST 等价（/x/emote/user/panel，data.packages 同构）
+            Rule(API_HOST, "/bapis/main.community.interface.emote.EmoteService/MyPackages", Kind.PATH_OVERRIDE,
+                    targetPath = "/x/emote/user/panel", isLoginRequired = true, category = "表情",
+                    note = "我的表情包。实测 /x/emote/user/panel?business=reply + APP 参数 → code=0，" +
+                            "data.packages 与 gRPC 版同构（EmoteApi.analyzeEmotePackages 零改动）。" +
+                            "注意：AllPackages（全站浏览/搜索）语义不同，仍保留"),
+            Rule(API_HOST, "/bapis/main.community.interface.emote.EmoteService/InUsePackages", Kind.PATH_OVERRIDE,
+                    targetPath = "/x/emote/user/panel", isLoginRequired = true, category = "表情",
+                    note = "使用中的表情包。同上走 /x/emote/user/panel（REST 里「我的表情包」就是可用的全集）"),
+            // 直播「为你推荐」：web 路径 -352，APP 的 feed 端点补全客户端参数后 code=0
+            Rule(LIVE_HOST, "/xlive/web-interface/v1/second/getUserRecommend", Kind.PATH_OVERRIDE,
+                    targetPath = "/xlive/app-interface/v2/index/feed",
+                    extraParams = LIVE_FEED_PARAMS, category = "直播",
+                    note = "直播「为你推荐」。实测 web 路径带 APP 参数 -352；" +
+                            "xlive/app-interface/v2/index/feed 缺客户端参数时 -400，" +
+                            "补齐频道/版本/机型等固定参数后 code=0（data.card_list 22 条、has_more）。" +
+                            "解析在 LiveApi.analyzeLiveFeedCards 里兼容 card_list → 直播卡片"),
             // 评论主接口（cursor 版 /x/v2/reply/wbi/main）**故意不写规则**：
             // 它的分页模型（offset）与 APP 可用的 pn/ps 版完全不同，在路由层做路径重定向
             // 会让调用方拿不到 cursor 键直接抛 JSONException。正确做法是让 ReplyApi 自己按
@@ -273,6 +341,31 @@ object ApiMigrationRules {
      * 避免「匿名 APP 返回 code=0 但数据为空」这种回退检测兜不住的静默错误。
      */
     private fun publicGetRules(): List<Rule> = listOf(
+            // —— WBI 密钥引导 + 设备号（三个都实测可用，见 notes alpha11 §1/§2）——
+            // nav 的返回值里真的带 wbi_img，且用它推导的 mixin key 能签出被服务端认可的 WBI 请求；
+            // 它以 -101 返回（匿名），所以用 acceptedCodes 放行 + requiredDataFields 做内容校验。
+            Rule(API_HOST, "/x/web-interface/nav", Kind.APP_PARAMS,
+                    isLoginRequired = false,
+                    acceptedCodes = intArrayOf(-101),
+                    requiredDataFields = listOf("wbi_img.img_url", "wbi_img.sub_url"),
+                    category = "协议",
+                    note = "WBI 密钥引导。实测 APP 参数 → code=-101 但 **data.wbi_img 完整**，" +
+                            "用它推导的 mixin key 签 WBI 搜索 → code=0/20 条（服务端认可）。" +
+                            "全仓库唯一消费方 ConfInfoApi.getWBIRawKey 只读 data.wbi_img、不看 code；" +
+                            "也没有任何地方消费 isLogin（登录态由 web Cookie 独立表达）。" +
+                            "requiredDataFields 保证「拿不到 wbi_img 就回退 web」，绝不静默炸掉签名"),
+            Rule(API_HOST, "/x/frontend/finger/spi", Kind.APP_PARAMS,
+                    isLoginRequired = false,
+                    requiredDataFields = listOf("b_3"),
+                    category = "协议",
+                    note = "buvid3/buvid4。实测 APP 参数 → code=0，data={b_3,b_4}。" +
+                            "requiredDataFields 保证拿不到 b_3 就回退 web，不给调用方留空设备号"),
+            Rule(API_HOST, "/x/web-frontend/getbuvid", Kind.APP_PARAMS,
+                    isLoginRequired = false,
+                    requiredDataFields = listOf("buvid"),
+                    category = "协议",
+                    note = "buvid3。实测 APP 参数 → code=0，data={buvid}。" +
+                            "requiredDataFields 保证拿不到 buvid 就回退 web"),
             // —— 视频信息 / 播放 ——
             get("/x/web-interface/view", "视频详细信息。实测三身份 code=0"),
             get("/x/web-interface/archive/related", "相关推荐。实测 code=0（data 为数组）"),
@@ -361,6 +454,9 @@ object ApiMigrationRules {
             get("/x/polymer/web-space/seasons_series_list", "合集/系列列表。与 seasons_archives_list 同族", login = true),
             get("/x/polymer/web-space/seasons_archives_list", "合集内视频。与 series/archives 同族", login = true),
             get("/x/series/archives", "系列内视频。结构同 space/fav/arc", login = true),
+            // —— 账号安全 ——
+            get("/x/safecenter/login_notice", "登录记录。实测 APP 参数 → -101 账号未登录 = 通道被接受",
+                    login = true, category = "协议"),
             // —— 消息 / 会员 ——
             get("/x/msgfeed/unread", "消息未读数。实测 -101（通道被接受）", login = true, category = "消息"),
             get("/x/msgfeed/like", "收到的点赞。实测 -101", login = true, category = "消息"),
@@ -494,6 +590,12 @@ object ApiMigrationRules {
             "/x/web-interface/popular" to "排行/热门",
             "/x/v2/history" to "历史",
             "/x/web-interface/history" to "历史",
+            "/x/emote" to "表情",
+            "/x/safecenter" to "协议",
+            "/x/web-interface/nav" to "协议",
+            "/x/frontend/finger" to "协议",
+            "/x/web-frontend/getbuvid" to "协议",
+            "/x/v2/dm" to "弹幕",
             "/x/emote" to "表情",
             "/x/stein" to "互动/其他",
             "/x/ugcpay-rank" to "互动/其他"

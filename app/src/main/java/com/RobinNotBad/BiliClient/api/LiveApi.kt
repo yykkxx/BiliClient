@@ -48,12 +48,53 @@ object LiveApi {
 
         val data = result.optJSONObject("data")
         if (data != null) {
+            // web 通道（迁移关闭）：data.list[]
             val list = data.optJSONArray("list")
-            if (list != null) {
-                return analyzeLiveRooms(list)
-            }
+            if (list != null) return analyzeLiveRooms(list)
+            // APP 通道（迁移开启后这条请求被改写到 xlive/app-interface/v2/index/feed）：data.card_list[]
+            val cards = data.optJSONArray("card_list")
+            if (cards != null) return analyzeLiveRooms(toWebShapedRooms(cards))
         }
         return null
+    }
+
+    /**
+     * 把 APP 直播 feed 的 `card_list[]` 拍平成 [analyzeLiveRooms] 认识的 web 形状。
+     *
+     * 实测（notes/api_full_migration_alpha11.md §13）结构：
+     * `card_list[i] = {card_type, card_data: {small_card_v1: {id, title, cover, uid, uname,
+     *  face, online, system_cover, parent_area_id, watched_show, …}}}`
+     * 其中 `banner_v2` / `area_entrance_v3` 这类是运营卡片，不是直播间，直接跳过。
+     *
+     * 这样 `analyzeLiveRooms`（被关注列表等多条路径共用）一行都不用改。
+     */
+    @Throws(JSONException::class)
+    private fun toWebShapedRooms(cards: JSONArray): JSONArray {
+        val rooms = JSONArray()
+        for (i in 0 until cards.length()) {
+            val item = toWebShapedRoom(cards.optJSONObject(i))
+            if (item != null) rooms.put(item)
+        }
+        return rooms
+    }
+
+    /** 单张 feed 卡片 → web 形状的直播间；不是直播间（运营卡片）时返回 null */
+    @Throws(JSONException::class)
+    private fun toWebShapedRoom(card: JSONObject?): JSONObject? {
+        if (card == null) return null
+        val room = card.optJSONObject("card_data")?.optJSONObject("small_card_v1") ?: return null
+        val item = JSONObject()
+        item.put("roomid", room.optLong("id", -1L))
+        item.put("uid", room.optLong("uid", 0L))
+        item.put("title", room.optString("title", ""))
+        item.put("uname", room.optString("uname", ""))
+        item.put("cover", room.optString("cover", ""))
+        item.put("system_cover", room.optString("system_cover", ""))
+        item.put("face", room.optString("face", ""))
+        item.put("online", room.optInt("online", -1))
+        item.put("parent_area_id", room.optInt("parent_area_id", -1))
+        item.put("area_v2_parent_id", room.optInt("parent_area_id", -1))
+        return item
     }
 
     /**
