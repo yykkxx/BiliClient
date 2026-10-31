@@ -16,6 +16,8 @@ import com.RobinNotBad.BiliClient.activity.reply.ReplyFragment
 import com.RobinNotBad.BiliClient.adapter.viewpager.ViewPagerFragmentAdapter
 import com.RobinNotBad.BiliClient.event.ReplyEvent
 import com.RobinNotBad.BiliClient.helper.TutorialHelper
+import com.RobinNotBad.BiliClient.model.VideoInfo
+import com.RobinNotBad.BiliClient.util.Result
 import com.RobinNotBad.BiliClient.util.AnimationUtils
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
@@ -94,32 +96,52 @@ class VideoInfoActivity : BaseActivity() {
         setPageName("视频详情")
         val seekReplyLocal = seek_reply
         TerminalContext.getInstance().getVideoInfoByAidOrBvId(aid, bvid).observe(this) { result ->
-            result.onSuccess { videoInfo ->
-                aid = videoInfo.aid
-                bvid = videoInfo.bvid
-                val newFragmentList = ArrayList<Fragment>(3)
-                contentFragment = VideoInfoFragment.newInstance(videoInfo.aid, bvid)
-                newFragmentList.add(contentFragment!!)
-                replyFragment = ReplyFragment.newInstance(videoInfo.aid, 1, videoInfo.stats!!.reply, seekReplyLocal, videoInfo.staff!!.get(0).mid)
-                replyFragment!!.setManager(videoInfo.staff)
-                newFragmentList.add(replyFragment!!)
-                if (SharedPreferencesUtil.getBoolean("related_enable", true)) {
-                    val vrFragment = VideoRcmdFragment.newInstance(videoInfo.aid)
-                    newFragmentList.add(vrFragment)
-                }
-                fragmentList = newFragmentList
-                viewPager!!.offscreenPageLimit = newFragmentList.size
-                val vpfAdapter = ViewPagerFragmentAdapter(supportFragmentManager, newFragmentList)
-                viewPager!!.adapter = vpfAdapter
-                if (seekReplyLocal != -1L) viewPager!!.currentItem = 1
-            }.onFailure { error ->
-                loading!!.setImageResource(R.mipmap.loading_2233_error)
-                MsgUtil.showMsg("获取信息失败！\n可能是视频不存在？")
-                CenterThreadPool.runOnUIThreadAfter(5L, TimeUnit.SECONDS, Runnable {
-                    MsgUtil.err(error)
-                })
+            // 统一收口：详情页的构建逻辑跑在主线程的 LiveData 回调里，
+            // 任何意外抛出（空数据、列表越界、fragment 初始化失败…）都是直接闪退。
+            // 这里兜住，给出可读提示后退出页面；堆栈由全局 ErrorCatch 落盘，便于事后定位。
+            try {
+                applyVideoInfoResult(result, seekReplyLocal)
+            } catch (e: Exception) {
+                MsgUtil.err("打开视频详情失败", e)
+                finish()
             }
         }
+    }
+
+    private fun applyVideoInfoResult(result: Result<VideoInfo>, seekReplyLocal: Long) {
+        result.onSuccess { videoInfo -> applyVideoInfo(videoInfo, seekReplyLocal) }
+                .onFailure { error ->
+                    loading?.setImageResource(R.mipmap.loading_2233_error)
+                    MsgUtil.showMsg("获取信息失败！\n可能是视频不存在？")
+                    CenterThreadPool.runOnUIThreadAfter(5L, TimeUnit.SECONDS, Runnable {
+                        MsgUtil.err(error)
+                    })
+                }
+    }
+
+    private fun applyVideoInfo(videoInfo: VideoInfo, seekReplyLocal: Long) {
+        aid = videoInfo.aid
+        bvid = videoInfo.bvid
+        val newFragmentList = ArrayList<Fragment>(3)
+        val content = VideoInfoFragment.newInstance(videoInfo.aid, bvid)
+        contentFragment = content
+        newFragmentList.add(content)
+        // stats / staff 都可能为空（未登录、字段缺失、合作稿 staff 缺失等）。
+        // 老写法 stats!!.reply、staff!!.get(0).mid 会直接 NPE / IndexOutOfBounds。
+        val replyCount = videoInfo.stats?.reply ?: 0
+        val upMid = videoInfo.staff?.firstOrNull()?.mid ?: 0L
+        val reply = ReplyFragment.newInstance(videoInfo.aid, 1, replyCount, seekReplyLocal, upMid)
+        reply.setManager(videoInfo.staff)
+        replyFragment = reply
+        newFragmentList.add(reply)
+        if (SharedPreferencesUtil.getBoolean("related_enable", true)) {
+            newFragmentList.add(VideoRcmdFragment.newInstance(videoInfo.aid))
+        }
+        fragmentList = newFragmentList
+        val pager = viewPager ?: return
+        pager.offscreenPageLimit = newFragmentList.size
+        pager.adapter = ViewPagerFragmentAdapter(supportFragmentManager, newFragmentList)
+        if (seekReplyLocal != -1L) pager.currentItem = 1
     }
 
     fun setCurrentAid(aid: Long) {

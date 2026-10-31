@@ -127,55 +127,60 @@ object VideoInfoApi {
     fun getInfoByJson(data: JSONObject): VideoInfo {  //项目实在太多qwq 拆就完事了
         val videoInfo = VideoInfo()
         Logu.v("视频信息", "--------")
-        videoInfo.title = data.getString("title")
+        videoInfo.title = data.optString("title")
         Logu.v("标题", videoInfo.title)
-        videoInfo.cover = data.getString("pic")
+        videoInfo.cover = data.optString("pic")
         Logu.v("封面", videoInfo.cover)
         if (data.has("desc_v2") && !data.isNull("desc_v2")) {
             val sb = SpannableStringBuilder()
             val descArray = data.getJSONArray("desc_v2")
             val ats = ArrayList<At>()
             for (i in 0 until descArray.length()) {
-                val curObj = descArray.getJSONObject(i)
-                val type = curObj.getInt("type")
+                val curObj = descArray.optJSONObject(i) ?: continue
+                val type = curObj.optInt("type")
                 when (type) {
                     2 -> {
-                        val indexs = StringUtil.appendString(sb, "@" + curObj.getString("raw_text"))
-                        ats.add(At(curObj.getLong("biz_id"), indexs.first, indexs.second))
+                        val indexs = StringUtil.appendString(sb, "@" + curObj.optString("raw_text"))
+                        ats.add(At(curObj.optLong("biz_id"), indexs.first, indexs.second))
                     }
                     else -> {
-                        sb.append(curObj.getString("raw_text"))
+                        sb.append(curObj.optString("raw_text"))
                     }
                 }
             }
             videoInfo.description = sb.toString()
             videoInfo.descAts = ats
         } else {
-            videoInfo.description = data.getString("desc")
+            videoInfo.description = data.optString("desc")
         }
         Logu.v("简介", videoInfo.description)
 
         videoInfo.bvid = data.optString("bvid")
-        videoInfo.aid = data.getLong("aid")
+        videoInfo.aid = data.optLong("aid")
 
         @Suppress("SimpleDateFormat") val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-        videoInfo.timeDesc = sdf.format(data.getLong("pubdate") * 1000)
+        videoInfo.timeDesc = sdf.format(data.optLong("pubdate") * 1000)
         Logu.v("发布时间", videoInfo.timeDesc.toString())
 
-        videoInfo.duration = StringUtil.toTime(data.getInt("duration"))
+        videoInfo.duration = StringUtil.toTime(data.optInt("duration"))
         Logu.v("视频时长", videoInfo.duration)
 
         if (data.has("copyright") && !data.isNull("copyright"))
-            videoInfo.copyright = data.getInt("copyright")
+            videoInfo.copyright = data.optInt("copyright")
 
-        val stat = data.getJSONObject("stat")
+        // 注意：以下全部用 optXxx 而不是 getXxx。
+        // 实测：未登录（登录态失效/未登录）时 /x/web-interface/view 匿名回包的 stat 里
+        // **没有 like 字段**（只有 aid/view/danmaku/reply/favorite/coin/share/now_rank），
+        // 老代码 stat.getInt("like") 会抛 JSONException，详情页变成「获取信息失败」；
+        // 若该异常发生在未捕获的后台线程，就是一次闪退。字段缺失一律给 0 兜底。
+        val stat = data.optJSONObject("stat")
         val stats = Stats()
-        stats.view = stat.getInt("view")
-        stats.like = stat.getInt("like")
-        stats.coin = stat.getInt("coin")
-        stats.reply = stat.getInt("reply")
-        stats.danmaku = stat.getInt("danmaku")
-        stats.favorite = stat.optInt("favorite", -1)
+        stats.view = stat?.optInt("view", 0) ?: 0
+        stats.like = stat?.optInt("like", 0) ?: 0
+        stats.coin = stat?.optInt("coin", 0) ?: 0
+        stats.reply = stat?.optInt("reply", 0) ?: 0
+        stats.danmaku = stat?.optInt("danmaku", 0) ?: 0
+        stats.favorite = stat?.optInt("favorite", -1) ?: -1
         stats.coin_limit = if (videoInfo.copyright == VideoInfo.COPYRIGHT_REPRINT) 1 else 2
         videoInfo.stats = stats
 
@@ -185,10 +190,10 @@ object VideoInfoApi {
             val cids = ArrayList<Long>()
             for (i in 0 until pages.length()) {
                 val page = pages.getJSONObject(i)
-                val pagename = page.getString("part")
+                val pagename = page.optString("part")
                 pagenames.add(pagename)
                 Logu.v("第" + i + "个视频的标题", pagename)
-                val cid = page.getLong("cid")
+                val cid = page.optLong("cid")
                 cids.add(cid)
                 Logu.v("第" + i + "个视频的cid", cid.toString())
             }
@@ -207,39 +212,45 @@ object VideoInfoApi {
 
         val staff_list = ArrayList<UserInfo>()
         if (videoInfo.isCooperation) { //如果是联合投稿就存储联合UP列表
-            val staff = data.getJSONArray("staff")
-            for (i in 0 until staff.length()) {
-                val staff_member = UserInfo()
-                val staff_info = staff.getJSONObject(i)
+            // 合作稿的 staff 数组在部分状态下会缺失（APP 通道/风控/灰度都可能），
+            // 老代码 data.getJSONArray("staff") 缺字段就抛 JSONException → 详情页报错甚至闪退。
+            val staff = data.optJSONArray("staff")
+            if (staff != null) {
+                for (i in 0 until staff.length()) {
+                    val staff_member = UserInfo()
+                    val staff_info = staff.optJSONObject(i) ?: continue
 
-                staff_member.mid = staff_info.getLong("mid")
-                staff_member.sign = staff_info.getString("title") //卡片的简介用来显示参与的事物
-                staff_member.name = staff_info.getString("name")
-                staff_member.avatar = staff_info.getString("face")
-                staff_member.fans = staff_info.getInt("follower")
-                staff_member.level = 6
-                staff_member.followed = false
-                staff_member.notice = ""
-                staff_member.official = staff_info.getJSONObject("official").getInt("role")
-                staff_member.officialDesc = staff_info.getJSONObject("official").getString("title")
+                    staff_member.mid = staff_info.optLong("mid")
+                    staff_member.sign = staff_info.optString("title") //卡片的简介用来显示参与的事物
+                    staff_member.name = staff_info.optString("name")
+                    staff_member.avatar = staff_info.optString("face")
+                    staff_member.fans = staff_info.optInt("follower")
+                    staff_member.level = 6
+                    staff_member.followed = false
+                    staff_member.notice = ""
+                    val official = staff_info.optJSONObject("official")
+                    staff_member.official = official?.optInt("role") ?: 0
+                    staff_member.officialDesc = official?.optString("title") ?: ""
 
-                staff_list.add(staff_member)
+                    staff_list.add(staff_member)
+                }
             }
         } else {
-            if (data.optJSONObject("owner") != null) {
-                val owner = data.getJSONObject("owner")
+            val owner = data.optJSONObject("owner")
+            if (owner != null) {
                 val userInfo = UserInfo()
-                userInfo.name = owner.getString("name")
-                userInfo.avatar = owner.getString("face")
-                userInfo.mid = owner.getLong("mid")
+                userInfo.name = owner.optString("name")
+                userInfo.avatar = owner.optString("face")
+                userInfo.mid = owner.optLong("mid")
                 userInfo.sign = "UP主"
                 staff_list.add(userInfo)
             }
         }
         videoInfo.staff = staff_list
 
-        if (data.optJSONObject("argue_info") != null) {
-            videoInfo.argueMsg = data.getJSONObject("argue_info").getString("argue_msg")
+        val argueInfo = data.optJSONObject("argue_info")
+        if (argueInfo != null) {
+            videoInfo.argueMsg = argueInfo.optString("argue_msg")
         }
 
         try {

@@ -165,7 +165,7 @@ object NetWorkUtil {
                 null
             }
             if (appResponse != null) {
-                val verdict = ApiRouter.classify(appResponse, plan)
+                val verdict = judge(plan, appResponse)
                 if (verdict.isOk) {
                     ApiRouter.recordHit(plan)
                     return appResponse
@@ -175,6 +175,22 @@ object NetWorkUtil {
             }
         }
         return executeGet(url, headers, redirectHandler)
+    }
+
+    /**
+     * 迁移判定外包一层异常保护。
+     *
+     * [ApiRouter.classify] 自身已经尽量不外抛，但它要读响应体、解析 JSON、查规则字段；
+     * 任何一处意外（响应体读取异常、规则表异常、URL 异常等）都会从这里直接冒到调用方的
+     * 后台线程。Kotlin 的 @Throws 不强制捕获，后台线程未捕获异常会让整个进程崩溃 ——
+     * 用户看到的就是一次闪退。判定失败最多多走一次 web 原请求，绝不能让它成为崩溃源。
+     */
+    private fun judge(plan: ApiRouter.Plan, response: Response): ApiRouter.Verdict {
+        return try {
+            ApiRouter.classify(response, plan)
+        } catch (e: Exception) {
+            ApiRouter.Verdict(isOk = false, reason = "判定异常：" + e.javaClass.simpleName)
+        }
     }
 
     /**
@@ -242,7 +258,7 @@ object NetWorkUtil {
                 null
             }
             if (appResponse != null) {
-                val verdict = ApiRouter.classify(appResponse, plan)
+                val verdict = judge(plan, appResponse)
                 if (verdict.isOk) {
                     ApiRouter.recordHit(plan)
                     return appResponse

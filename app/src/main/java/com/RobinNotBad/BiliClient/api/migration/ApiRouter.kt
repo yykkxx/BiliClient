@@ -445,8 +445,15 @@ object ApiRouter {
         val accepted = plan != null && plan.acceptedCodes != null && plan.acceptedCodes.contains(code)
         val retryable = RETRY_CODES.contains(code) && !accepted
         if (retryable) return Verdict(isOk = false, reason = "code=" + code)
-        if (accepted && plan != null) {
-            // 放行了业务码，必须再确认「该拿到的数据真的在」，避免静默空数据被当成成功
+        // 内容校验不再只服务于「放行的业务码」：code=0 同样要验。
+        //
+        // 为什么：迁移层原先只看 code，只要 APP 通道回 code=0 就当成可用并**直接返回给调用方**。
+        // 但 APP 端点和 web 端点的响应结构并不保证永远一致（有的接口在登录态、风控态、
+        // 灰度态下字段会变），一旦结构漂移，上游各 Api 的 JSON 解析会在后台线程抛异常；
+        // Kotlin 的 @Throws 不强制捕获，后台线程未捕获异常 = 进程崩溃（用户看到的就是闪退）。
+        // 规则只要声明了 requiredDataFields，无论 code 是多少都必须过一遍内容校验，
+        // 缺字段就回退 web —— 宁可多一次请求，也不能把「形状不对的响应」交给解析层。
+        if (plan != null) {
             val missing = firstMissingField(trimmed, plan.requiredDataFields)
             if (missing != null) return Verdict(isOk = false, reason = "缺少字段 " + missing)
         }
@@ -466,7 +473,21 @@ object ApiRouter {
             return "响应不是完整JSON(" + e.javaClass.simpleName + ")"
         }
         if (!root.has("data") || root.isNull("data")) return "data"
-        return firstMissingSubField(root.getJSONObject("data"), fields)
+        return missingDataShape(root, fields)
+    }
+
+    /**
+     * `data` 既可能是对象（详情类接口）也可能是数组（列表类接口：相关推荐 / TAG / 分P）。
+     *
+     * 以前这里直接 `getJSONObject("data")`，列表接口会抛异常并被当成「不是完整 JSON」，
+     * 结果就是「只要给列表接口配了 requiredDataFields 就永远回退 web」。
+     * 现在先分流：数组只验非空，对象再逐字段下钻。
+     */
+    private fun missingDataShape(root: JSONObject, fields: List<String>): String? {
+        val array = root.optJSONArray("data")
+        if (array != null) return if (array.length() == 0) "data(空数组)" else null
+        val obj = root.optJSONObject("data") ?: return "data(既不是对象也不是数组)"
+        return firstMissingSubField(obj, fields)
     }
 
     /** 逐段下钻检查点号路径 */

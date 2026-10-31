@@ -4,13 +4,16 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.TextView
 
 import com.RobinNotBad.BiliClient.R
+import com.RobinNotBad.BiliClient.activity.CatchActivity
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.setup.SetupUIActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
+import com.RobinNotBad.BiliClient.util.CrashStore
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 /**
@@ -41,8 +44,24 @@ class LauncherActivity : BaseActivity() {
         animator.playTogether(logoAnim, hintAnim)
         animator.start()
 
+        // 补展示上次崩溃：ErrorCatch 会在 startActivity(CatchActivity) 之后立刻 killProcess，
+        // 页面经常来不及绘制，用户只看到「闪退一下」。这里在下一次启动时再展示一次，
+        // 用户随手截图就能把完整堆栈反馈出来。（展示过就标记，不会每次都弹）
+        showLastCrashIfAny()
+
         // 用 postDelayed 保证动画至少可见一帧，路由到真正的页面
         logo.postDelayed({ route() }, 260)
+    }
+
+    private fun showLastCrashIfAny() {
+        val stack = CrashStore.takeUnacknowledged(this) ?: return
+        try {
+            val intent = Intent(this, CatchActivity::class.java)
+            intent.putExtra("stack", stack)
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.w("launcher", "show last crash failed", e)
+        }
     }
 
     private fun route() {

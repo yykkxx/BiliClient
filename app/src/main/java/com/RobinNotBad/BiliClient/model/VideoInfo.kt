@@ -86,19 +86,29 @@ class VideoInfo : Parcelable, Serializable { // 自定义类需要加这个才�
     override fun describeContents(): Int = 0
 
     fun toCard(): VideoCard {
-        return VideoCard(title, staff!!.get(0).name, StringUtil.toWan(stats!!.view.toLong()), cover, aid, bvid)
+        // staff / stats 缺失时不能崩：这几个字段在未登录、合作稿 staff 缺失、
+        // 老版本缓存反序列化（Parcelable）等场景下都可能是 null 或空列表。
+        val upName = staff?.firstOrNull()?.name ?: ""
+        val viewText = StringUtil.toWan((stats?.view ?: 0).toLong())
+        return VideoCard(title, upName, viewText, cover, aid, bvid)
     }
 
     fun toPlayerData(index: Int): PlayerData {
         val data = PlayerData()
         data.aid = aid
-        data.cid = cids!!.get(index)
-        data.title = if (pagenames!!.size == 1) title else pagenames!!.get(index)
+        // cids / pagenames 可能为空或长度对不上（老缓存反序列化、接口没给 pages、
+        // 分P 列表被截断），老写法 cids!!.get(index) 会 NPE/越界 → 进播放器即闪退。
+        // 这里夹到合法范围，最差退化成 0 号分P，至少还能播。
+        val cidList = cids ?: ArrayList()
+        val nameList = pagenames ?: ArrayList()
+        val safeIndex = if (index in cidList.indices) index else 0
+        data.cid = cidList.getOrElse(safeIndex) { 0L }
+        data.title = if (nameList.size <= 1) title else nameList.getOrElse(safeIndex) { title }
         data.mid = SharedPreferencesUtil.getLong("mid", 0)
         data.qn = SharedPreferencesUtil.getInt("play_qn", 16)
         data.pagenames = pagenames
         data.cids = cids
-        data.currentPageIndex = index
+        data.currentPageIndex = safeIndex
         return data
     }
 

@@ -47,10 +47,19 @@ object PlayerAudioPolicy {
     const val QUALITY_MAX_SPEED = 3.0F
 
     /**
-     * 「系统变速」（AudioTrack PlaybackParams）使用的倍速上界。
+     * 「系统变速」（AudioTrack PlaybackParams）能真正生效的倍速上界 = **2.0x**。
      *
-     * 超过它一律改用 SoundTouch（TDStretch 咬字糊，但它是唯一能真正跑 3.0x 的实现）；
-     * 这样既满足「保留 3.0x」，又让 1.25~2.0 这些常用档位走咬字清楚的引擎。
+     * 这不是音质取舍，是平台硬限制（完整推导见 notes/player_speed_unified.md 第二节）：
+     * AOSP `AudioTrack::setPlaybackRate` 会用 `isSampleRateSpeedAllowed_l(effectiveRate, effectiveSpeed)`
+     * 校验「现有缓冲是否够快进」（`AudioTrack.cpp:1341` / `:3026-3045`，Android 10/11/13 一致），
+     * 要求帧数随 speed **线性增长**：`k*(afFrameCount*speed + 2)`；
+     * 而 ijk 建 AudioTrack 时只给了 `getMinBufferSize() * AUDIOTRACK_PLAYBACK_MAXSPEED`
+     * （`android_audiotrack.c:203-214`，`:33` 该宏 = 2），即 `2*k*(afFrameCount + 2)`。
+     * 两式相除得上限 `speed <= 2 + 2/afFrameCount`，与采样率/通道/设备均无关 —— 实测值
+     * 2.0021（af=960）/ 2.0042（af=480）/ 2.0083（af=240）。
+     * 超过它的 `setPlaybackRate` 返回 BAD_VALUE，Java 层抛 IllegalArgumentException，
+     * 而 j4a 把异常吞掉（`AudioTrack.util.c` 的 `goto fail`）⇒ **静默失速**（设了倍速、语速不变）。
+     * 所以 2.5x/3.0x 不可能走系统变速；要真正支持只能重编 .so 把该宏改大（需 NDK，本机没有）。
      */
     const val SYSTEM_ENGINE_MAX_SPEED = 2.0F
 
@@ -74,22 +83,17 @@ object PlayerAudioPolicy {
     const val PREF_DASH_AUDIO = "player_dash_audio"
 
     /**
-     * 偏好键：倍速算法（**默认 false = 系统变速**）。
+     * 历史偏好键：v5.0.3-alpha11 的「倍速算法」开关（**已从设置页移除，代码不再读取**）。
      *
-     * 为什么用布尔而不是字符串：设置页的 choose 控件只支持布尔
-     * （见 adapter/SettingsAdapter.kt 的 ChooseHolder），写字符串会变成「选了不生效」。
-     * true = SoundTouch（App 层，支持 3.0x、咬字略糊）；false = 系统变速（咬字清楚）。
+     * 保留常量只为两件事：一是说明存在过这个键（老用户机器上可能还留着 true），
+     * 二是升级说明里可以点名它已被忽略。引擎现在完全由 [engineFor] 内部判定，
+     * 用户不需要、也不能再选 —— 这正是本轮「不用思考用哪个倍速模式」的要求。
      */
-    const val PREF_SPEED_SOUNDTOUCH = "player_speed_soundtouch"
+    const val PREF_SPEED_SOUNDTOUCH_LEGACY = "player_speed_soundtouch"
 
     /** 是否启用 DASH 高音质伴音轨（默认**关**：单音轨单文件，不重复下载） */
     @JvmStatic
     fun dashAudioEnabled(): Boolean = SharedPreferencesUtil.getBoolean(PREF_DASH_AUDIO, false)
-
-    /** 用户是否显式选了「SoundTouch」倍速算法（默认否 = 系统变速） */
-    @JvmStatic
-    fun soundtouchPreferred(): Boolean =
-            SharedPreferencesUtil.getBoolean(PREF_SPEED_SOUNDTOUCH, false)
 
     /**
      * 本进程内「系统变速实测无效」的标记。
@@ -130,16 +134,19 @@ object PlayerAudioPolicy {
     fun clampSpeed(speed: Float): Float = speed.coerceIn(SPEED_VALUES[0], QUALITY_MAX_SPEED)
 
     /**
-     * 该倍速应该用哪个引擎（**必须在 prepare 之前决定**）。
+     * 该倍速应该用哪个引擎（**必须在 prepare 之前决定**）。唯一的判定入口。
      *
-     * 规则：>2.0x 恒 SoundTouch（系统变速在 3.0x 上不可靠，且用户要求保留 3.0x）；
-     * 其余按用户设置（默认系统变速）。若本机已实测「系统变速无效」，一律 SoundTouch。
+     * 规则（用户完全不用选，这就是「单一算法覆盖 0.5x~3.0x」的实现）：
+     * 1. `speed > 2.0x` ⇒ SoundTouch。因为系统变速在 >2.0x 会被平台缓冲区校验拒绝并静默失速
+     *    （见 [SYSTEM_ENGINE_MAX_SPEED] 的推导），而 TDStretch 没有倍速上限，是唯一真能跑 3.0x 的实现；
+     * 2. `speed <= 2.0x` ⇒ 系统变速（AudioTrack PlaybackParams/Sonic，App 层不丢样本，咬字最清楚）；
+     * 3. 若本进程实测过「系统变速在本机无效」([markSystemEngineBroken])，则一律 SoundTouch 兜底。
      */
     @JvmStatic
     fun engineFor(speed: Float): Int {
         if (speed > SYSTEM_ENGINE_MAX_SPEED + 0.001F) return ENGINE_SOUNDTOUCH
         if (systemEngineBroken) return ENGINE_SOUNDTOUCH
-        return if (soundtouchPreferred()) ENGINE_SOUNDTOUCH else ENGINE_SYSTEM
+        return ENGINE_SYSTEM
     }
 
     /** 引擎的可读名字（日志/提示用） */
@@ -195,7 +202,12 @@ object PlayerAudioPolicy {
         return clamped
     }
 
-    /** 该倍速是否需要换引擎（页面层据此决定是否重建播放器） */
+    /**
+     * 该倍速是否需要换引擎（页面层据此决定是否重建播放器）。
+     *
+     * 只有跨 2.0x 边界（2.0x ↔ 3.0x 档）才会为 true —— 这是 [SYSTEM_ENGINE_MAX_SPEED]
+     * 那条平台限制的直接后果，不是实现偷懒；同引擎之间的任意切档（0.5x~2.0x 全档）都不会重载。
+     */
     @JvmStatic
     fun needsEngineRebuild(currentEngine: Int, speed: Float): Boolean =
             engineFor(speed) != currentEngine

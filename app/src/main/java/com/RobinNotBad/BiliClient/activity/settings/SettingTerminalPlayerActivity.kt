@@ -58,18 +58,10 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
         sectionList.add(SettingSection("choose", "音频输出", "player_audio",
                 getString(R.string.desc_audiocodec), "false",
                 arrayOf("OpenSles", "AudioTrack")))
-        // v5.0.3-alpha11：倍速算法。默认「系统变速」——
-        // 用户实测「只要倍速就咬字不清」，取证结论是 App 层 SoundTouch 的 TDStretch 时间拉伸
-        // 会把摩擦音/爆破音拼掉（3.0x 时每帧只剩约三分之一原始波形），
-        // 而系统变速（AudioTrack PlaybackParams / Sonic）在 App 层不丢样本，咬字明显更清。
-        // 注意 choose 控件的布尔语义（SettingsAdapter.ChooseHolder）：
-        // 偏好为 true 时选中 /** 第一项 */ strings[0]，false 选中 strings[1]。
-        // 所以数组顺序必须是 [true 项, false 项] = [SoundTouch, 系统变速]，默认 false 才落在「系统变速」。
-        sectionList.add(SettingSection("choose", "倍速算法", PlayerAudioPolicy.PREF_SPEED_SOUNDTOUCH,
-                "系统变速：咬字清楚，2.0x 以内最佳（需要 AudioTrack 输出，勾选 OpenSles 时会被忽略）。" +
-                        "SoundTouch：App 层变速，唯一能真正跑 3.0x 的实现，但咬字略糊。",
-                "false",
-                arrayOf("SoundTouch", "系统变速")))
+        // v5.0.4-alpha2：**删掉了原来的「倍速算法」选项**。
+        // 用户明确说「不想思考用哪个倍速模式」，所以这项不再是用户需要决定的事：
+        // 引擎由 PlayerAudioPolicy.engineFor() 内部判定（<=2.0x 系统变速、>2.0x 自动 SoundTouch），
+        // 用户什么都不用选。它不再出现在设置页，也不再被代码读取。
         sectionList.add(SettingSection("switch", "低延迟优先", "player_low_latency",
                 getString(R.string.desc_low_latency), "false"))
         // v5.0.2-alpha10 引入、v5.0.3-alpha11 **默认关闭**：

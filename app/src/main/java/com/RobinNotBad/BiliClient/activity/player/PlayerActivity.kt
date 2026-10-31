@@ -1208,13 +1208,14 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             releaseDashAudio("换分P/换视频")
     }
 
-    // ==================== 倍速引擎（v5.0.3-alpha11） ====================
-    // 背景与证据见 notes/player_audio_alpha11.md 第一节：
-    //   soundtouch=1 → App 层 SoundTouch TDStretch 时间拉伸，任何倍速都咬字不清（主因，3.0x 尤甚）；
-    //   soundtouch=0 + AudioTrack → 交给系统 PlaybackParams（Sonic），App 层不丢样本，咬字清楚；
-    //   OpenSL ES 后端没有 playback-rate 钩子，所以系统变速必须强制 AudioTrack；
-    //   引擎只能在 prepare 之前决定（选项只在 ffp_prepare_async_l 里被消费一次），
-    //   因此运行中要换引擎只能重建播放器（只在跨 2.0x 边界时才发生）。
+    // ==================== 倍速引擎（v5.0.4-alpha2：用户零选择） ====================
+    // 用户原话「不想思考用哪个倍速模式」，所以设置页的「倍速算法」已删除；
+    // 引擎完全由 PlayerAudioPolicy.engineFor() 内部判定：
+    //   <=2.0x → 系统变速（AudioTrack PlaybackParams/Sonic，App 层不丢样本，咬字清楚）
+    //   >2.0x  → SoundTouch（TDStretch 无上限，是 3.0x 唯一真能跑的实现）
+    // 证据与推导见 notes/player_speed_unified.md（2.0x 上限是 AOSP 缓冲区校验 + ijk 只给 2 倍缓冲）。
+    // 引擎只能在 prepare 之前决定（选项只在 ffp_prepare_async_l 里被消费一次），
+    // 因此运行时换引擎必须重建播放器 —— 只会在 2.0x ↔ 3.0x 这一处边界发生。
 
     /** 主播放器这次 prepare 用的是哪个引擎（[PlayerAudioPolicy.ENGINE_SYSTEM] / ENGINE_SOUNDTOUCH） */
     private var mainSpeedEngine = PlayerAudioPolicy.ENGINE_SYSTEM
@@ -1228,9 +1229,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     /**
      * 所有「切倍速」的唯一入口：更新主播放器、伴音轨与弹幕层，必要时切引擎。
      *
-     * 不能只调 setSpeed 的原因：`soundtouch` 是**只在 prepare 时生效**的选项，
-     * 运行中把 2.0x 切到 3.0x（或反向）必须重载播放器才能真的换引擎，
-     * 否则用户会看到「3.0x 档位却还是系统变速」这种静默失效。
+     * 用户不需要为任何档位做选择；唯一的代价是**跨 2.0x 边界**时必须重载一次播放器
+     * （`soundtouch` 只在 prepare 时生效，见 [PlayerAudioPolicy.SYSTEM_ENGINE_MAX_SPEED] 的推导），
+     * 同引擎区间内（0.5x~2.0x 全部 7 档）任意切档都是零重载的纯 setSpeed。
      */
     private fun applySpeedToPlayers(speed: Float, fromUser: Boolean = false) {
         val target = PlayerAudioPolicy.clampSpeed(speed)
@@ -1260,10 +1261,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     /**
-     * 跨 2.0x 边界切速时重载播放器（换变速引擎）。
+     * 跨 2.0x 边界切速时重载播放器（换变速引擎）。这是唯一会重载的用户操作。
      *
      * 代价是一次重缓冲，收益是「3.0x 真的按 3.0x 播且不静默失效」。只在用户主动切档位时触发；
      * 长按 2x（临时态）与 onPrepared 补应用不会走到这里（它们的目标引擎与当前一致）。
+     * 若同引擎（例如 1.5x ↔ 2.0x）则完全不重载，走 applySpeedToPlayers 里的纯 setSpeed 分支。
      */
     private fun reloadForSpeedEngine(target: Float, showHint: Boolean) {
         val position = try {
@@ -1360,7 +1362,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         mainHandler?.post {
                             if (!destroyed) {
                                 MsgUtil.showMsg("此设备不支持系统变速，已改用 SoundTouch")
-                                applySpeedToPlayers(currentSpeedValue())
+                                // 必须走重载（不是 applySpeedToPlayers(…, fromUser=false)）：
+                                // 后者会跳过换引擎分支，播放器仍停在已失效的系统变速路径上。
+                                // 这里只提示一次，所以重载本身不再弹「已切换到…倍速」。
+                                if (!speedEngineReloading)
+                                    reloadForSpeedEngine(currentSpeedValue(), false)
                             }
                         }
                     }

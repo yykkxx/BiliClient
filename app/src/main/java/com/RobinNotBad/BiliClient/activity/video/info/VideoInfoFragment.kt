@@ -52,6 +52,7 @@ import com.RobinNotBad.BiliClient.api.PlayerApi
 import com.RobinNotBad.BiliClient.api.VideoInfoApi
 import com.RobinNotBad.BiliClient.api.WatchLaterApi
 import com.RobinNotBad.BiliClient.model.PlayerData
+import com.RobinNotBad.BiliClient.model.Stats
 import com.RobinNotBad.BiliClient.model.VideoInfo
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
@@ -172,10 +173,36 @@ class VideoInfoFragment : BaseFragment() {
                 if (getLifecycle().getCurrentState() == Lifecycle.State.DESTROYED) return@onSuccess
                 this.videoInfo = videoInfo
 
-                initView(rootview)
+                // 详情页渲染跑在 LiveData 的主线程回调里，这里没有 try 就是一颗闪退地雷：
+                // 一旦下面的渲染（含 Glide、列表、Spannable）抛出任何异常，进程直接被杀，
+                // 用户看到的正是「点进视频详情就闪退」。现在兜住并把堆栈交给全局落盘。
+                try {
+                    normalizeVideoInfo(videoInfo)
+                    initView(rootview)
+                } catch (e: Exception) {
+                    MsgUtil.err("打开视频详情失败", e)
+                }
             }.onFailure { error ->
             }
         }
+    }
+
+    /**
+     * 把可能为 null 的集合/统计字段补齐成「空但合法」的值。
+     *
+     * 为什么要这一步：VideoInfo 的 stats / staff / cids / pagenames 都是可空字段，
+     * 新解析路径（VideoInfoApi.getInfoByJson）已经保证补齐，但**缓存里来自老版本的
+     * Parcelable 对象**、以及合作稿缺 staff 等情况仍可能是 null 或空列表；
+     * 而本页面后续渲染与点赞/投币回调里有大量 `stats!!` / `staff!!.get(0)` 用法
+     * （其中一部分跑在 runOnUiThread 的独立消息里，外层 try/catch 抓不到 → 必崩）。
+     * 在这里一次性补成合法空值，比逐处改写更小、更不容易漏。
+     */
+    private fun normalizeVideoInfo(videoInfo: VideoInfo) {
+        if (videoInfo.stats == null) videoInfo.stats = Stats()
+        if (videoInfo.staff == null) videoInfo.staff = ArrayList()
+        if (videoInfo.cids == null) videoInfo.cids = ArrayList()
+        if (videoInfo.pagenames == null) videoInfo.pagenames = ArrayList()
+        if (videoInfo.cover == null) videoInfo.cover = ""
     }
 
     @SuppressLint("SetTextI18n")

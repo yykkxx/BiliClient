@@ -367,11 +367,18 @@ object ApiMigrationRules {
                     note = "buvid3。实测 APP 参数 → code=0，data={buvid}。" +
                             "requiredDataFields 保证拿不到 buvid 就回退 web"),
             // —— 视频信息 / 播放 ——
-            get("/x/web-interface/view", "视频详细信息。实测三身份 code=0"),
-            get("/x/web-interface/archive/related", "相关推荐。实测 code=0（data 为数组）"),
+            // required 的含义：这些字段必须都能在 data 里找到，否则回退 web。
+            // 详情页解析（VideoInfoApi.getInfoByJson）对 title/aid/stat/pages 是硬依赖，
+            // 缺一个就会在后台线程抛 JSONException → 未捕获 → 闪退，所以这里必须兜住。
+            // 列表型接口（data 是数组）只要求「非空」，字段名占位即可（数组分支不解析字段名）。
+            get("/x/web-interface/view", "视频详细信息。实测三身份 code=0",
+                    required = listOf("title", "aid", "stat", "pages")),
+            get("/x/web-interface/archive/related", "相关推荐。实测 code=0（data 为数组）",
+                    required = listOf("*")),
             get("/x/tag/archive/tags", "视频 TAG。实测 code=0"),
             get("/x/player/online/total", "在线观看人数。实测 code=0"),
-            get("/x/player/pagelist", "分 P 列表。实测 code=0（data 为数组）"),
+            get("/x/player/pagelist", "分 P 列表。实测 code=0（data 为数组）",
+                    required = listOf("*")),
             get("/x/web-interface/card", "用户名片。alpha9 记为 -352，2026-10-29 复测三身份 code=0"),
             get("/x/web-interface/wbi/index/top/feed/rcmd",
                     "首页推荐（web）。实测 APP 参数 → code=0（item[]/business_card/floor_info 齐全）"),
@@ -551,9 +558,10 @@ object ApiMigrationRules {
         note: String,
         host: String = API_HOST,
         login: Boolean = false,
-        category: String = categoryOf(path)
+        category: String = categoryOf(path),
+        required: List<String>? = null
     ): Rule = Rule(host, path, Kind.APP_PARAMS, isLoginRequired = login,
-            category = category, note = note)
+            requiredDataFields = required, category = category, note = note)
 
     private fun post(
         path: String,

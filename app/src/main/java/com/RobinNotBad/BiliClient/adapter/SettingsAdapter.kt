@@ -44,7 +44,13 @@ class SettingsAdapter(
     )
 
     override fun getItemViewType(position: Int): Int {
-        return typeMap[list[position].type!!]!!
+        // RecyclerView 在测量阶段就会调这里，抛任何异常都是直接闪退。
+        // 旧实现是 typeMap[list[position].type!!]!! —— 只要某个设置项的 type 拼错、
+        // 为 null、或者越界，就是 NPE/IndexOutOfBounds，用户看到的就是「进设置页闪退」。
+        // 现在越界/未知类型一律降级成 switch 行（0），宁可显示得朴素一点也不能崩。
+        if (position < 0 || position >= list.size) return 0
+        val type = list[position].type ?: return 0
+        return typeMap[type] ?: 0
     }
 
     @NonNull
@@ -152,9 +158,15 @@ class SettingsAdapter(
                 desc.setVisibility(View.VISIBLE)
             }
             name.setText(settingSection.name)
-            val strings = settingSection.extra as Array<String>
-            chocola.setText(strings[0])
-            vanilla.setText(strings[1])
+            // extra 必须是 Array<String> 且至少两项，旧实现直接 `as Array<String>` + [0]/[1]，
+            // 漏传 extra、传错类型、或数组只有一项都会当场 NPE/越界 —— 也是「进设置页闪退」的一种。
+            // 这里改成安全取用：缺项就显示空，第二项不存在时干脆隐藏，功能降级但不崩。
+            val strings = settingSection.extra as? Array<*>
+            val first = strings?.getOrNull(0)?.toString() ?: ""
+            val second = strings?.getOrNull(1)?.toString() ?: ""
+            chocola.setText(first)
+            vanilla.setText(second)
+            vanilla.visibility = if (second.isEmpty()) View.GONE else View.VISIBLE
 
             val value = SharedPreferencesUtil.getBoolean(settingSection.id,
                 java.lang.Boolean.parseBoolean(settingSection.defaultValue))
@@ -186,8 +198,10 @@ class SettingsAdapter(
             name.setText(settingSection.name)
             when (settingSection.type) {
                 "input_int" -> {
+                    // defaultValue 若不是合法整数（漏填/写成空串/带单位），
+                    // 旧实现 Integer.parseInt 会抛 NumberFormatException → 进设置页直接闪退。
                     val intValue = SharedPreferencesUtil.getInt(settingSection.id,
-                        Integer.parseInt(settingSection.defaultValue))
+                        settingSection.defaultValue?.trim()?.toIntOrNull() ?: 0)
                     input.setInputType(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED)
                     input.setText(java.lang.String.valueOf(intValue))
                     input.addTextChangedListener(object : TextWatcher {
@@ -207,7 +221,7 @@ class SettingsAdapter(
                 }
                 "input_float" -> {
                     val floatValue = SharedPreferencesUtil.getFloat(settingSection.id,
-                        java.lang.Float.parseFloat(settingSection.defaultValue))
+                        settingSection.defaultValue?.trim()?.toFloatOrNull() ?: 0f)
                     input.setInputType(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
                     input.setText(java.lang.String.valueOf(floatValue))
                     input.addTextChangedListener(object : TextWatcher {
@@ -285,8 +299,11 @@ class SettingsAdapter(
                 chip.isCheckable = true
                 chip.isCheckedIconVisible = false
                 chip.id = View.generateViewId()
+                // labels 与 valueIds 长度不一致时（配置写错）不能直接 valueIds[i]，
+                // 那样是 ArrayIndexOutOfBounds → 进设置页闪退。
+                val valueId = valueIds.getOrNull(i)
                 // 高亮当前选中项：选中色走主题色，未选中保持灰
-                if (valueIds[i] == current) {
+                if (valueId != null && valueId == current) {
                     chip.isChecked = true
                     chip.chipBackgroundColor = android.content.res.ColorStateList.valueOf(ThemeUtil.withAlpha(ThemeUtil.getColor(), 0x66))
                     chip.chipStrokeWidth = 0f
@@ -297,7 +314,8 @@ class SettingsAdapter(
                     chip.chipStrokeWidth = 1f * chip.resources.displayMetrics.density
                 }
                 chip.setOnClickListener {
-                    SharedPreferencesUtil.putInt(settingSection.id, valueIds[i])
+                    val id = valueIds.getOrNull(i) ?: return@setOnClickListener
+                    SharedPreferencesUtil.putInt(settingSection.id, id)
                     // 重新绑定以刷新高亮
                     (chipGroup.tag as? Runnable)?.run() ?: bind(settingSection)
                 }

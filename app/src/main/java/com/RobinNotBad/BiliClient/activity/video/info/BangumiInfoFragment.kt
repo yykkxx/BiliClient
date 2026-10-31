@@ -75,9 +75,31 @@ class BangumiInfoFragment : Fragment() {
             .observe(getViewLifecycleOwner()) { result ->
                 result.onSuccess { bangumi ->
                     this.bangumi = bangumi
-                    initView()
+                    // 与视频详情页同理：initView 跑在主线程回调里，番剧数据缺字段
+                    // （未上线/被下架/接口结构变化）时 info/sectionList 可能是 null，
+                    // 老写法满屏的 info!! / sectionList!! 会当场 NPE 闪退。
+                    try {
+                        normalizeBangumi(bangumi)
+                        initView()
+                    } catch (e: Exception) {
+                        MsgUtil.err("打开番剧详情失败", e)
+                    }
                 }.onFailure { error -> MsgUtil.err("番剧详情：", error) }
             }
+    }
+
+    /** 把可空的容器字段补成「空但合法」，让 initView 里的 !! 用法不至于崩进程。 */
+    private fun normalizeBangumi(bangumi: Bangumi) {
+        if (bangumi.info == null) {
+            // info 整块缺失（接口异常/被风控）时补一个空壳：页面照常渲染出空内容，
+            // 也比直接崩掉好；标题等文案字段本身可空，setText(null) 不会崩。
+            bangumi.info = Bangumi.Info()
+        }
+        if (bangumi.sectionList == null) bangumi.sectionList = ArrayList()
+        bangumi.info?.let { info ->
+            if (info.cover_horizontal == null) info.cover_horizontal = info.cover ?: ""
+            if (info.title == null) info.title = ""
+        }
     }
 
     @SuppressLint("SetTextI18n")
@@ -256,7 +278,14 @@ class BangumiInfoFragment : Fragment() {
 
         //play button setting
         playButton.setOnClickListener { v ->
-            val episode = bangumi.sectionList!!.get(selectedSection).episodeList!!.get(selectedEpisode)
+            // 点击回调跑在主线程：切季/切集的索引与数据不同步（某季 episodeList 为空）时
+            // 老写法双 get 会越界 → 点播放直接闪退。安全取用，取不到只提示。
+            val section = bangumi.sectionList?.getOrNull(selectedSection)
+            val episode = section?.episodeList?.getOrNull(selectedEpisode)
+            if (episode == null) {
+                MsgUtil.showMsg("这一季还没有可播放的正片")
+                return@setOnClickListener
+            }
             Glide.get(requireContext()).clearMemory()
             //直接使用内置播放器（已去掉第三方播放器跳转逻辑）
             startActivity(PlayerApi.buildPlayerIntent(episode.toPlayerData()))
