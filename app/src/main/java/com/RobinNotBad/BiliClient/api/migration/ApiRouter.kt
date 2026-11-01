@@ -124,7 +124,14 @@ object ApiRouter {
         /** 回包 `data` 里必须存在的点号路径（见 Rule.requiredDataFields） */
         val requiredDataFields: List<String>? = null,
         /** 允许二进制响应（见 Rule.allowBinary） */
-        val allowBinary: Boolean = false
+        val allowBinary: Boolean = false,
+        /**
+         * 登录态接口（v5.1.2 加固，源自「手机端 token 被部分接口拒绝 → 鉴权失败弹窗」实测）：
+         * - 任何非 0 code（未被 [acceptedCodes] 放行）一律回退 web —— 凭据不可信时 web 永远是更对的选择；
+         * - 回包 `data` 必须存在（presence-only 校验）—— 拦住 code=0 但 data 缺失/为 null 的畸形回包。
+         * 这两条只影响判定，不改变请求构造。
+         */
+        val loginRequired: Boolean = false
     )
 
     /** 响应判定结果：ok=true 表示 APP 通道可用，false 时 reason 说明为什么要回退 */
@@ -317,7 +324,8 @@ object ApiRouter {
         return Plan("GET", originalUrl, appUrl, AppRcmdApi.appHeaders(identity), null, null, endpoint,
                 acceptedCodes = rule.acceptedCodes,
                 requiredDataFields = rule.requiredDataFields,
-                allowBinary = rule.allowBinary)
+                allowBinary = rule.allowBinary,
+                loginRequired = rule.isLoginRequired)
     }
 
     /**
@@ -433,7 +441,8 @@ object ApiRouter {
                 replayable = rule.isPostSafe,
                 acceptedCodes = rule.acceptedCodes,
                 requiredDataFields = rule.requiredDataFields,
-                allowBinary = rule.allowBinary)
+                allowBinary = rule.allowBinary,
+                loginRequired = rule.isLoginRequired)
     }
 
     /** 按身份补 APP 公共参数（appkey/ts/sign 由 [AppRcmdApi.sign] 追加） */
@@ -533,6 +542,16 @@ object ApiRouter {
         val accepted = plan != null && plan.acceptedCodes != null && plan.acceptedCodes.contains(code)
         val retryable = RETRY_CODES.contains(code) && !accepted
         if (retryable) return Verdict(isOk = false, reason = "code=" + code)
+        // 登录态接口加固（v5.1.2）：任何非 0 code 都回退 web。
+        // 背景：手机端 token 是「TV 密钥签发」的，部分严格校验的接口会拒绝
+        // 「TV 签发 token + Android appkey」组合，返回「鉴权失败，请联系账号管理员」
+        // 这类非 0 code（不在 RETRY_CODES 里）且无 data —— 原逻辑会直接把它交给上层，
+        // 上层 getJSONObject("data") 抛异常 → 详情页弹错误框。登录接口依赖凭据，
+        // 凭据可疑时回退 web（匿名或 web 登录态）永远比把错误抛给用户更合理。
+        val loginPlan = plan != null && plan.loginRequired
+        if (loginPlan && code != 0 && !accepted) {
+            return Verdict(isOk = false, reason = "code=" + code + "(登录接口回退)")
+        }
         // 内容校验不再只服务于「放行的业务码」：code=0 同样要验。
         //
         // 为什么：迁移层原先只看 code，只要 APP 通道回 code=0 就当成可用并**直接返回给调用方**。
@@ -542,7 +561,7 @@ object ApiRouter {
         // 规则只要声明了 requiredDataFields，无论 code 是多少都必须过一遍内容校验，
         // 缺字段就回退 web —— 宁可多一次请求，也不能把「形状不对的响应」交给解析层。
         if (plan != null) {
-            val missing = firstMissingField(trimmed, plan.requiredDataFields)
+            val missing = firstMissingField(trimmed, plan.requiredDataFields, plan.loginRequired)
             if (missing != null) return Verdict(isOk = false, reason = "缺少字段 " + missing)
         }
         return Verdict(isOk = true, reason = "")
@@ -550,10 +569,12 @@ object ApiRouter {
 
     /**
      * 检查 [fields] 里每个「点号路径」是否都能在回包的 `data` 里找到。
+     * @param presenceOnly true 时只校验「`data` 字段存在且非 null」，不做字段下钻
+     *        （登录态接口的通用底线：data 都没有的回包必然不可用）
      * @return 第一个缺失的路径；全部存在返回 null
      */
-    private fun firstMissingField(jsonText: String, fields: List<String>?): String? {
-        if (fields == null || fields.isEmpty()) return null
+    private fun firstMissingField(jsonText: String, fields: List<String>?, presenceOnly: Boolean = false): String? {
+        if (!presenceOnly && (fields == null || fields.isEmpty())) return null
         val root = try {
             JSONObject(jsonText)
         } catch (e: Exception) {
@@ -561,7 +582,9 @@ object ApiRouter {
             return "响应不是完整JSON(" + e.javaClass.simpleName + ")"
         }
         if (!root.has("data") || root.isNull("data")) return "data"
-        return missingDataShape(root, fields)
+        if (presenceOnly) return null
+        val checked = fields ?: return null
+        return missingDataShape(root, checked)
     }
 
     /**

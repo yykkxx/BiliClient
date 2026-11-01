@@ -69,6 +69,10 @@ object LikeCoinFavApi {
             val url = "https://api.bilibili.com/x/web-interface/archive/relation?aid=" + videoInfo.aid
             val result = NetWorkUtil.getJson(url)
             apiResult.fromJson(result)
+            // 非登录/鉴权类业务错误（code≠0：未登录 -101、单端口模式设备 token 被拒等）：
+            // 静默按「未互动」处理并直接返回，不再往下解析 data —— 否则 getJSONObject 抛
+            // "No value for data"，在详情页弹出错误框（5.1.1 单端口模式实测）。
+            if (apiResult.code != 0) return apiResult
             val data = result.getJSONObject("data")
             videoInfo.stats!!.followed = data.optBoolean("attention")
             videoInfo.stats!!.liked = data.optBoolean("like")

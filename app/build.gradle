@@ -13,7 +13,11 @@ android {
 
     namespace 'com.RobinNotBad.BiliClient'
     //noinspection GradleDependency
-    compileSdk 33
+    // 5.1.2：33→34（androidx.media3 1.4.1 要求 minCompileSdk=34，实测 aar-metadata）。
+    // AGP 7.3.1 官方支持上限是 33，警告用 gradle.properties 的
+    // android.suppressUnsupportedCompileSdk=34 抑制（官方文档化的 workaround）；
+    // targetSdk 保持 30 不动，运行时行为不受 compileSdk 影响。
+    compileSdk 34
 
     sourceSets {
         main{
@@ -32,9 +36,9 @@ android {
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
-        // 5.1.1：versionCode 保持 20261101（同日构建规则，与 5.1.0 同号）
+        // 5.1.2：versionCode 保持 20261101（同日构建规则，与 5.1.0/5.1.1 同号）
         versionCode 20261101
-        versionName "5.1.1"
+        versionName "5.1.2"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer
@@ -183,4 +187,10 @@ dependencies {
     // util/CoroutineScopes.kt，规范见 tools/quality/README.md。
     //noinspection GradleDependency
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
+    // 5.1.2 双播放引擎：Media3（实验内核，默认仍为 IjkPlayer，见 PlayerFactory）。
+    // 锁 1.4.1 = minCompileSdk 34 系最高稳定版；1.5.1 起要 compileSdk 35（AGP 7.3.1 aapt2 直接硬失败，
+    // 见 ../notes/media3_version_survey.md §5.2）。exoplayer-hls 给直播 m3u8 用；
+    // 传递依赖自动带入 common / datasource / extractor / container 等。
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
 }

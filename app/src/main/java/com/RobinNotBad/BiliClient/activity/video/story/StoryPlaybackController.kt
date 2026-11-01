@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 
+import com.RobinNotBad.BiliClient.player.PlayerFactory
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 
@@ -49,7 +50,8 @@ class StoryPlaybackController(
 
     private val handler = Handler(Looper.getMainLooper())
 
-    private var player: IjkMediaPlayer? = null
+    // 5.1.2 双引擎：类型放宽为 IMediaPlayer，实例由 PlayerFactory 按偏好创建
+    private var player: IMediaPlayer? = null
     private var surfaceReady = false
     private var prepared = false
     private var firstFrameRendered = false
@@ -197,7 +199,7 @@ class StoryPlaybackController(
 
     private fun createPlayer() {
         val p = try {
-            IjkMediaPlayer()
+            PlayerFactory.create(surfaceView.context)
         } catch (t: Throwable) {
             Logu.e("story", "创建播放器失败：" + t.message)
             listener.onPlayerError(-2, -2)
@@ -331,7 +333,7 @@ class StoryPlaybackController(
         }
     }
 
-    private fun applyOptions(p: IjkMediaPlayer, hardware: Boolean) {
+    private fun applyOptions(p: IMediaPlayer, hardware: Boolean) {
         //与 PlayerActivity#setDisplay 保持一致的参数集
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (hardware) 1L else 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)

@@ -117,6 +117,28 @@ public interface IMediaPlayer {
 
     MediaInfo getMediaInfo();
 
+    /*--------------------
+     * 引擎扩展方法（5.1.2 双引擎）。
+     * IjkMediaPlayer 本就实现了这三个方法（自动 override 这里的 default）；app 内的
+     * Media3Player 适配器给出映射实现。给 default 空实现是为了让接口的其他既有实现类
+     * （AndroidMediaPlayer / MediaPlayerProxy / TextureMediaPlayer 等）不受影响。
+     * app 侧调用点（ijkPlayer.setOption / setSpeed）因此可以在 IMediaPlayer 类型上直接调用。
+     */
+    default void setOption(int category, String name, String value) {
+    }
+
+    default void setOption(int category, String name, long value) {
+    }
+
+    default void setSpeed(float speed) {
+    }
+
+    default void setDataSource(String path, Map<String, String> headers)
+            throws IOException, IllegalArgumentException, IllegalStateException {
+        setDataSource(path);
+    }
+
+
     @SuppressWarnings("EmptyMethod")
     @Deprecated
     void setLogEnabled(boolean enable);

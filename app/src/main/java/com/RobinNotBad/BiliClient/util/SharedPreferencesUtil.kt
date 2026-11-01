@@ -127,6 +127,10 @@ object SharedPreferencesUtil {
     @JvmField
     val PLAYER_MEDIA_SESSION_ENABLE = "player_media_session_enable"
 
+    // 5.1.2 双播放引擎：true=Media3 实验内核，false=IjkPlayer（默认，行为与 5.1.1 一致）。
+    // 全新命名键（player_media3），只新增不改旧键；切换在下次创建播放器时生效（PlayerFactory）。
+    const val PLAYER_MEDIA3 = "player_media3"
+
     @JvmField
     val RECENT_UP_DISPLAY_ENABLE = "recent_up_display_enable"
 

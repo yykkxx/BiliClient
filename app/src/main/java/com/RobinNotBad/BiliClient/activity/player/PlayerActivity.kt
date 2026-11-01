@@ -69,6 +69,7 @@ import com.RobinNotBad.BiliClient.model.PlayerData
 import com.RobinNotBad.BiliClient.model.Subtitle
 import com.RobinNotBad.BiliClient.model.SubtitleLink
 import com.RobinNotBad.BiliClient.model.ViewPoint
+import com.RobinNotBad.BiliClient.player.PlayerFactory
 import com.RobinNotBad.BiliClient.ui.widget.BatteryView
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
@@ -111,7 +112,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     @JvmField
     var destroyed = false
 
-    private var ijkPlayer: IjkMediaPlayer? = null
+    // 5.1.2 双引擎：类型放宽为 IMediaPlayer，实例由 PlayerFactory 按偏好创建
+    // （IjkMediaPlayer / Media3Player 二选一；setOption/setSpeed 已上提为接口 default 方法）
+    private var ijkPlayer: IMediaPlayer? = null
     private var mDanmakuView: IDanmakuView? = null
 
     /** 弹幕层控制器（Kotlin）：配置、解析器、增量渲染、缺失分段补拉 */
@@ -405,9 +408,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             initMediaSession()
         }
 
-        IjkMediaPlayer.loadLibrariesOnce(null)
-
-        ijkPlayer = IjkMediaPlayer()
+        // 5.1.2：loadLibrariesOnce 移入 PlayerFactory 的 IjkPlayer 分支（Media3 引擎不需要加载 native 库）
+        ijkPlayer = PlayerFactory.create(this)
 
         batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
         batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
@@ -1496,7 +1498,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 val player = ijkPlayer ?: return
                 val text: String
                 try {
-                    text = String.format(Locale.CHINA, "%.1f", player.getTcpSpeed() / 1024f) + "KB/s"
+                    // 5.1.2：getTcpSpeed 是 IjkMediaPlayer 独有 API；Media3 引擎下显示 0
+                    val speed = (player as? IjkMediaPlayer)?.getTcpSpeed() ?: 0L
+                    text = String.format(Locale.CHINA, "%.1f", speed / 1024f) + "KB/s"
                 } catch (e: Exception) {
                     return
                 }
@@ -1896,7 +1900,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         ijkPlayer!!.release()
                     } catch (ignored: Exception) {
                     }
-                    ijkPlayer = IjkMediaPlayer()
+                    ijkPlayer = PlayerFactory.create(this)
 
                     // 复位状态，让 setDisplay 重新走一遍 prepare 流程
                     isPrepared = false
@@ -2993,7 +2997,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     runOnUiThread {
                         if (destroyed)
                             return@runOnUiThread
-                        ijkPlayer = IjkMediaPlayer()
+                        ijkPlayer = PlayerFactory.create(this)
                         progress_history = currentPosition
 
                         setDisplay()
@@ -3234,7 +3238,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         interactionChoiceLayout!!.removeAllViews()
                     }
 
-                    ijkPlayer = IjkMediaPlayer()
+                    ijkPlayer = PlayerFactory.create(this)
                     mDanmakuView = findViewById<View>(R.id.sv_danmaku) as IDanmakuView
 
                     setDisplay()
@@ -3380,7 +3384,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     isPrepared = false
                     isPlaying = false
 
-                    ijkPlayer = IjkMediaPlayer()
+                    ijkPlayer = PlayerFactory.create(this)
                     progress_history = currentPosition
 
                     setDisplay()
@@ -3790,7 +3794,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         interactionChoiceLayout!!.removeAllViews()
                     }
 
-                    ijkPlayer = IjkMediaPlayer()
+                    ijkPlayer = PlayerFactory.create(this)
                     mDanmakuView = findViewById<View>(R.id.sv_danmaku) as IDanmakuView
 
                     setDisplay()

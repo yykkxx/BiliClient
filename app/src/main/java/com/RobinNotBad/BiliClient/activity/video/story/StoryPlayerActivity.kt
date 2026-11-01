@@ -693,9 +693,12 @@ class StoryPlayerActivity : BaseActivity() {
 
     private fun initGesture() {
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(e1: MotionEvent, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-                val dy = e2.y - e1.y
-                val dx = e2.x - e1.x
+            // compileSdk 34：onFling 的 e1（起始按下事件）在 API 34 里标成了 @Nullable，
+            // Kotlin 覆写签名必须跟着改成可空，否则报 "overrides nothing"
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                val down = e1 ?: return false
+                val dy = e2.y - down.y
+                val dx = e2.x - down.x
                 if (Math.abs(dy) > 90f && Math.abs(dy) > Math.abs(dx) * 2f) {
                     if (dy < 0) switchRelative(1) else switchRelative(-1)
                     return true

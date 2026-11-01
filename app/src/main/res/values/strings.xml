@@ -128,6 +128,7 @@
     <string name="desc_display">！如果视频播放异常/闪退/未响应/无法缩放，请尝试切换该选项！\n已知：KidoX3只能Surface，小天才只能Texture，部分设备需要使用Texture才能进行缩放</string>
     <string name="desc_videocodec">硬件解码：使用GPU解码，速度快，性能消耗小\n软件解码：使用CPU硬算，兼容性好，暖手必备</string>
     <string name="desc_audiocodec">通常使用AudioTrack即可，声音延迟或无法播放请尝试切换</string>
+    <string name="desc_player_engine">IjkPlayer：老内核（默认），与旧版本行为完全一致\nMedia3（实验）：ExoPlayer 新内核，切换后下次播放生效；遇到播放异常请切回 IjkPlayer</string>
     <string name="desc_new_danmaku_api">开启后，内置播放器将通过新的弹幕接口实时获取视频弹幕。\n注意：该选项仅对内置播放器有效，且不支持高级弹幕</string>
     <string name="desc_danmaku_force_r2l">除了高级弹幕以外的弹幕都会被强制以滚动弹幕的形式展示，从而避免顶部弹幕和底部弹幕遮挡画面</string>
     <string name="desc_danmaku_showsender">显示直播聊天弹幕的发送者名称</string>

@@ -7,6 +7,7 @@ import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 import java.util.ArrayList
 
@@ -57,6 +58,12 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
         sectionList.add(SettingSection("choose", "音频输出", "player_audio",
                 getString(R.string.desc_audiocodec), "false",
                 arrayOf("OpenSles", "AudioTrack")))
+        // 5.1.2 双播放内核：ChooseHolder 语义 = 偏好 true → strings[0]（chocola）、
+        // false → strings[1]（vanilla），默认值 false 必须与 strings[1] 的语义对齐，
+        // 所以「IjkPlayer」放第二位（默认选中），「Media3（实验）」放第一位。
+        sectionList.add(SettingSection("choose", "播放内核", SharedPreferencesUtil.PLAYER_MEDIA3,
+                getString(R.string.desc_player_engine), "false",
+                arrayOf("Media3（实验）", "IjkPlayer")))
         sectionList.add(SettingSection("switch", "低延迟优先", "player_low_latency",
                 getString(R.string.desc_low_latency), "false"))
 
