@@ -21,9 +21,9 @@ public class DrawingCache implements IDrawingCache<DrawingCacheHolder>, Poolable
     }
 
     @Override
-    public void build(int w, int h, int density, boolean checkSizeEquals, int bitsPerPixel) {
+    public void build(int w, int h, int density, boolean checkSizeEquals) {
         final DrawingCacheHolder holder = mHolder;
-        holder.buildCache(w, h, density, checkSizeEquals, bitsPerPixel);
+        holder.buildCache(w, h, density, checkSizeEquals);
         mSize = mHolder.bitmap.getRowBytes() * mHolder.bitmap.getHeight();
     }
 

@@ -21,7 +21,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Build;
-import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.AttributeSet;
@@ -52,11 +51,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
 
     private HandlerThread mHandlerThread;
 
-    /**
-     * 绘制 handler。上游为 protected，BiliClient 本地补丁 19b28595 放开为 public：
-     * 播放器需要 `(IDanmakuView as DanmakuView).handler.updateFrameRate(...)` 下发温控帧率。
-     */
-    public volatile DrawHandler handler;
+    public DrawHandler handler;
 
     private boolean isSurfaceCreated;
 
@@ -64,25 +59,19 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
 
     private OnDanmakuClickListener mOnDanmakuClickListener;
 
-    private float mXOff;
-
-    private float mYOff;
-
-    private OnClickListener mOnClickListener;
-
     private DanmakuTouchHelper mTouchHelper;
-    
+
     private boolean mShowFps;
 
     private boolean mDanmakuVisible = true;
 
     protected int mDrawingThreadType = THREAD_TYPE_NORMAL_PRIORITY;
 
-    private Object mDrawMonitor = new Object();
+    private final Object mDrawMonitor = new Object();
 
     private boolean mDrawFinished = false;
 
-    protected boolean mRequestRender = false;
+    private boolean mRequestRender = false;
 
     private long mUiThreadId;
 
@@ -128,7 +117,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
             handler.removeAllDanmakus(isClearDanmakusOnScreen);
         }
     }
-    
+
     @Override
     public void removeAllLiveDanmakus() {
         if (handler != null) {
@@ -152,10 +141,15 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         }
     }
 
+    public DrawHandler getHandler() {
+        return handler;
+    }
+
     @Override
     public void release() {
         stop();
-        if(mDrawTimes!= null) mDrawTimes.clear();
+        if (mDrawTimes != null)
+            mDrawTimes.clear();
     }
 
     @Override
@@ -163,19 +157,16 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         stopDraw();
     }
 
-    private synchronized void stopDraw() {
-        if (this.handler == null) {
-            return;
-        }
+    private void stopDraw() {
         DrawHandler handler = this.handler;
         this.handler = null;
         unlockCanvasAndPost();
         if (handler != null) {
             handler.quit();
         }
-        HandlerThread handlerThread = this.mHandlerThread;
-        mHandlerThread = null;
-        if (handlerThread != null) {
+        if (mHandlerThread != null) {
+            HandlerThread handlerThread = this.mHandlerThread;
+            mHandlerThread = null;
             try {
                 handlerThread.join();
             } catch (InterruptedException e) {
@@ -185,7 +176,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         }
     }
 
-    protected synchronized Looper getLooper(int type) {
+    protected Looper getLooper(int type) {
         if (mHandlerThread != null) {
             mHandlerThread.quit();
             mHandlerThread = null;
@@ -240,28 +231,27 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
     }
 
     @Override
-    public void showFPS(boolean show){
+    public void showFPS(boolean show) {
         mShowFps = show;
     }
+
     private static final int MAX_RECORD_SIZE = 50;
     private static final int ONE_SECOND = 1000;
     private LinkedList<Long> mDrawTimes;
 
-    protected boolean mClearFlag;
+    private boolean mClearFlag;
+
     private float fps() {
         long lastTime = SystemClock.uptimeMillis();
         mDrawTimes.addLast(lastTime);
-        Long first = mDrawTimes.peekFirst();
-        if (first == null) {
-            return 0.0f;
-        }
-        float dtime = lastTime - first;
+        float dtime = lastTime - mDrawTimes.getFirst();
         int frames = mDrawTimes.size();
         if (frames > MAX_RECORD_SIZE) {
             mDrawTimes.removeFirst();
         }
         return dtime > 0 ? mDrawTimes.size() * ONE_SECOND / dtime : 0.0f;
     }
+
     @Override
     public long drawDanmakus() {
         if (!isSurfaceCreated)
@@ -272,19 +262,19 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         lockCanvas();
         return SystemClock.uptimeMillis() - stime;
     }
-    
+
     @SuppressLint("NewApi")
     private void postInvalidateCompat() {
         mRequestRender = true;
-        if(Build.VERSION.SDK_INT >= 16) {
+        if (Build.VERSION.SDK_INT >= 16) {
             this.postInvalidateOnAnimation();
         } else {
             this.postInvalidate();
         }
     }
 
-    protected void lockCanvas() {
-        if(mDanmakuVisible == false) {
+    private void lockCanvas() {
+        if (mDanmakuVisible == false) {
             return;
         }
         postInvalidateCompat();
@@ -303,19 +293,19 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
             mDrawFinished = false;
         }
     }
-    
+
     private void lockCanvasAndClear() {
         mClearFlag = true;
         lockCanvas();
     }
-    
+
     private void unlockCanvasAndPost() {
         synchronized (mDrawMonitor) {
             mDrawFinished = true;
             mDrawMonitor.notifyAll();
         }
     }
-    
+
     @Override
     protected void onDraw(Canvas canvas) {
         if ((!mDanmakuVisible) && (!mRequestRender)) {
@@ -330,7 +320,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
                 RenderingState rs = handler.draw(canvas);
                 if (mShowFps) {
                     if (mDrawTimes == null)
-                        mDrawTimes = new LinkedList<Long>();
+                        mDrawTimes = new LinkedList<>();
                     String fps = String.format(Locale.getDefault(),
                             "fps %.2f,time:%d s,cache:%d,miss:%d", fps(), getCurrentTime() / 1000,
                             rs.cacheHitCount, rs.cacheMissCount);
@@ -341,7 +331,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         mRequestRender = false;
         unlockCanvasAndPost();
     }
-    
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
@@ -372,18 +362,17 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
 
     private int mResumeTryCount = 0;
 
-    private Runnable mResumeRunnable = new Runnable() {
+    private final Runnable mResumeRunnable = new Runnable() {
         @Override
         public void run() {
-            DrawHandler drawHandler = handler;
-            if (drawHandler == null) {
+            if (handler == null) {
                 return;
             }
             mResumeTryCount++;
             if (mResumeTryCount > 4 || DanmakuView.super.isShown()) {
-                drawHandler.resume();
+                handler.resume();
             } else {
-                drawHandler.postDelayed(this, 100 * mResumeTryCount);
+                handler.postDelayed(this, 100 * mResumeTryCount);
             }
         }
     };
@@ -393,16 +382,15 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         if (handler != null && handler.isPrepared()) {
             handler.removeCallbacks(mResumeRunnable);
             mResumeTryCount = 0;
-            // 本地补丁 1cc692a7：延迟 50ms 再 resume，避开播放器刚切回前台的时序抖动
             handler.postDelayed(mResumeRunnable, 50);
-        }  else if (handler == null) {
+        } else if (handler == null) {
             restart();
         }
     }
-    
+
     @Override
     public boolean isPaused() {
-        if(handler != null) {
+        if (handler != null) {
             return handler.isStop();
         }
         return false;
@@ -419,36 +407,43 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
     }
 
     @Override
-    public void start(long position) {
-        Handler handler = this.handler;
+    public void start(long postion) {
         if (handler == null) {
             prepare();
-            handler = this.handler;
         } else {
-            // 本地补丁 1cc692a7：只清 resume 回调，不要 removeCallbacksAndMessages(null)
-            // ——那会把 START/SEEK 等排队消息一起清掉，导致 start() 后弹幕层不动。
             handler.removeCallbacks(mResumeRunnable);
         }
         if (handler != null) {
-            handler.obtainMessage(DrawHandler.START, position).sendToTarget();
+            handler.obtainMessage(DrawHandler.START, postion).sendToTarget();
         }
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        boolean isEventConsumed = mTouchHelper.onTouchEvent(event);
-        if (!isEventConsumed) {
-            return super.onTouchEvent(event);
+        if (null != mTouchHelper) {
+            mTouchHelper.onTouchEvent(event);
         }
-        return isEventConsumed;
+
+        return super.onTouchEvent(event);
     }
 
     public void seekTo(Long ms) {
-        if(handler != null){
+        if (handler != null && handler.isPrepared()) {
             handler.seekTo(ms);
         }
     }
 
+    public void setSpeed(float speed) {
+        if (handler != null && handler.isPrepared()) {
+            handler.setSpeed(speed);
+        }
+    }
+
+    public void adjust() {
+        if (handler != null) {
+            handler.syncTimerIfNeeded();
+        }
+    }
 
     public void enableDanmakuDrawingCache(boolean enable) {
         mEnableDanmakuDrwaingCache = enable;
@@ -465,25 +460,15 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
     }
 
     @Override
-    public int getViewWidth() {
-        return super.getWidth();
-    }
-
-    @Override
-    public int getViewHeight() {
-        return super.getHeight();
-    }
-
-    @Override
     public View getView() {
         return this;
     }
-      
+
     @Override
     public void show() {
         showAndResumeDrawTask(null);
     }
-    
+
     @Override
     public void showAndResumeDrawTask(Long position) {
         mDanmakuVisible = true;
@@ -502,7 +487,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
         }
         handler.hideDanmakus(false);
     }
-    
+
     @Override
     public long hideAndPauseDrawTask() {
         mDanmakuVisible = false;
@@ -532,7 +517,7 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
 
     @Override
     public void setDrawingThreadType(int type) {
-        mDrawingThreadType  = type;
+        mDrawingThreadType = type;
     }
 
     @Override
@@ -564,54 +549,12 @@ public class DanmakuView extends View implements IDanmakuView, IDanmakuViewContr
     @Override
     public void setOnDanmakuClickListener(OnDanmakuClickListener listener) {
         mOnDanmakuClickListener = listener;
-    }
-
-    @Override
-    public void setOnDanmakuClickListener(OnDanmakuClickListener listener, float xOff, float yOff) {
-        mOnDanmakuClickListener = listener;
-        mXOff = xOff;
-        mYOff = yOff;
+        setClickable(null != listener);
     }
 
     @Override
     public OnDanmakuClickListener getOnDanmakuClickListener() {
         return mOnDanmakuClickListener;
-    }
-
-    @Override
-    public float getXOff() {
-        return mXOff;
-    }
-
-    @Override
-    public float getYOff() {
-        return mYOff;
-    }
-
-    public void forceRender() {
-        mRequestRender = true;
-        handler.forceRender();
-    }
-
-    // ---------------- BiliClient 本地补丁（19b28595 / f1e2b44b） ----------------
-
-    @Override
-    public DrawHandler getHandler() {
-        return handler;
-    }
-
-    @Override
-    public void setSpeed(float speed) {
-        if (handler != null && handler.isPrepared()) {
-            handler.setSpeed(speed);
-        }
-    }
-
-    @Override
-    public void adjust() {
-        if (handler != null) {
-            handler.syncTimerIfNeeded();
-        }
     }
 
     @Override

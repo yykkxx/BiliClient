@@ -39,8 +39,6 @@ import java.io.Serializable
 import java.util.Arrays
 import java.util.HashMap
 import java.util.Map
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 object PlayerApi {
     /**
@@ -249,33 +247,6 @@ object PlayerApi {
 
         playerData.timeStamp = System.currentTimeMillis()
 
-        // durl（fnval=1）内嵌的音轨恒为 44kbps HE-AAC（证据见 notes/player_audio_alpha10.md 第五节），
-        // 所以额外请求一次 fnval=16 拿 DASH 里最高带宽的 AAC 音轨，供两处使用：
-        //   1) 听视频模式：主播放器直接改播这条音轨（单文件单音轨，无额外带宽）；
-        //   2) 实验性的「双流高音质音轨」：主播放器播 durl、这条音轨单独出声。
-        //
-        // v5.0.4-alpha3：该开关**默认开启**（音质优先）。
-        // 实测：durl 混流内嵌音轨恒为 44kbps，DASH 音轨最高 204kbps —— 就是这个差距造成「沉闷」。
-        // 默认值必须与 PlayerAudioPolicy.dashAudioEnabled() 保持一致（那里是 true），
-        // 否则会出现「播放器认为该挂伴音轨、但这里没去取地址」的静默不一致。
-        // 注意：这次请求**只拿 JSON 地址，不产生音频流量**；真正的音轨下载只在伴音轨真的播放时发生。
-        val needDashAudio = SharedPreferencesUtil.getBoolean("player_dash_audio", true) ||
-                (!download && SharedPreferencesUtil.getBoolean("player_audio_only", false))
-        val dashAudioLatch = CountDownLatch(1)
-        if (needDashAudio) {
-            CenterThreadPool.run(Runnable {
-                try {
-                    fetchDashAudioUrl(playerData)
-                } catch (t: Throwable) {
-                    Logu.d("player-audio", "DASH 音轨解析失败（忽略，走原声）：" + t.message)
-                } finally {
-                    dashAudioLatch.countDown()
-                }
-            })
-        } else {
-            dashAudioLatch.countDown()
-        }
-
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml"
 
         val html5 = !download && SharedPreferencesUtil.getString("player", "") == "mtvPlayer"
@@ -314,62 +285,8 @@ object PlayerApi {
         playerData.qnStrList = qnStrList
         playerData.qnValueList = qnValueList
 
-        // 等并行那一路音轨解析（最多 3s）。不需要时上面已经 countDown，这里是零等待；
-        // 需要但失败/超时就算了（走 durl 原声 / 听视频模式退回 durl）。
-        try {
-            dashAudioLatch.await(3, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            Logu.d("player-audio", "等待 DASH 音轨被中断：" + e.message)
-            Thread.currentThread().interrupt()
-        }
     }
 
-    /**
-     * 解析 DASH 里**最高带宽的 AAC 音轨**并写进 `playerData.audioUrl`。
-     *
-     * v5.0.3-alpha11：该地址只服务于「听视频模式」与默认关闭的实验性双流音轨；
-     * 默认播放路径（durl 单文件）完全不碰它，也就没有重复下载。
-     *
-     * 为什么不用 [DashData.getBestAudioStream]：那个方法优先 flac → 杜比 → 带宽，
-     * 而本机 ijkplayer 的 ffmpeg 只编了 aac/pcm/flac/mp3 等解码器，**没有 ac3/eac3**，
-     * 一旦选中杜比（30250）就会彻底没声音。所以这里只挑 `codecs` 以 `mp4a` 开头的
-     * AAC 流（30216=44k / 30232=103k / 30280=204k）里带宽最大的那一条。
-     *
-     * 任何异常都由调用方吞掉：音频只是「加分项」，绝不能因为它导致播放失败。
-     */
-    @JvmStatic
-    fun fetchDashAudioUrl(playerData: PlayerData) {
-        var url = "https://api.bilibili.com/x/player/wbi/playurl?" +
-                "avid=" + playerData.aid +
-                "&cid=" + playerData.cid +
-                "&qn=" + playerData.qn +
-                "&fnval=16&fnver=0" +
-                "&platform=pc" +
-                "&voice_balance=1" +
-                "&gaia_source=pre-load" +
-                "&isGaiaAvoided=true"
-        url = ConfInfoApi.signWBI(url)
-
-        val body = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders)
-        val dash = body.optJSONObject("data")?.optJSONObject("dash") ?: return
-        val audioArray = dash.optJSONArray("audio") ?: return
-
-        val best = (0 until audioArray.length())
-                .mapNotNull { audioArray.optJSONObject(it) }
-                // 只要 AAC：ijkplayer 没有 ac3/eac3 解码器，选杜比就是静音
-                .filter { it.optString("codecs", "").startsWith("mp4a") }
-                .filter { it.optString("baseUrl", it.optString("base_url", "")).isNotEmpty() }
-                .maxByOrNull { it.optLong("bandwidth", 0L) }
-
-        if (best == null) {
-            Logu.d("player-audio", "没有可用的 AAC 音轨")
-            return
-        }
-        playerData.audioUrl = best.optString("baseUrl", best.optString("base_url", ""))
-        Logu.d("player-audio", "DASH 音轨 id=" + best.optInt("id", 0) +
-                " codecs=" + best.optString("codecs", "") +
-                " bandwidth=" + best.optLong("bandwidth", 0L))
-    }
 
     /**
      * 解析番剧，和普通视频的api不一样
@@ -433,10 +350,6 @@ object PlayerApi {
         val intent = Intent()
         intent.setClass(context, PlayerActivity::class.java)
         intent.putExtra("url", playerData.videoUrl)
-        // v5.0.2-alpha10：DASH 高音质音轨（durl 内嵌音轨只有 44kbps），
-        // PlayerActivity 会用它做「伴音轨」或听视频模式的唯一音源。为空表示不启用。
-        // 听视频模式 / 实验性的双流音轨用它；为 null 时播放器完全不涉及第二路流。
-        intent.putExtra("audio_url", playerData.audioUrl)
         intent.putExtra("danmaku", playerData.danmakuUrl)
         intent.putExtra("title", playerData.title)
         intent.putExtra("aid", playerData.aid)

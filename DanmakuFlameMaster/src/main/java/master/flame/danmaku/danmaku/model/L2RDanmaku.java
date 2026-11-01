@@ -27,7 +27,7 @@ public class L2RDanmaku extends R2LDanmaku {
     public void layout(IDisplayer displayer, float x, float y) {
         if (mTimer != null) {
             long currMS = mTimer.currMillisecond;
-            long deltaDuration = currMS - getActualTime();
+            long deltaDuration = currMS - time;
             if (deltaDuration > 0 && deltaDuration < duration.value) {
                 this.x = getAccurateLeft(displayer, currMS);
                 if (!this.isShown()) {
@@ -58,7 +58,7 @@ public class L2RDanmaku extends R2LDanmaku {
     }
 
     protected float getAccurateLeft(IDisplayer displayer, long currTime) {
-        long elapsedTime = currTime - getActualTime();
+        long elapsedTime = currTime - time;
         if (elapsedTime >= duration.value) {
             return displayer.getWidth();
         }

@@ -72,19 +72,18 @@ public class NativeBitmapFactory {
         Log.e("NativeBitmapFactory", "loaded" + nativeLibLoaded);
     }
 
-    public static synchronized void releaseLibs() {
-        boolean loaded =  nativeLibLoaded;
-        nativeIntField = null;
-        nativeLibLoaded = false;
-        if (loaded) {
+    public static void releaseLibs() {
+        if (nativeLibLoaded) {
             release();
         }
+        nativeIntField = null;
+        nativeLibLoaded = false;
         // Log.e("NativeBitmapFactory", "released");
     }
 
     static void initField() {
         try {
-            nativeIntField = Bitmap.Config.class.getDeclaredField("nativeInt");
+            nativeIntField = Config.class.getDeclaredField("nativeInt");
             nativeIntField.setAccessible(true);
         } catch (NoSuchFieldException e) {
             nativeIntField = null;
@@ -100,7 +99,7 @@ public class NativeBitmapFactory {
         Bitmap bitmap = null;
         Canvas canvas = null;
         try {
-            bitmap = createNativeBitmap(2, 2, Bitmap.Config.ARGB_8888, true);
+            bitmap = createNativeBitmap(2, 2, Config.ARGB_8888, true);
             boolean result = (bitmap != null && bitmap.getWidth() == 2 && bitmap.getHeight() == 2);
             if (result) {
                 if (android.os.Build.VERSION.SDK_INT >= 17 && !bitmap.isPremultiplied()) {
@@ -119,7 +118,7 @@ public class NativeBitmapFactory {
             }
             return result;
         } catch (Exception e) {
-            Log.e("NativeBitmapFactory", "exception:" + e.toString());
+            Log.e("NativeBitmapFactory", "exception:" + e);
             return false;
         } catch (Error e) {
             return false;
@@ -131,7 +130,7 @@ public class NativeBitmapFactory {
         }
     }
 
-    public static int getNativeConfig(Bitmap.Config config) {
+    public static int getNativeConfig(Config config) {
         try {
             if (nativeIntField == null) {
                 return 0;
@@ -145,15 +144,15 @@ public class NativeBitmapFactory {
         return 0;
     }
 
-    public static Bitmap createBitmap(int width, int height, Bitmap.Config config) {
-        return createBitmap(width, height, config, config.equals(Bitmap.Config.ARGB_4444) || config.equals(Bitmap.Config.ARGB_8888));
+    public static Bitmap createBitmap(int width, int height, Config config) {
+        return createBitmap(width, height, config, config.equals(Config.ARGB_8888));
     }
 
     public static void recycle(Bitmap bitmap) {
         bitmap.recycle();
     }
 
-    public static synchronized Bitmap createBitmap(int width, int height, Bitmap.Config config, boolean hasAlpha) {
+    public static Bitmap createBitmap(int width, int height, Config config, boolean hasAlpha) {
         if (!nativeLibLoaded || nativeIntField == null) {
             // Log.e("NativeBitmapFactory", "ndk bitmap create failed");
             return Bitmap.createBitmap(width, height, config);

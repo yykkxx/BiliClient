@@ -738,15 +738,13 @@ class PlayerDanmakuController(
         if (danmakus == null || danmakus.isEmpty) return
         val markTimestamp = timeJumpEnabled
         var count = 0
-        // 上游 0.9.25 的 IDanmakus 移除了 iterator()，统一走 forEachSync 遍历
-        danmakus.forEachSync(object : IDanmakus.DefaultConsumer<BaseDanmaku>() {
-            override fun accept(item: BaseDanmaku): Int {
-                if (markTimestamp) markTimestampSpan(item)
-                view.addDanmaku(item)
-                count++
-                return IDanmakus.DefaultConsumer.ACTION_CONTINUE
-            }
-        })
+        val it = danmakus.iterator()
+        while (it.hasNext()) {
+            val item = it.next() ?: continue
+            if (markTimestamp) markTimestampSpan(item)
+            view.addDanmaku(item)
+            count++
+        }
         if (count > 0) hasDanmaku = true
         Logu.d("danmaku", "增量追加 $count 条弹幕")
     }
@@ -799,20 +797,15 @@ class PlayerDanmakuController(
 
         var hitText: CharSequence? = null
         try {
-            // 上游 0.9.25 的 IDanmakus 移除了 iterator()，统一走 forEachSync 遍历
-            visible.forEachSync(object : IDanmakus.DefaultConsumer<BaseDanmaku>() {
-                override fun accept(danmaku: BaseDanmaku): Int {
-                    if (!danmaku.isOutside) {
-                        val hitX = x >= danmaku.left - HIT_SLOP && x <= danmaku.right + HIT_SLOP
-                        val hitY = y >= danmaku.top - HIT_SLOP && y <= danmaku.bottom + HIT_SLOP
-                        if (hitX && hitY) {
-                            // 后画的弹幕在更上层，命中更靠后的那条更符合直觉
-                            hitText = danmaku.text
-                        }
-                    }
-                    return IDanmakus.DefaultConsumer.ACTION_CONTINUE
-                }
-            })
+            val it = visible.iterator()
+            while (it.hasNext()) {
+                val danmaku = it.next() ?: continue
+                if (danmaku.isOutside) continue
+                if (x < danmaku.left - HIT_SLOP || x > danmaku.right + HIT_SLOP) continue
+                if (y < danmaku.top - HIT_SLOP || y > danmaku.bottom + HIT_SLOP) continue
+                // 后画的弹幕在更上层，命中更靠后的那条更符合直觉
+                hitText = danmaku.text
+            }
         } catch (e: ConcurrentModificationException) {
             // 遍历中途被改：用已拿到的部分结果继续
         } catch (e: NullPointerException) {

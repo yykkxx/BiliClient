@@ -17,12 +17,10 @@
 package master.flame.danmaku.danmaku.renderer;
 
 
-import master.flame.danmaku.danmaku.model.DanmakuTimer;
 import master.flame.danmaku.danmaku.model.ICacheManager;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.IDisplayer;
-import master.flame.danmaku.danmaku.model.android.Danmakus;
 
 public interface IRenderer {
     
@@ -64,20 +62,14 @@ public interface IRenderer {
 
     public class RenderingState {
         public final static int UNKNOWN_TIME = -1;
-
-        public boolean isRunningDanmakus;
-        public DanmakuTimer timer = new DanmakuTimer();
-        public int indexInScreen;
-        public int totalSizeInScreen;
-        public BaseDanmaku lastDanmaku;
-
+        
         public int r2lDanmakuCount;
         public int l2rDanmakuCount;
         public int ftDanmakuCount;
         public int fbDanmakuCount;
         public int specialDanmakuCount;
         public int totalDanmakuCount;
-        public int lastTotalDanmakuCount;
+        public int incrementCount;
         public long consumingTime;
         public long beginTime;
         public long endTime;
@@ -85,9 +77,6 @@ public interface IRenderer {
         public long sysTime;
         public long cacheHitCount;
         public long cacheMissCount;
-
-        private IDanmakus runningDanmakus = new Danmakus(Danmakus.ST_BY_LIST);
-        private boolean mIsObtaining;
 
         public int addTotalCount(int count) {
             totalDanmakuCount += count;
@@ -116,25 +105,21 @@ public interface IRenderer {
         }
 
         public void reset() {
-            lastTotalDanmakuCount = totalDanmakuCount;
             r2lDanmakuCount = l2rDanmakuCount = ftDanmakuCount = fbDanmakuCount = specialDanmakuCount = totalDanmakuCount = 0;
             sysTime = beginTime = endTime = consumingTime = 0;
             nothingRendered = false;
-            synchronized (this) {
-                runningDanmakus.clear();
-            }
         }
 
         public void set(RenderingState other) {
             if(other == null)
                 return;
-            lastTotalDanmakuCount = other.lastTotalDanmakuCount;
             r2lDanmakuCount = other.r2lDanmakuCount;
             l2rDanmakuCount = other.l2rDanmakuCount;
             ftDanmakuCount = other.ftDanmakuCount;
             fbDanmakuCount = other.fbDanmakuCount;
             specialDanmakuCount = other.specialDanmakuCount;
             totalDanmakuCount = other.totalDanmakuCount;
+            incrementCount = other.incrementCount;
             consumingTime = other.consumingTime;
             beginTime = other.beginTime;
             endTime = other.endTime;
@@ -143,27 +128,9 @@ public interface IRenderer {
             cacheHitCount = other.cacheHitCount;
             cacheMissCount = other.cacheMissCount;
         }
-
-        public void appendToRunningDanmakus(BaseDanmaku danmaku) {
-            if (!mIsObtaining) {
-                runningDanmakus.addItem(danmaku);
-            }
-        }
-
-        public IDanmakus obtainRunningDanmakus() {
-            mIsObtaining = true;
-            IDanmakus danmakus;
-            synchronized (this) {
-                danmakus = runningDanmakus;
-                runningDanmakus = new Danmakus(Danmakus.ST_BY_LIST);
-            }
-            mIsObtaining = false;
-            return danmakus;
-        }
-
     }
 
-    void draw(IDisplayer disp, IDanmakus danmakus, long startRenderTime, RenderingState renderingState);
+    RenderingState draw(IDisplayer disp, IDanmakus danmakus, long startRenderTime);
 
     void clear();
 
@@ -178,7 +145,5 @@ public interface IRenderer {
     void setOnDanmakuShownListener(OnDanmakuShownListener onDanmakuShownListener);
 
     void removeOnDanmakuShownListener();
-
-    void alignBottom(boolean enable);
 
 }

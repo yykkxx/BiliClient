@@ -44,7 +44,7 @@ public class DanmakuUtils {
         if(d1.isOutside()){
             return false;
         }
-        long dTime = d2.getActualTime() - d1.getActualTime();
+        long dTime = d2.time - d1.time;
         if (dTime <= 0)
             return true;
         if (Math.abs(dTime) >= duration || d1.isTimeOut() || d2.isTimeOut()) {
@@ -56,7 +56,7 @@ public class DanmakuUtils {
         }
 
         return checkHitAtTime(disp, d1, d2, currTime) 
-                || checkHitAtTime(disp, d1, d2,  d1.getActualTime() + d1.getDuration());
+                || checkHitAtTime(disp, d1, d2,  d1.time + d1.getDuration());
     }
     
     private static boolean checkHitAtTime(IDisplayer disp, BaseDanmaku d1, BaseDanmaku d2, long time){
@@ -85,11 +85,11 @@ public class DanmakuUtils {
     }
 
     public static DrawingCache buildDanmakuDrawingCache(BaseDanmaku danmaku, IDisplayer disp,
-            DrawingCache cache, int bitsPerPixel) {
+            DrawingCache cache) {
         if (cache == null)
             cache = new DrawingCache();
 
-        cache.build((int) Math.ceil(danmaku.paintWidth), (int) Math.ceil(danmaku.paintHeight), disp.getDensityDpi(), false, bitsPerPixel);
+        cache.build((int) Math.ceil(danmaku.paintWidth), (int) Math.ceil(danmaku.paintHeight), disp.getDensityDpi(), false);
         DrawingCacheHolder holder = cache.get();
         if (holder != null) {
             ((AbsDisplayer) disp).drawDanmaku(danmaku, holder.canvas, 0, 0, true);
@@ -101,11 +101,11 @@ public class DanmakuUtils {
         return cache;
     }
 
-    public static int getCacheSize(int w, int h, int bytesPerPixel) {
-        return (w) * (h) * bytesPerPixel;
+    public static int getCacheSize(int w, int h) {
+        return (w) * (h) * 4;
     }
     
-    public final static boolean isDuplicate(BaseDanmaku obj1, BaseDanmaku obj2) {
+    public static boolean isDuplicate(BaseDanmaku obj1, BaseDanmaku obj2) {
         if(obj1 == obj2) {
             return false;
         }
@@ -125,7 +125,7 @@ public class DanmakuUtils {
         return false;
     }
 
-    public final static int compare(BaseDanmaku obj1, BaseDanmaku obj2) {
+    public static int compare(BaseDanmaku obj1, BaseDanmaku obj2) {
         
         if (obj1 == obj2) {
             return 0;
@@ -139,13 +139,44 @@ public class DanmakuUtils {
             return 1;
         }
 
-        long val = obj1.getTime() - obj2.getTime();
+        long val = obj1.time - obj2.time;
         if (val > 0) {
             return 1;
         } else if (val < 0) {
             return -1;
         }
-        int r = obj1.index - obj2.index;
+        
+        int result = obj1.index - obj2.index;
+        if (result > 0) {
+            return 1;
+        } else if (result < 0) {
+            return -1;
+        }
+
+        result = obj1.getType() - obj2.getType();
+        if (result > 0) {
+            return 1;
+        } else if (result < 0) {
+            return -1;
+        }
+
+        if (obj1.text == null) {
+            return -1;
+        }
+        if (obj2.text == null) {
+            return 1;
+        }
+
+        int r = obj1.text.toString().compareTo(obj2.text.toString());
+        if (r != 0) {
+            return r;
+        }
+
+        r = obj1.textColor - obj2.textColor;
+        if (r != 0)
+            return r < 0 ? -1 : 1;
+
+        r = obj1.index - obj2.index;
         if (r != 0)
             return r < 0 ? -1 : 1;
 
@@ -153,7 +184,7 @@ public class DanmakuUtils {
         return r;
     }
 
-    public final static boolean isOverSize(IDisplayer disp, BaseDanmaku item) {
+    public static boolean isOverSize(IDisplayer disp, BaseDanmaku item) {
         return disp.isHardwareAccelerated() && (item.paintWidth > disp.getMaximumCacheWidth() || item.paintHeight > disp.getMaximumCacheHeight());
     }
 

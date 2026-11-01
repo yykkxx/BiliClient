@@ -9,9 +9,9 @@ public interface IDanmakuViewController {
 
     public boolean isViewReady();
 
-    public int getViewWidth();
+    public int getWidth();
 
-    public int getViewHeight();
+    public int getHeight();
 
     public Context getContext();
 

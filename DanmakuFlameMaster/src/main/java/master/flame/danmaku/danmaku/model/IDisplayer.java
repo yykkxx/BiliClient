@@ -35,13 +35,9 @@ public interface IDisplayer {
 
     int draw(BaseDanmaku danmaku);
 
-    void recycle(BaseDanmaku danmaku);
-
     float getScaledDensity();
 
     int getSlopPixel();
-
-    void prepare(BaseDanmaku danmaku, boolean fromWorkerThread);
 
     void measure(BaseDanmaku danmaku, boolean fromWorkerThread);
 
@@ -66,11 +62,4 @@ public interface IDisplayer {
 
     void setDanmakuStyle(int style, float[] data);
 
-    void setMargin(int m);
-
-    int getMargin();
-
-    void setAllMarginTop(int m);
-
-    int getAllMarginTop();
 }

@@ -4,7 +4,6 @@ import android.os.Bundle
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
-import com.RobinNotBad.BiliClient.activity.player.PlayerAudioPolicy
 import com.RobinNotBad.BiliClient.activity.player.PlayerDanmakuController
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
@@ -58,23 +57,8 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
         sectionList.add(SettingSection("choose", "音频输出", "player_audio",
                 getString(R.string.desc_audiocodec), "false",
                 arrayOf("OpenSles", "AudioTrack")))
-        // v5.0.4-alpha2：**删掉了原来的「倍速算法」选项**。
-        // 用户明确说「不想思考用哪个倍速模式」，所以这项不再是用户需要决定的事：
-        // 变速算法恒为 SoundTouch（与播放器重构前那一版一致），用户不需要选，
-        // 用户什么都不用选。它不再出现在设置页，也不再被代码读取。
         sectionList.add(SettingSection("switch", "低延迟优先", "player_low_latency",
                 getString(R.string.desc_low_latency), "false"))
-        // 音质项（v5.0.4-alpha3 起**默认开启**）。
-        // 实测：durl 混流内嵌音轨恒为 44kbps HE-AAC（qn=16/64 都一样），而同一视频的 DASH
-        // 音轨有 44 / 103 / 204 kbps 三档（mp4a.40.2）—— 用户说的「沉闷」就是 44kbps 那档。
-        // 开启后画面仍走 durl，声音另起一路播 DASH 204kbps，失败自动回退原声（绝不会没声音）。
-        // 代价是多一份音频流量；关掉就回到 durl 单文件单音轨（省流量）。
-        sectionList.add(SettingSection("switch", "高音质音轨（DASH AAC）",
-                PlayerAudioPolicy.PREF_DASH_AUDIO,
-                "画面用 durl，声音另下一份 DASH 最高码率音轨（204kbps AAC）。" +
-                        "durl 内嵌音轨只有 44kbps，这就是之前听感发闷的原因。默认开启；" +
-                        "关闭则回到 durl 单文件单音轨（省流量）。不可用时自动回退原声。",
-                "true"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 

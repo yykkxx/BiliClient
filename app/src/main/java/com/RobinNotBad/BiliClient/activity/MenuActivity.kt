@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.activity.dynamic.DynamicActivity
 import com.RobinNotBad.BiliClient.activity.live.RecommendLiveActivity
 import com.RobinNotBad.BiliClient.activity.message.MessageActivity
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity
+import com.RobinNotBad.BiliClient.activity.settings.SettingAppRcmdActivity
 import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.user.MySpaceActivity
@@ -132,6 +133,15 @@ class MenuActivity : BaseActivity() {
                 else -> materialButton.text = btnNames[btn]!!.first
             }
             materialButton.setOnClickListener { killAndJump(btn) }
+            // 长按「推荐」= 打开推荐 API 设置（移动端推荐逻辑：登录身份 / 开关 / 状态）
+            if (btn == "recommend") {
+                materialButton.setOnLongClickListener {
+                    val intent = Intent()
+                    intent.setClass(this@MenuActivity, SettingAppRcmdActivity::class.java)
+                    startActivity(intent)
+                    true
+                }
+            }
             layout.addView(materialButton, params)
         }
 

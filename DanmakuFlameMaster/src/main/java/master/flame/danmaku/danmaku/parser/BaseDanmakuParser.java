@@ -17,10 +17,9 @@
 package master.flame.danmaku.danmaku.parser;
 
 import android.content.SharedPreferences;
-
-
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.DanmakuTimer;
+import master.flame.danmaku.danmaku.model.IDanmakuIterator;
 import master.flame.danmaku.danmaku.model.IDanmakus;
 import master.flame.danmaku.danmaku.model.IDisplayer;
 import master.flame.danmaku.danmaku.model.android.DanmakuContext;
@@ -29,11 +28,6 @@ import master.flame.danmaku.danmaku.model.android.DanmakuContext;
  *
  */
 public abstract class BaseDanmakuParser {
-
-    public interface Listener {
-        void onDanmakuAdd(BaseDanmaku danmaku);
-    }
-
     protected IDataSource<?> mDataSource;
 
     protected DanmakuTimer mTimer;
@@ -46,13 +40,11 @@ public abstract class BaseDanmakuParser {
 
     protected IDisplayer mDisp;
     protected DanmakuContext mContext;
-    protected Listener mListener;
-
-    /** 宿主 App 的偏好设置（BiliClient 本地补丁：BiliDanmukuParser 用它读强制滚动等开关） */
+    
     public SharedPreferences sharedPreferences = null;
 
     /**
-     * 解析结果文本标记器（宿主 App 注入，BiliClient 本地补丁 9847ac23）。
+     * 解析结果文本标记器（宿主 App 注入）。
      *
      * 用途：由宿主在"解析出弹幕之后、渲染之前"统一改写弹幕文本，
      * 例如把弹幕里的时间戳标成蓝色下划线（BiliClient #2）。
@@ -78,21 +70,17 @@ public abstract class BaseDanmakuParser {
         if (marker == null || mDanmakus == null || mDanmakus.isEmpty()) {
             return;
         }
-        final DanmakuTextMarker finalMarker = marker;
-        mDanmakus.forEachSync(new IDanmakus.DefaultConsumer<BaseDanmaku>() {
-            @Override
-            public int accept(BaseDanmaku danmaku) {
-                if (danmaku != null) {
-                    try {
-                        finalMarker.mark(danmaku);
-                    } catch (Exception ignored) {
-                    }
-                }
-                return ACTION_CONTINUE;
+        IDanmakuIterator it = mDanmakus.iterator();
+        while (it.hasNext()) {
+            BaseDanmaku danmaku = it.next();
+            if (danmaku == null) continue;
+            try {
+                marker.mark(danmaku);
+            } catch (Exception ignored) {
             }
-        });
+        }
     }
-
+    
     public BaseDanmakuParser setDisplayer(IDisplayer disp){
         mDisp = disp;
     	mDispWidth = disp.getWidth();
@@ -103,15 +91,6 @@ public abstract class BaseDanmakuParser {
         mContext.mDanmakuFactory.updateMaxDanmakuDuration();
         return this;
     }
-
-    public IDisplayer getDisplayer(){
-        return mDisp;
-    }
-
-    public BaseDanmakuParser setListener(Listener listener) {
-        mListener = listener;
-        return this;
-    }
     
     /**
      * decide the speed of scroll-danmakus
@@ -119,6 +98,10 @@ public abstract class BaseDanmakuParser {
      */
     protected float getViewportSizeFactor() {
         return 1 / (mDispDensity - 0.6f);
+    }
+
+    public IDisplayer getDisplayer(){
+        return mDisp;
     }
     
     public BaseDanmakuParser load(IDataSource<?> source) {
@@ -159,6 +142,9 @@ public abstract class BaseDanmakuParser {
     }
 
     public BaseDanmakuParser setConfig(DanmakuContext config) {
+        if (mContext != null && mContext != config) {
+            mDanmakus = null; // call re-parse() under different context
+        }
         mContext = config;
         return this;
     }

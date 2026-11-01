@@ -32,7 +32,16 @@ public class DrawingCacheHolder {
 
     }
 
-    public void buildCache(int w, int h, int density, boolean checkSizeEquals, int bitsPerPixel) {
+    public DrawingCacheHolder(int w, int h) {
+        buildCache(w, h, 0, true);
+    }
+    
+    public DrawingCacheHolder(int w, int h, int density) {
+        mDensity = density;
+        buildCache(w, h, density, true);
+    }
+
+    public void buildCache(int w, int h, int density, boolean checkSizeEquals) {
         boolean reuse = checkSizeEquals ? (w == width && h == height) : (w <= width && h <= height);
         if (reuse && bitmap != null) {
 //            canvas.drawColor(Color.TRANSPARENT);
@@ -47,11 +56,7 @@ public class DrawingCacheHolder {
         }
         width = w;
         height = h;
-        Bitmap.Config config = Bitmap.Config.ARGB_4444;
-        if (bitsPerPixel == 32) {
-            config = Bitmap.Config.ARGB_8888;
-        }
-        bitmap = NativeBitmapFactory.createBitmap(w, h, config);
+        bitmap = NativeBitmapFactory.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         if (density > 0) {
             mDensity = density;
             bitmap.setDensity(density);
@@ -129,9 +134,9 @@ public class DrawingCacheHolder {
 
     private void eraseBitmapArray() {
         if (bitmapArray != null) {
-            for (int i = 0; i < bitmapArray.length; i++) {
-                for (int j = 0; j < bitmapArray[i].length; j++) {
-                    eraseBitmap(bitmapArray[i][j]);
+            for (Bitmap[] bitmaps : bitmapArray) {
+                for (int j = 0; j < bitmaps.length; j++) {
+                    eraseBitmap(bitmaps[j]);
                 }
             }
         }
