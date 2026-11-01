@@ -60,20 +60,21 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
                 arrayOf("OpenSles", "AudioTrack")))
         // v5.0.4-alpha2：**删掉了原来的「倍速算法」选项**。
         // 用户明确说「不想思考用哪个倍速模式」，所以这项不再是用户需要决定的事：
-        // 引擎由 PlayerAudioPolicy.engineFor() 内部判定（<=2.0x 系统变速、>2.0x 自动 SoundTouch），
+        // 变速算法恒为 SoundTouch（与播放器重构前那一版一致），用户不需要选，
         // 用户什么都不用选。它不再出现在设置页，也不再被代码读取。
         sectionList.add(SettingSection("switch", "低延迟优先", "player_low_latency",
                 getString(R.string.desc_low_latency), "false"))
-        // v5.0.2-alpha10 引入、v5.0.3-alpha11 **默认关闭**：
-        // 打开后视频与音频会分两路下载（durl 那份混流音轨 + 另一份 DASH 204kbps 音轨），
-        // 同一段音轨被下载两遍 —— 用户明确反馈「不想为音质多付一份带宽」。
-        // 默认关闭 = durl 单文件单音轨，零额外连接、零额外带宽；
-        // 想要高音质再手动打开（听视频模式不受本开关影响，它本来就是单音轨单文件）。
-        sectionList.add(SettingSection("switch", "双流高音质音轨（实验，额外流量）",
+        // 音质项（v5.0.4-alpha3 起**默认开启**）。
+        // 实测：durl 混流内嵌音轨恒为 44kbps HE-AAC（qn=16/64 都一样），而同一视频的 DASH
+        // 音轨有 44 / 103 / 204 kbps 三档（mp4a.40.2）—— 用户说的「沉闷」就是 44kbps 那档。
+        // 开启后画面仍走 durl，声音另起一路播 DASH 204kbps，失败自动回退原声（绝不会没声音）。
+        // 代价是多一份音频流量；关掉就回到 durl 单文件单音轨（省流量）。
+        sectionList.add(SettingSection("switch", "高音质音轨（DASH AAC）",
                 PlayerAudioPolicy.PREF_DASH_AUDIO,
-                "开启后视频和音频分两路下载：画面用 durl，声音另下一份 DASH 204kbps 音轨" +
-                        "（durl 内嵌音轨只有 44kbps）。会额外占用一份音频流量，不可用时自动回退。默认关闭。",
-                "false"))
+                "画面用 durl，声音另下一份 DASH 最高码率音轨（204kbps AAC）。" +
+                        "durl 内嵌音轨只有 44kbps，这就是之前听感发闷的原因。默认开启；" +
+                        "关闭则回到 durl 单文件单音轨（省流量）。不可用时自动回退原声。",
+                "true"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 

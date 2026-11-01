@@ -111,7 +111,7 @@ object AppInfoApi {
                     .put("debugEnabled", BuildConfig.DEBUG)
                     .toString()))
         } catch (e: JSONException) {
-            MsgUtil.showMsg("版本信息json生成出错\n无影响，正常情况下你应该不会遇到")
+            reportHeaderBuildFailure("版本信息json生成出错\n无影响，正常情况下你应该不会遇到", e)
         }
         customHeaders.add("Device-Info")
         try {
@@ -125,7 +125,25 @@ object AppInfoApi {
                     .put("id", Build.ID)
                     .toString()))
         } catch (e: JSONException) {
-            MsgUtil.showMsg("设备信息json生成出错\n无影响，正常情况下你应该不会遇到")
+            reportHeaderBuildFailure("设备信息json生成出错\n无影响，正常情况下你应该不会遇到", e)
+        }
+    }
+
+    /**
+     * 在 **object 静态初始化** 里上报失败。
+     *
+     * 不能用 `MsgUtil.showMsg`：它内部会读 `SharedPreferencesUtil.getBoolean`，而那个
+     * object 的 `sharedPreferences` 要等 `BiliTerminal.onCreate` 才赋值。万一本类在
+     * Application.onCreate 之前被类加载（`init {}` 就是 `<clinit>` 的一部分），
+     * 那条路会抛 **ExceptionInInitializerError**，进而把整个 AppInfoApi 变成
+     * **NoClassDefFoundError** —— 原本只是「一条提示没弹出来」，会被放大成崩溃。
+     * 所以：SP 已就绪时保持原行为，未就绪时只写日志。
+     */
+    private fun reportHeaderBuildFailure(msg: String, e: JSONException) {
+        if (SharedPreferencesUtil.sharedPreferences != null) {
+            MsgUtil.showMsg(msg)
+        } else {
+            Log.w("AppInfoApi", msg, e)
         }
     }
 

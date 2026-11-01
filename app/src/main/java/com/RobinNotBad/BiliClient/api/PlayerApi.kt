@@ -254,13 +254,12 @@ object PlayerApi {
         //   1) 听视频模式：主播放器直接改播这条音轨（单文件单音轨，无额外带宽）；
         //   2) 实验性的「双流高音质音轨」：主播放器播 durl、这条音轨单独出声。
         //
-        // v5.0.3-alpha11：用户明确不接受为音质多下一份音轨，该实验开关**默认关闭**
-        // （PlayerAudioPolicy.PREF_DASH_AUDIO，见 activity/player/PlayerAudioPolicy.kt）。
-        // 但听视频模式仍然需要这个地址，所以请求本身保留 —— 注意它**不产生音频流量**，
-        // 只是一次 JSON playurl 请求（真正的音轨下载只在上面两种场景之一真的播放时才发生）。
-        // 只有真的可能用到这条音轨才发这次请求，否则连一次多余的 playurl 也不发：
-        // 默认路径（双流开关关 + 不是听视频模式）= durl 单文件，完全不需要它。
-        val needDashAudio = SharedPreferencesUtil.getBoolean("player_dash_audio", false) ||
+        // v5.0.4-alpha3：该开关**默认开启**（音质优先）。
+        // 实测：durl 混流内嵌音轨恒为 44kbps，DASH 音轨最高 204kbps —— 就是这个差距造成「沉闷」。
+        // 默认值必须与 PlayerAudioPolicy.dashAudioEnabled() 保持一致（那里是 true），
+        // 否则会出现「播放器认为该挂伴音轨、但这里没去取地址」的静默不一致。
+        // 注意：这次请求**只拿 JSON 地址，不产生音频流量**；真正的音轨下载只在伴音轨真的播放时发生。
+        val needDashAudio = SharedPreferencesUtil.getBoolean("player_dash_audio", true) ||
                 (!download && SharedPreferencesUtil.getBoolean("player_audio_only", false))
         val dashAudioLatch = CountDownLatch(1)
         if (needDashAudio) {

@@ -477,11 +477,33 @@ object NetWorkUtil {
     val USER_AGENT_WEB: String =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.95 Safari/537.36"
 
+    /**
+     * 读取持久化的 Cookie（供 [webHeaders] 静态初始化使用）。
+     *
+     * **为什么要有这个函数**：object 的属性在 `<clinit>` 里按声明顺序执行，
+     * 这里是 NetWorkUtil 第一次被类加载时跑。如果那时 `BiliTerminal.onCreate`
+     * 还没给 `SharedPreferencesUtil.sharedPreferences` 赋值（例如任何在
+     * Application.onCreate 之前/更早的进程入口触碰本类），
+     * `SharedPreferencesUtil.getString()` 内部的 `sharedPreferences!!`
+     * 会抛 **ExceptionInInitializerError → 之后全变 NoClassDefFoundError**。
+     * 拿不到就退化成「无 Cookie」，等 onCreate 后再由 [refreshHeaders] 补齐。
+     */
+    private fun initialCookie(): String {
+        return try {
+            SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
+        } catch (t: Throwable) {
+            // 不能吞掉线索：静态初始化失败最容易被误判成「随机拿不到 Cookie」，
+            // 这里把原因打出来（Logu.w 不受 LOGD_ENABLED 开关影响，release 也能看到）。
+            Logu.w("网络头", "静态初始化时读取 Cookie 失败，先用空 Cookie：" + t.message)
+            ""
+        }
+    }
+
     @JvmField
     val webHeaders: ArrayList<String> = object : ArrayList<String>() {
         init {
             add("Cookie")
-            add(SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: "")
+            add(initialCookie())
 
             add("Origin")
             add("https://www.bilibili.com")
@@ -505,6 +527,7 @@ object NetWorkUtil {
 
     @JvmStatic
     fun refreshHeaders() {
+        if (SharedPreferencesUtil.sharedPreferences == null) return
         webHeaders[1] = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
     }
 

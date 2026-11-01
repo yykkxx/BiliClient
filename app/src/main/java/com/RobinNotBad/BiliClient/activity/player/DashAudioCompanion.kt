@@ -101,8 +101,7 @@ class DashAudioCompanion(
         try {
             // 纯音频：关掉视频解码，只留音频链路
             p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vn", 1L)
-            // 变速引擎与主播放器同一套策略：≤2.0x 默认走系统变速（AudioTrack PlaybackParams），
-            // >2.0x 或用户选了 SoundTouch 才用 App 层 TDStretch（后者咬字略糊，证据见 notes）。
+            // 音频选项与主播放器同一套（soundtouch=1 恒开，变速交给 ijk 内部 SoundTouch）。
             // 注意选项只在 prepare 前生效，所以要在 setDataSource/prepareAsync 之前调。
             PlayerAudioPolicy.applyPrepareOptions(p, this.speed,
                     SharedPreferencesUtil.getBoolean("player_audio", false))

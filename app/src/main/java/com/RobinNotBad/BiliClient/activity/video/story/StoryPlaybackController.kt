@@ -207,10 +207,8 @@ class StoryPlaybackController(
 
     /** 倍速（长按倍速 / 倍速菜单共用） */
     fun setSpeed(newSpeed: Float) {
-        // v5.0.3-alpha11：档位恢复到 3.0x，切速统一走策略类入口。
-        // 短视频播放器与主播放器不同：一次 play() 之后不会为变速重建播放器
-        // （切换卡片本身就是重 prepare），所以跨 2.0x 的引擎变化会在下一次 play() 生效，
-        // 这里只保证「已经 prepare 完的情况下 setSpeed 不抛异常、数值被夹取」。
+        // 切速统一走策略类入口：引擎恒为 SoundTouch，这里只做夹取 + setSpeed，
+        // 不重建播放器（旧版就是这个行为）。
         val clamped = PlayerAudioPolicy.clampSpeed(newSpeed)
         speed = clamped
         player?.let { PlayerAudioPolicy.applySpeed(it, clamped) }
@@ -410,8 +408,8 @@ class StoryPlaybackController(
         //start 由 onPrepared 自己控制，否则暂停状态会被 start-on-prepared 覆盖
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-        // v5.0.3-alpha11：变速引擎与主播放器同一套判定（≤2.0x 默认系统变速、>2.0x 用 SoundTouch），
-        // 避免 alpha8 那种「注释说一致、实际写反」的分叉。必须在 prepare 之前设置（选项只在
+        // 音频选项与主播放器共用 PlayerAudioPolicy（soundtouch=1 恒开），避免 alpha8 那种
+        // 「注释说一致、实际写反」的分叉。必须在 prepare 之前设置（选项只在
         // ffp_prepare_async_l 里被消费一次，运行期 setOption 是哑操作）。
         PlayerAudioPolicy.applyPrepareOptions(p, speed,
                 SharedPreferencesUtil.getBoolean("player_audio", false))
@@ -420,7 +418,7 @@ class StoryPlaybackController(
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_at_eof", 0L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 5L)
-        // 短视频没有脉冲拉流策略，恒用连续缓冲；仍走共享策略以便与主播放器同一判定
+        // 短视频没有脉冲拉流策略，恒用连续缓冲；仍走共享策略，与主播放器同一份实现
         PlayerAudioPolicy.applyBufferingPolicy(p, speed, false)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 20L * 1024 * 1024)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 1L)

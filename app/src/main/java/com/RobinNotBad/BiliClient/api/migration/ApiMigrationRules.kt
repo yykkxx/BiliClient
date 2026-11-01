@@ -184,6 +184,42 @@ object ApiMigrationRules {
             "scale" to "2"
     )
 
+    /**
+     * 路径前缀 → 分类。**顺序有意义**（先匹配先生效），
+     * `web-dynamic` 必须排在 `web-space` 之前之类的细节都在这个表里。
+     */
+    private val CATEGORY_PREFIXES = listOf(
+            "/x/v2/reply" to "评论",
+            "/x/v3/fav" to "收藏",
+            "/x/space/fav" to "收藏",
+            "/x/polymer/web-dynamic" to "动态",
+            "/x/dynamic" to "动态",
+            "/x/polymer/web-space" to "合集",
+            "/x/series" to "合集",
+            "/x/relation" to "用户/关注",
+            "/x/space" to "用户/关注",
+            "/x/msgfeed" to "消息",
+            "/x/sys-msg" to "消息",
+            "/x/member" to "消息",
+            "/x/vip" to "消息",
+            "/pgc" to "番剧",
+            "/x/article" to "专栏",
+            "/x/web-interface/wbi/search" to "搜索",
+            "/x/web-interface/ranking" to "排行/热门",
+            "/x/web-interface/popular" to "排行/热门",
+            "/x/v2/history" to "历史",
+            "/x/web-interface/history" to "历史",
+            "/x/emote" to "表情",
+            "/x/safecenter" to "协议",
+            "/x/web-interface/nav" to "协议",
+            "/x/frontend/finger" to "协议",
+            "/x/web-frontend/getbuvid" to "协议",
+            "/x/v2/dm" to "弹幕",
+            "/x/emote" to "表情",
+            "/x/stein" to "互动/其他",
+            "/x/ugcpay-rank" to "互动/其他"
+    )
+
     private val RULES: List<Rule> = keepWebRules() + pathOverrideRules() +
             publicGetRules() + loginGetRules() + writeRules()
 
@@ -573,41 +609,6 @@ object ApiMigrationRules {
     ): Rule = Rule(host, path, Kind.APP_PARAMS, isPostSafe = safe, isPostWrite = write,
             isLoginRequired = true, category = category, note = note)
 
-    /**
-     * 路径前缀 → 分类。**顺序有意义**（先匹配先生效），
-     * `web-dynamic` 必须排在 `web-space` 之前之类的细节都在这个表里。
-     */
-    private val CATEGORY_PREFIXES = listOf(
-            "/x/v2/reply" to "评论",
-            "/x/v3/fav" to "收藏",
-            "/x/space/fav" to "收藏",
-            "/x/polymer/web-dynamic" to "动态",
-            "/x/dynamic" to "动态",
-            "/x/polymer/web-space" to "合集",
-            "/x/series" to "合集",
-            "/x/relation" to "用户/关注",
-            "/x/space" to "用户/关注",
-            "/x/msgfeed" to "消息",
-            "/x/sys-msg" to "消息",
-            "/x/member" to "消息",
-            "/x/vip" to "消息",
-            "/pgc" to "番剧",
-            "/x/article" to "专栏",
-            "/x/web-interface/wbi/search" to "搜索",
-            "/x/web-interface/ranking" to "排行/热门",
-            "/x/web-interface/popular" to "排行/热门",
-            "/x/v2/history" to "历史",
-            "/x/web-interface/history" to "历史",
-            "/x/emote" to "表情",
-            "/x/safecenter" to "协议",
-            "/x/web-interface/nav" to "协议",
-            "/x/frontend/finger" to "协议",
-            "/x/web-frontend/getbuvid" to "协议",
-            "/x/v2/dm" to "弹幕",
-            "/x/emote" to "表情",
-            "/x/stein" to "互动/其他",
-            "/x/ugcpay-rank" to "互动/其他"
-    )
 
     /** 按路径前缀归类，设置页「按分类覆盖数」用；显式传入 category 时优先显式值 */
     private fun categoryOf(path: String): String {
