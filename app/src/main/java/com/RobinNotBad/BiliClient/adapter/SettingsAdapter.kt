@@ -131,7 +131,13 @@ class SettingsAdapter(
             }
             switchMaterial.setText(settingSection.name)
             switchMaterial.setOnCheckedChangeListener(
-                { buttonView, isChecked -> SharedPreferencesUtil.putBoolean(settingSection.id, isChecked) })
+                { buttonView, isChecked ->
+                    SharedPreferencesUtil.putBoolean(settingSection.id, isChecked)
+                    // extra 可选携带 Runnable：开关写入后执行副作用（如实验室「重构账号体系」
+                    // 切换时清掉 ApiRouter 的连续失败暂停，让端点立刻按新配置重试）。
+                    // 不带 extra 时纯持久化，与原行为完全一致。
+                    (settingSection.extra as? Runnable)?.run()
+                })
             switchMaterial.setChecked(SharedPreferencesUtil.getBoolean(settingSection.id,
                 java.lang.Boolean.parseBoolean(settingSection.defaultValue)))
         }

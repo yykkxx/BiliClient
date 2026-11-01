@@ -476,6 +476,73 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 登录选项（v5.1.1 实验「重构账号体系」）：四端口登录状态与登录/退出总入口 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/loginOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <ImageView
+                        android:id="@+id/loginOptions_go"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="16dp"
+                        android:src="@drawable/arrow_forward"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/loginOptions_icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_marginStart="8dp"
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/icon_person"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintHeight_percent="0.4"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintVertical_bias="0.5" />
+
+                    <TextView
+                        android:id="@+id/loginOptions_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:text="登录选项"
+                        android:textSize="12sp"
+                        app:layout_constraintBottom_toTopOf="@+id/loginOptions_desription"
+                        app:layout_constraintEnd_toStartOf="@+id/loginOptions_go"
+                        app:layout_constraintStart_toEndOf="@+id/loginOptions_icon"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <com.RobinNotBad.BiliClient.ui.widget.MarqueeTextView
+                        android:id="@+id/loginOptions_desription"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginBottom="10dp"
+                        android:singleLine="true"
+                        android:text="Web / Android手机 / HD / TV 四端登录状态与登录退出（实验）"
+                        android:textSize="11sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/loginOptions_go"
+                        app:layout_constraintStart_toEndOf="@+id/loginOptions_icon"
+                        app:layout_constraintTop_toBottomOf="@+id/loginOptions_title" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/laboratory"
                 android:layout_width="match_parent"

@@ -7,6 +7,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
+import com.RobinNotBad.BiliClient.api.migration.ApiRouter
 import com.RobinNotBad.BiliClient.model.SettingSection
 import android.content.Intent
 import com.RobinNotBad.BiliClient.util.FileUtil
@@ -47,6 +48,18 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 Runnable {
                     startActivity(Intent(this, SettingApiMigrationActivity::class.java))
                 }))
+        // 重构账号体系（实验，v5.1.1）：单端口模式总开关。打开后到「设置 → 登录选项」选端口并登录该端口；
+        // 路由是否生效由 ApiRouter.isEnabled 综合判断（端口=web 时本开关不改变请求行为），
+        // 与旧「全 API 迁移」开关相互独立、旧开关默认值不动。切换时清掉连续失败暂停，
+        // 让端点立刻按新配置重试（幂等操作，重复触发无副作用）。
+        sectionList.add(SettingSection("switch", "重构账号体系（实验）",
+                SharedPreferencesUtil.LAB_ACCOUNT_REFACTOR,
+                "打开后请在「设置 → 登录选项」里选择端口并登录该端口：全接口将统一走所选端" +
+                        "（该端登录后，web 未登录也能用收藏/历史/动态/消息等全部功能）。" +
+                        "本开关只决定全 API 路由走哪个端口；推荐页移动端逻辑的身份仍由其自身设置控制。" +
+                        "实验特性：降级回老版本后本开关自动失效，旧登录不受影响。默认关闭，关闭时行为与 5.1.0 完全一致。",
+                "false",
+                Runnable { ApiRouter.clearSuspensions() }))
 
         sectionList.add(SettingSection("title", "可用性", "", "", ""))
         sectionList.add(SettingSection("switch", "新版弹幕获取方式", "new_danmaku_api",

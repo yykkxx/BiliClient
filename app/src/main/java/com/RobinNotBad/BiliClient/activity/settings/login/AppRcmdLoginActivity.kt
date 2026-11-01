@@ -28,18 +28,41 @@ import java.util.TimerTask
  * - 接口为 passport-tv-login（auth_code / poll），返回 access_token 而非 web Cookie；
  * - 登录信息只写入 app_rcmd_ 前缀的独立键，完全不动软件的 web 登录；
  * - 登录成功后弹窗询问「是否打开推荐页面的移动端逻辑」。
+ *
+ * v5.1.1「登录选项」入口：支持可选 extra [EXTRA_IDENTITY]（hd / tv / phone）指定登录身份，
+ * 二维码协议与登录成功后写入的槽位都是该身份对应的端；不带 extra 时行为与原来完全一致
+ * （登录「当前身份」，槽位互不影响）。
  */
 class AppRcmdLoginActivity : BaseActivity() {
+
+    companion object {
+        /** 指定登录身份的 extra（取值 AppRcmdApi.IDENTITY_*）；不带 = 登录当前身份（旧行为） */
+        const val EXTRA_IDENTITY = "identity"
+    }
+
     private var qrImageView: ImageView? = null
     private var scanStat: TextView? = null
     private var qrImage: Bitmap? = null
     private var timer: Timer? = null
     private var needRefresh = false
 
+    /** 本次扫码要登录的身份（默认当前身份；带 extra 时为指定身份） */
+    private var loginIdentity: AppRcmdApi.RcmdIdentity = AppRcmdApi.getIdentity()
+
+    /** 是否由「登录选项」页按端口进入（决定登录成功后的引导文案，不写推荐页开关） */
+    private var fromLoginOptions = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_rcmd_login)
-        setPageName("移动端登录（" + AppRcmdApi.getIdentity().displayName + "）")
+        val identityExtra = intent?.getStringExtra(EXTRA_IDENTITY)
+        fromLoginOptions = identityExtra != null
+        loginIdentity = when (identityExtra) {
+            AppRcmdApi.IDENTITY_HD, AppRcmdApi.IDENTITY_TV, AppRcmdApi.IDENTITY_PHONE ->
+                AppRcmdApi.getIdentityById(identityExtra)
+            else -> AppRcmdApi.getIdentity()
+        }
+        setPageName("移动端登录（" + loginIdentity.displayName + "）")
         setTopbarExit()
 
         qrImageView = findViewById(R.id.appRcmdQrImage)
@@ -69,7 +92,7 @@ class AppRcmdLoginActivity : BaseActivity() {
         CenterThreadPool.run(Runnable {
             try {
                 CenterThreadPool.runOnUiThread(Runnable { scanStat!!.text = "正在获取二维码" })
-                qrImage = AppRcmdApi.getLoginQR()
+                qrImage = AppRcmdApi.getLoginQR(loginIdentity)
                 CenterThreadPool.runOnUiThread(Runnable {
                     if (isDestroyed) return@Runnable
                     qrImageView!!.setImageBitmap(qrImage)
@@ -98,7 +121,7 @@ class AppRcmdLoginActivity : BaseActivity() {
         timer!!.schedule(object : TimerTask() {
             override fun run() {
                 try {
-                    val result = AppRcmdApi.getLoginState()
+                    val result = AppRcmdApi.getLoginState(loginIdentity)
                     if (isDestroyed) {
                         this.cancel()
                         return
@@ -113,7 +136,7 @@ class AppRcmdLoginActivity : BaseActivity() {
                             CenterThreadPool.runOnUiThread(Runnable {
                                 if (isDestroyed) return@Runnable
                                 try {
-                                    val mid = AppRcmdApi.saveLogin(data)
+                                    val mid = AppRcmdApi.saveLogin(data, loginIdentity.id)
                                     scanStat!!.text = "登录成功！"
                                     showEnableDialog(mid)
                                 } catch (e: Exception) {
@@ -139,7 +162,7 @@ class AppRcmdLoginActivity : BaseActivity() {
                         //待扫码
                         code == 86039 -> CenterThreadPool.runOnUiThread {
                             if (!isDestroyed) scanStat!!.text =
-                                "请使用官方手机端哔哩哔哩，扫描${AppRcmdApi.getIdentity().displayName}二维码登录"
+                                "请使用官方手机端哔哩哔哩，扫描${loginIdentity.displayName}二维码登录"
                         }
                         else -> CenterThreadPool.runOnUiThread {
                             if (!isDestroyed) {
@@ -164,8 +187,19 @@ class AppRcmdLoginActivity : BaseActivity() {
         }, 500, 1000)
     }
 
-    /** 登录成功后：询问是否打开推荐页面的移动端逻辑 */
+    /** 登录成功后的引导：从「登录选项」进入只提示成功；普通入口保持旧行为（问推荐页开关） */
     private fun showEnableDialog(mid: Long) {
+        if (fromLoginOptions) {
+            // 按端口登录（实验室「重构账号体系」）：登录槽位由端口决定，
+            // 推荐页开关与本入口无关，绝不代替用户写 app_rcmd_enabled
+            AlertDialog.Builder(this)
+                .setTitle("登录成功")
+                .setMessage("已登录${loginIdentity.displayName}（uid：$mid）。\n\n可在「设置 → 登录选项」里选择端口让全接口走该端。")
+                .setPositiveButton("好的") { _, _ -> finish() }
+                .setCancelable(false)
+                .show()
+            return
+        }
         AlertDialog.Builder(this)
             .setTitle("登录成功")
             .setMessage("已使用移动端方式登录（uid：$mid）。\n\n是否打开推荐页面的移动端逻辑？")

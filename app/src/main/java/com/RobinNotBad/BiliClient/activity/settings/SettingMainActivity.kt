@@ -107,6 +107,14 @@ class SettingMainActivity : InstanceActivity() {
                 startActivity(intent)
             }
 
+            //登录选项（v5.1.1 实验「重构账号体系」）：一直可见，进页面后未开实验开关会提示去实验室
+            val loginOptions = findViewById<MaterialCardView>(R.id.loginOptions)
+            loginOptions.setOnClickListener { view ->
+                val intent = Intent()
+                intent.setClass(this, SettingLoginActivity::class.java)
+                startActivity(intent)
+            }
+
             //关于
             val about = findViewById<MaterialCardView>(R.id.about)
             about.setOnClickListener { view ->

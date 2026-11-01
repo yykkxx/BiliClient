@@ -40,6 +40,19 @@ object SharedPreferencesUtil {
     @JvmField
     val APP_RCMD_BUVID = "app_rcmd_buvid"
 
+    // ==================== 重构账号体系（实验室实验，v5.1.1） ====================
+    // 全新命名键（lab_ / account_refactor_ 前缀），升级/降级兼容红线：只新增、绝不改写旧键；
+    // 老版本读不到新键就当不存在，行为回到老版。
+    // 用 const 而非 @JvmField：字符串常量用 const 更准确（detekt MayBeConst），
+    // 对 Java 端同样是 public static final，可直接访问（与上方 API_MIGRATION_ENABLED 同理）。
+    // 实验室总开关：打开后 ApiRouter 才可能启用单端口模式（是否真启用还看端口是否非 web）。
+    const val LAB_ACCOUNT_REFACTOR = "lab_account_refactor"
+
+    // 单端口模式端口：web / android / hd / tv。web = 维持 web Cookie 通道不变；
+    // 其余三端复用 AppRcmdApi 既有槽位 app_rcmd_{phone|hd|tv}_*，不新增任何凭据存储，
+    // 也绝不把 web Cookie 写进 app_rcmd 槽位（禁止跨端转移）。
+    const val ACCOUNT_REFACTOR_PORT = "account_refactor_port"
+
     // ==================== 旧版本（v5.0.0-alpha 时代）单 token 键，仅用于迁移 ====================
     @JvmField
     val APP_RCMD_ACCESS_TOKEN = "app_rcmd_access_token"

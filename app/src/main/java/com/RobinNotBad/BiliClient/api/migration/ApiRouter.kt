@@ -138,10 +138,88 @@ object ApiRouter {
      * ② 账号相关接口只在「APP 身份与 web 账号是同一个号」时才迁移（[isAccountMismatch]）；
      * ③ 非幂等写操作一旦可能发出就绝不重放。
      * 用户仍可在「设置 → 实验室 → 全 API 迁移」里一键关掉，关掉后行为与老版本完全一致。
+     *
+     * v5.1.1 起新增第二个开关来源：实验室「重构账号体系」选中**非 web 端口**时
+     * 也启用路由（单端口模式，见 [singlePortIdentity]）。旧开关 [SharedPreferencesUtil.API_MIGRATION_ENABLED]
+     * 的默认值与语义保持不动：它仍是 true，任何存量用户行为不变。
      */
     @JvmStatic
     fun isEnabled(): Boolean {
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_MIGRATION_ENABLED, true)
+        // 旧开关（全 API 迁移）保持原样：默认值/读写键一律不动
+        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_MIGRATION_ENABLED, true)) return true
+        // 实验室「重构账号体系」：选了非 web 端口才启用路由（选 web = 维持现状）
+        return singlePortIdentity() != null
+    }
+
+    // ==================== 单端口模式（实验室「重构账号体系」，v5.1.1） ====================
+
+    /** 端口取值，与 [SharedPreferencesUtil.ACCOUNT_REFACTOR_PORT] 的合法值一致 */
+    const val PORT_WEB = "web"
+    const val PORT_ANDROID = "android"
+    const val PORT_HD = "hd"
+    const val PORT_TV = "tv"
+
+    /**
+     * 实验室「重构账号体系」总开关（与端口无关；页面显隐用它判断）。
+     * 只读 [SharedPreferencesUtil.LAB_ACCOUNT_REFACTOR]，不产生任何副作用。
+     */
+    @JvmStatic
+    fun isAccountRefactorLabEnabled(): Boolean {
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LAB_ACCOUNT_REFACTOR, false)
+    }
+
+    /**
+     * 当前端口（归一化后）。web / android / hd / tv；历史脏数据或非法值一律按 web 处理
+     * （web = 不进单端口模式，路由保持现状）。
+     */
+    @JvmStatic
+    fun currentPort(): String {
+        val raw = SharedPreferencesUtil.getString(SharedPreferencesUtil.ACCOUNT_REFACTOR_PORT, PORT_WEB) ?: ""
+        return when (raw.trim().lowercase(Locale.ROOT)) {
+            PORT_ANDROID -> PORT_ANDROID
+            PORT_HD -> PORT_HD
+            PORT_TV -> PORT_TV
+            else -> PORT_WEB
+        }
+    }
+
+    /** 端口的显示名（登录选项页 / 提示文案用） */
+    @JvmStatic
+    fun portDisplayName(port: String): String {
+        return when (port) {
+            PORT_ANDROID -> "Android手机"
+            PORT_HD -> "HD"
+            PORT_TV -> "TV"
+            else -> "Web"
+        }
+    }
+
+    /**
+     * 单端口模式的身份：实验室开关开且端口**不是 web** 时返回对应身份，否则 null。
+     *
+     * - android → [AppRcmdApi.IDENTITY_PHONE]；hd → IDENTITY_HD；tv → IDENTITY_TV；
+     * - 身份对象/请求头/签名/参数生成全部复用 [AppRcmdApi] 既有体系，token 读写也落在
+     *   既有槽位 app_rcmd_{phone|hd|tv}_*，不新增存储；web 端口走既有 Cookie，互不转移；
+     * - 单端口模式下 [ApiMigrationRules] 的 KEEP_WEB 条目（共 13 条）**仍然保持 web**：
+     *   它们多为匿名可访问（弹幕 XML / 搜索联想 / pbp / 页面地址 / 埋点），
+     *   登录协议两条在「不用 web 端口」时也用不到，维持 web 无损；
+     * - 返回 null 时 [isEnabled] 不因本功能打开，行为与 5.1.0 完全一致。
+     */
+    @JvmStatic
+    fun singlePortIdentity(): AppRcmdApi.RcmdIdentity? {
+        if (!isAccountRefactorLabEnabled()) return null
+        return when (currentPort()) {
+            PORT_ANDROID -> AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_PHONE)
+            PORT_HD -> AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_HD)
+            PORT_TV -> AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_TV)
+            else -> null
+        }
+    }
+
+    /** 是否处于单端口模式（[singlePortIdentity] 非 null 的便捷判断） */
+    @JvmStatic
+    fun isSinglePortMode(): Boolean {
+        return singlePortIdentity() != null
     }
 
     /**
@@ -212,7 +290,9 @@ object ApiRouter {
         }
 
         // 规则可以定点指定身份（preferredIdentity）；默认跟随用户在设置里选的当前身份。
-        val identity = AppRcmdApi.getIdentityById(rule.preferredIdentity)
+        // 单端口模式（实验室「重构账号体系」）覆盖规则的 preferredIdentity：
+        // 端口账号就是唯一账号，全部请求统一走该端身份。
+        val identity = singlePortIdentity() ?: AppRcmdApi.getIdentityById(rule.preferredIdentity)
         val accessToken = AppRcmdApi.getAccessToken(identity.id)
         // 未登录当前客户端身份时：只有明确标记为公共接口的规则才迁移。
         // 原因见 ApiMigrationRules.Rule.isLoginRequired：匿名 APP 请求对收藏/历史/动态等
@@ -253,6 +333,12 @@ object ApiRouter {
      * 账号相关接口是否必须保持 web（两个理由之一即保持）：
      * 1. `isLoginRequired` 但当前 APP 身份没登录 —— 匿名 APP 请求可能返回 code=0 却是空数据；
      * 2. APP 身份与 web 账号**不是同一个号** —— 否则会静默读写另一个账号的数据。
+     *
+     * 单端口模式（实验室「重构账号体系」）跳过第 2 条 [isAccountMismatch] 检查：
+     * 端口账号就是唯一账号，web 没登录是预期状态（这正是本功能的意义）；
+     * 即使 web 登了别的号，APP 通道请求也根本不读 web Cookie，不存在串号路径。
+     * 第 1 条「无 token → 保持 web」分支**保留**：没登录的端口无法替登录接口，
+     * 这类接口在未登录时本来就该保持 web（提示登录），绝不匿名硬闯。
      */
     private fun mustKeepWebForAccount(
         rule: ApiMigrationRules.Rule,
@@ -261,6 +347,7 @@ object ApiRouter {
     ): Boolean {
         if (!rule.isLoginRequired) return false
         if (accessToken.isEmpty()) return true
+        if (isSinglePortMode()) return false
         return isAccountMismatch(identity)
     }
 
@@ -320,8 +407,9 @@ object ApiRouter {
             return null
         }
 
-        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份），且不能串号
-        val identity = AppRcmdApi.getIdentityById(rule.preferredIdentity)
+        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份），且不能串号；
+        // 单端口模式下身份被端口覆盖（同 buildGetPlan 的口径）
+        val identity = singlePortIdentity() ?: AppRcmdApi.getIdentityById(rule.preferredIdentity)
         val accessToken = AppRcmdApi.getAccessToken(identity.id)
         if (mustKeepWebForAccount(rule, identity, accessToken)) return null
 

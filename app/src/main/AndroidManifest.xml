@@ -237,6 +237,11 @@
             android:label="全 API 迁移"
             android:screenOrientation="locked" />
         <activity
+            android:name=".activity.settings.SettingLoginActivity"
+            android:exported="false"
+            android:label="登录选项"
+            android:screenOrientation="locked" />
+        <activity
             android:name=".activity.settings.login.AppRcmdLoginActivity"
             android:exported="false"
             android:label="移动端登录"

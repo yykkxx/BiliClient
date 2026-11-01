@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.api
 
 import android.graphics.Bitmap
 
+import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.QRCodeUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -43,6 +44,8 @@ object AppRcmdApi {
     const val IDENTITY_HD = "hd"
     const val IDENTITY_TV = "tv"
     const val IDENTITY_PHONE = "phone"
+
+    private const val LOG_TAG = "app-rcmd"
 
     private const val AUTH_CODE_URL = "https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code"
     private const val AUTH_CODE_URL_BAK = "https://passport.snm0516.aisee.tv/x/passport-tv-login/qrcode/auth_code"
@@ -332,11 +335,25 @@ object AppRcmdApi {
         return formData
     }
 
-    /** 获取扫码登录二维码（auth_code 流程，用当前身份的扫码密钥） */
+    /** 获取扫码登录二维码（当前身份） */
     @Throws(JSONException::class, IOException::class)
     @JvmStatic
     fun getLoginQR(): Bitmap {
-        val identity = getIdentity()
+        return getLoginQRFor(getIdentity())
+    }
+
+    /**
+     * 获取扫码登录二维码（指定身份版）：「登录选项」页按端口进入时用，
+     * 保证二维码协议（appkey/mobi_app）与登录成功后要写入的槽位是同一端。
+     */
+    @Throws(JSONException::class, IOException::class)
+    @JvmStatic
+    fun getLoginQR(identity: RcmdIdentity): Bitmap {
+        return getLoginQRFor(identity)
+    }
+
+    @Throws(JSONException::class, IOException::class)
+    private fun getLoginQRFor(identity: RcmdIdentity): Bitmap {
         val formData = signWith(NetWorkUtil.FormData()
             .put("local_id", "0")
             .put("mobi_app", identity.loginMobiApp)
@@ -344,9 +361,10 @@ object AppRcmdApi {
 
         //主域名优先，失败退 snm0516 备用域名（PiliPala 用的就是这个）
         val result = try {
-            NetWorkUtil.post(AUTH_CODE_URL, formData.toString(), appHeaders()).body!!.string()
+            readPostBody(AUTH_CODE_URL, formData, identity)
         } catch (e: IOException) {
-            NetWorkUtil.post(AUTH_CODE_URL_BAK, formData.toString(), appHeaders()).body!!.string()
+            Logu.d(LOG_TAG, "主域名获取二维码失败，退备用域名：" + e.javaClass.simpleName)
+            readPostBody(AUTH_CODE_URL_BAK, formData, identity)
         }
         val json = JSONObject(result)
         if (json.optInt("code", -1) != 0) {
@@ -357,21 +375,42 @@ object AppRcmdApi {
         return QRCodeUtil.createQRCodeBitmap(data.getString("url"), 320, 320)!!
     }
 
+    /** 轮询扫码状态（当前身份） */
+    @Throws(JSONException::class, IOException::class)
+    @JvmStatic
+    fun getLoginState(): JSONObject {
+        return getLoginStateFor(getIdentity())
+    }
+
+    /** 轮询扫码状态（指定身份版，「登录选项」页按端口登录用） */
+    @Throws(JSONException::class, IOException::class)
+    @JvmStatic
+    fun getLoginState(identity: RcmdIdentity): JSONObject {
+        return getLoginStateFor(identity)
+    }
+
     /**
      * 轮询扫码状态。
      * @return code：86038=二维码失效 86039=待扫码 86061/86090=已扫码未确认 0=登录成功
      */
     @Throws(JSONException::class, IOException::class)
-    @JvmStatic
-    fun getLoginState(): JSONObject {
-        val identity = getIdentity()
+    private fun getLoginStateFor(identity: RcmdIdentity): JSONObject {
         val code = authCode ?: throw IOException("尚未获取二维码")
         val formData = signWith(NetWorkUtil.FormData()
             .put("auth_code", code)
             .put("local_id", "0"), identity.scanAppKey, identity.scanAppSec)
 
-        val result = NetWorkUtil.post(POLL_URL, formData.toString(), appHeaders()).body!!.string()
-        return JSONObject(result)
+        return JSONObject(readPostBody(POLL_URL, formData, identity))
+    }
+
+    /**
+     * POST 并读全文（按身份生成公共头）。响应体为空视为 IO 失败抛出，
+     * 由调用方决定是否退备用域名——替代原先 `.body!!` 的非空断言写法。
+     */
+    @Throws(IOException::class)
+    private fun readPostBody(url: String, formData: NetWorkUtil.FormData, identity: RcmdIdentity): String {
+        val response = NetWorkUtil.post(url, formData.toString(), appHeaders(identity))
+        return response.body?.string() ?: throw IOException("响应体为空")
     }
 
     // v5.0.0 重构：原「手机版 web 账号一键转换」（convertWebLogin）已按需求移除——
@@ -387,34 +426,63 @@ object AppRcmdApi {
     @Throws(JSONException::class)
     @JvmStatic
     fun saveLogin(data: JSONObject): Long {
+        return saveLoginToIdentity(data, getIdentity().id)
+    }
+
+    /**
+     * 登录成功后把登录信息写入**指定身份**的独立槽位（「登录选项」页按端口登录用；
+     * 不带身份的 [saveLogin] 写当前身份槽位）。两种入口都只写自己的端，
+     * 不影响 web Cookie 与其他端槽位（禁止跨端转移）。
+     */
+    @Throws(JSONException::class)
+    @JvmStatic
+    fun saveLogin(data: JSONObject, identityId: String): Long {
+        return saveLoginToIdentity(data, identityId)
+    }
+
+    @Throws(JSONException::class)
+    private fun saveLoginToIdentity(data: JSONObject, identityId: String): Long {
         val tokenInfo = data.optJSONObject("token_info")
             ?: throw JSONException("接口未返回身份信息，可能被风控，请尝试重新登录")
-
-        val accessToken = tokenInfo.optString("access_token", "")
-        val refreshToken = tokenInfo.optString("refresh_token", "")
         val mid = tokenInfo.optLong("mid", 0L)
+        writeIdentitySlot(identityId, tokenInfo.optString("access_token", ""),
+                tokenInfo.optString("refresh_token", ""), mid, cookiesTextOf(data))
+        return mid
+    }
 
-        val cookieSb = StringBuilder()
-        val cookieInfo = data.optJSONObject("cookie_info")
-        if (cookieInfo != null) {
-            val cookies: JSONArray = cookieInfo.optJSONArray("cookies") ?: JSONArray()
-            for (i in 0 until cookies.length()) {
-                val c = cookies.optJSONObject(i) ?: continue
-                val name = c.optString("name")
-                val value = c.optString("value")
-                if (name.isNotEmpty() && value.isNotEmpty()) {
-                    if (cookieSb.isNotEmpty()) cookieSb.append("; ")
-                    cookieSb.append(name).append('=').append(value)
-                }
-            }
-        }
-
-        val identityId = getIdentity().id
+    /** 写一个身份槽位的完整四元组（token/refresh/mid/cookies） */
+    private fun writeIdentitySlot(
+        identityId: String,
+        accessToken: String,
+        refreshToken: String,
+        mid: Long,
+        cookiesText: String
+    ) {
         SharedPreferencesUtil.putString(keyOf(identityId, "access_token"), accessToken)
         SharedPreferencesUtil.putString(keyOf(identityId, "refresh_token"), refreshToken)
         SharedPreferencesUtil.putLong(keyOf(identityId, "mid"), mid)
-        SharedPreferencesUtil.putString(keyOf(identityId, "cookies"), cookieSb.toString())
-        return mid
+        SharedPreferencesUtil.putString(keyOf(identityId, "cookies"), cookiesText)
+    }
+
+    /** 从登录回包提取 "name=value; name2=value2" 形式的 Cookie 串（token 响应的 cookie_info） */
+    private fun cookiesTextOf(data: JSONObject): String {
+        val cookieInfo = data.optJSONObject("cookie_info") ?: return ""
+        val cookies: JSONArray = cookieInfo.optJSONArray("cookies") ?: return ""
+        val pairs = ArrayList<String>()
+        for (i in 0 until cookies.length()) {
+            val pair = cookiePairOf(cookies.optJSONObject(i))
+            if (pair.isNotEmpty()) pairs.add(pair)
+        }
+        return pairs.joinToString("; ")
+    }
+
+    /** 单条 Cookie 的 name=value；对象缺失或 name/value 为空都返回空串（由调用方跳过） */
+    private fun cookiePairOf(cookie: JSONObject?): String {
+        if (cookie == null) return ""
+        val name = cookie.optString("name")
+        val value = cookie.optString("value")
+        if (name.isEmpty() || value.isEmpty()) return ""
+        return name + "=" + value
     }
 
     /** 退出移动端登录：只清**当前身份**槽位，其他端登录态与 web 登录、功能开关都不动 */
