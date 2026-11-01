@@ -81,6 +81,7 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil.USER_AGENT_WEB
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.util.TimeInputParser
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 import com.google.android.material.snackbar.Snackbar
@@ -824,8 +825,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     /**
      * 弹出"跳转到指定时间"的输入框。
      *
-     * 输入格式见 [parseTimeInput]：纯秒数、`分:秒`、`时:分:秒`，
-     * 分隔符可用空格 / 中文冒号 / 英文冒号（#4）。
+     * 输入格式见 [TimeInputParser.parse]：连续数字（右对齐 MMSS，末两位 = 秒）、
+     * 纯秒数、`分:秒`、`时:分:秒`，分隔符可用空格 / 中文冒号 / 英文冒号（#4）。
      *
      * 注意：这个方法只应由**左侧进度时间**与**右侧收缩栏的时间按钮**触发；
      * 底部收起状态下的时间文本现在也可以点击呼出时间跳转卡片（#3 新口径）。
@@ -874,8 +875,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             .setTitle("跳转到指定时间")
             .setView(container)
             .setPositiveButton("跳转") { _, _ ->
-                val seconds = parseTimeInput(editText.text.toString())
-                if (seconds == null) {
+                val seconds = TimeInputParser.parse(editText.text.toString())
+                if (seconds < 0) {
                     MsgUtil.showMsg("时间格式不对，示例：90、1:30、5 30、1：02：03")
                     return@setPositiveButton
                 }
@@ -887,33 +888,6 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             }
             .setNegativeButton("取消", null)
             .show()
-    }
-
-    /**
-     * 解析用户输入的时间文本为秒数（#4）。
-     *
-     * 分隔符同时接受：**空格**、**中文冒号（：）**、**英文冒号（:）**，
-     * 且可以混用。例如 `90`（秒）、`1:30`、`1：30`、`5 30`（= 5 分 30 秒）、
-     * `01:02:03`（时:分:秒）都解析为总秒数；解析失败返回 null。
-     *
-     * 规则：按分隔符拆成若干段，从前往后按 60 进位累加
-     * （最后一段是最低位的秒），因此 `5 30` 与 `5:30` 等价。
-     */
-    private fun parseTimeInput(raw: String?): Long? {
-        val text = raw?.trim().orEmpty()
-        if (text.isEmpty()) return null
-
-        // 空格（含多空格 / 制表符）+ 中文冒号 + 英文冒号 都作为分隔符
-        val parts = text.split(Regex("[\\s:：]+")).filter { it.isNotEmpty() }
-        if (parts.isEmpty() || parts.size > 3) return null
-
-        var total = 0L
-        for (part in parts) {
-            val value = part.trim().toLongOrNull() ?: return null
-            if (value < 0) return null
-            total = total * 60 + value
-        }
-        return total
     }
 
     /**
@@ -2770,8 +2744,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
         findViewById<View>(R.id.time_jump_apply).setOnClickListener { view1 ->
             val editText = time_jump_input ?: return@setOnClickListener
-            val seconds = parseTimeInput(editText.text.toString())
-            if (seconds == null) {
+            val seconds = TimeInputParser.parse(editText.text.toString())
+            if (seconds < 0) {
                 MsgUtil.showMsg("时间格式不对，示例：90、1:30、5 30、1：02：03")
                 return@setOnClickListener
             }
@@ -2893,7 +2867,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             if (card_time_jump != null && card_time_jump!!.visibility == View.VISIBLE) {
                 val steps = -event.getAxisValue(MotionEvent.AXIS_SCROLL)
                 if (steps != 0f) {
-                    val base = parseTimeInput(time_jump_input?.text?.toString() ?: "") ?: 0L
+                    val base = TimeInputParser.parse(time_jump_input?.text?.toString() ?: "").takeIf { it >= 0 }?.toLong() ?: 0L
                     val durationSec = (try { ijkPlayer!!.getDuration() } catch (e: Exception) { 0L }) / 1000
                     var target: Long = base + (steps * CROWN_SEEK_STEP_MS / 1000f).toInt()
                     if (target < 0) target = 0

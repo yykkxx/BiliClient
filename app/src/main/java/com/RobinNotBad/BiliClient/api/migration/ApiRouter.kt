@@ -540,18 +540,8 @@ object ApiRouter {
         val code = match?.groupValues?.getOrNull(1)?.toIntOrNull()
         if (code == null) return Verdict(isOk = false, reason = "响应缺少 code 字段")
         val accepted = plan != null && plan.acceptedCodes != null && plan.acceptedCodes.contains(code)
-        val retryable = RETRY_CODES.contains(code) && !accepted
-        if (retryable) return Verdict(isOk = false, reason = "code=" + code)
-        // 登录态接口加固（v5.1.2）：任何非 0 code 都回退 web。
-        // 背景：手机端 token 是「TV 密钥签发」的，部分严格校验的接口会拒绝
-        // 「TV 签发 token + Android appkey」组合，返回「鉴权失败，请联系账号管理员」
-        // 这类非 0 code（不在 RETRY_CODES 里）且无 data —— 原逻辑会直接把它交给上层，
-        // 上层 getJSONObject("data") 抛异常 → 详情页弹错误框。登录接口依赖凭据，
-        // 凭据可疑时回退 web（匿名或 web 登录态）永远比把错误抛给用户更合理。
-        val loginPlan = plan != null && plan.loginRequired
-        if (loginPlan && code != 0 && !accepted) {
-            return Verdict(isOk = false, reason = "code=" + code + "(登录接口回退)")
-        }
+        val codeVerdict = verdictForCode(trimmed, code, plan, accepted)
+        if (codeVerdict != null) return codeVerdict
         // 内容校验不再只服务于「放行的业务码」：code=0 同样要验。
         //
         // 为什么：迁移层原先只看 code，只要 APP 通道回 code=0 就当成可用并**直接返回给调用方**。
@@ -565,6 +555,36 @@ object ApiRouter {
             if (missing != null) return Verdict(isOk = false, reason = "缺少字段 " + missing)
         }
         return Verdict(isOk = true, reason = "")
+    }
+
+    /**
+     * 按 code 判定 APP 通道响应是否要回退（从 [classifyJsonBody] 拆出，控制圈复杂度）。
+     * @return null = 该 code 不触发回退，交给后续内容校验/放行
+     */
+    private fun verdictForCode(trimmed: String, code: Int, plan: Plan?, accepted: Boolean): Verdict? {
+        val retryable = RETRY_CODES.contains(code) && !accepted
+        if (retryable) return Verdict(isOk = false, reason = "code=" + code)
+        // 登录态接口加固（v5.1.2）：任何非 0 code 都回退 web。
+        // 背景：手机端 token 是「TV 密钥签发」的，部分严格校验的接口会拒绝
+        // 「TV 签发 token + Android appkey」组合，返回「鉴权失败，请联系账号管理员」
+        // 这类非 0 code（不在 RETRY_CODES 里）且无 data —— 原逻辑会直接把它交给上层，
+        // 上层 getJSONObject("data") 抛异常 → 详情页弹错误框。登录接口依赖凭据，
+        // 凭据可疑时回退 web（匿名或 web 登录态）永远比把错误抛给用户更合理。
+        val loginPlan = plan != null && plan.loginRequired
+        if (loginPlan && code != 0 && !accepted) {
+            return Verdict(isOk = false, reason = "code=" + code + "(登录接口回退)")
+        }
+        // 通用错误壳兜底（v5.1.3）：非 0 code 且回包没有 data 的「错误壳」一律回退 web。
+        // 背景：三例同构翻车（三连状态 relation / 视频标签 tags / 收藏列表）——设备 token 被
+        // 服务端拒绝时公共接口也会返回「错误壳」（code≠0 且无 data），原逻辑直接交上层，
+        // 上层 getJSONArray/getJSONObject("data") 抛 JSONException → 页面弹错误框。
+        // 回退 web 要么拿到正常数据，要么拿到同样的错误壳（调用方本就按错误处理），不会更差。
+        val plainPlan = plan != null && plan.requiredDataFields == null
+        if (plainPlan && code != 0 && !accepted) {
+            val missing = firstMissingField(trimmed, null, true)
+            if (missing != null) return Verdict(isOk = false, reason = "code=" + code + "(错误壳回退)")
+        }
+        return null
     }
 
     /**

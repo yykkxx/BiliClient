@@ -53,6 +53,8 @@ object VideoInfoApi {
     fun getTags(bvid: String): String {  //通过bvid获取tag
         val url = "https://api.bilibili.com/x/tag/archive/tags?bvid=" + bvid
         val result = NetWorkUtil.getJson(url)
+        // 错误壳兜底（设备 token 被拒/风控）：无 data 按无标签处理，绝不抛 JSONException 弹错误框
+        if (!result.has("data") || result.isNull("data")) return ""
         return analyzeTags(result.getJSONArray("data"))
     }
 
@@ -61,6 +63,8 @@ object VideoInfoApi {
     fun getTags(aid: Long): String {  //通过aid获取tag
         val url = "https://api.bilibili.com/x/tag/archive/tags?aid=" + aid
         val result = NetWorkUtil.getJson(url)
+        // 同上：错误壳兜底
+        if (!result.has("data") || result.isNull("data")) return ""
         return analyzeTags(result.getJSONArray("data"))
     }
 

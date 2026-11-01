@@ -98,6 +98,7 @@
 
 | 版本 | 说明 |
 | --- | --- |
+| `5.1.3` | **弹幕/详情页修复 + 时间跳转连续数字**：① Media3 引擎弹幕卡顿修复（后台线程读播放位置改「锚点+墙钟×倍速」平滑外插，不再 500ms 一跳）；② 详情页「No value for data」根治——迁移层通用错误壳兜底（任何 APP 通道响应非 0 code 且无 data 一律回退 Web）+ 标签解析兜底；③ 时间跳转支持连续数字：`28`→28秒、`308`→3分08秒、`4325`→43分25秒（末两位=秒、前面=分，秒超 60 自动进位），原有 `5:30`/`5 30` 分隔符写法不变 |
 | `5.1.2` | **双播放引擎（实验）**：设置 → 内置播放器设置新增「播放内核」choose 项，可在**老内核 IjkPlayer**（默认，行为与 5.1.1 完全一致）与 **Media3 实验内核**（androidx.media3 ExoPlayer 1.4.1，Sonic 变速 0.5–3.0 保音调、系统硬解管线）间切换，切换后下次播放生效；两套引擎共存于 APK（libijk\*.so 保留），`PlayerFactory` 统一创建，差异全部封装在 `Media3Player implements IMediaPlayer` 适配器内（线程收敛/option 映射/跨协议重定向/HLS 等见 notes/player_lib_512.md）；compileSdk 33→34（media3 1.4.1 要求，targetSdk 仍 30），新增 `player_media3` 偏好键（默认 false，升级/降级兼容） |
 | `5.1.1` | **重构账号体系（实验）**：① **实验室新开关**「重构账号体系」+ 设置主页新入口「登录选项」——四端口（Web / Android手机 / HD / TV）统一选择与登录管理：状态卡展示各端登录 uid、端口 RadioGroup 一键切换、各端口独立登录/退出（web 走原扫码登录；三端复用移动端扫码，支持指定身份进入）；② **单端口模式**：选非 web 端口并登录该端后，全接口统一走该端身份（`ApiRouter.singlePortIdentity()` 覆盖规则 preferredIdentity、单端口下跳过账号一致性检查），**web 未登录也能用收藏/历史/动态/消息等全部功能**；③ **升级/降级兼容**：只新增 `lab_account_refactor` / `account_refactor_port` 两个键，绝不改写旧键，token 存储完全复用 AppRcmdApi 既有三端槽位（不把 web Cookie 写进任何 app_rcmd 槽位、也不反向转移），降级回老版本后新开关自动失效、旧登录不受影响；开关关闭时行为与 5.1.0 完全一致 |
 | `5.1.0` | **播放器库整体回退 + 推荐设置入口**：DanmakuFlameMaster / ijkplayer-java 两模块与 `libijk*.so`（`libijkffmpeg.so` 回到旧版）全部回退到播放器库升级之前的代码状态，`PlayerActivity` 等播放代码同步还原；删除 DASH 伴音轨（`PlayerAudioPolicy` / `DashAudioCompanion` 移除，`PlayerApi` 清理伴音轨预取）；`MenuActivity` 新增长按「推荐」直达推荐设置页（`SettingAppRcmdActivity`） |

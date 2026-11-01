@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Surface
 import android.view.SurfaceHolder
 
@@ -120,6 +121,15 @@ class Media3Player(context: Context) : IMediaPlayer {
     @Volatile
     private var mirrorPlaying = false
 
+    // 平滑外插锚点（v5.1.3）：后台线程（弹幕绘制线程每帧）读位置不能等 500ms ticker，
+    // 否则弹幕时间轴一格一格跳（真机实测「Media3 弹幕很卡」）。锚点 = 最近一次主线程采样，
+    // 后台读 = 锚点 + 经过墙钟 × 倍速；暂停时静止。
+    @Volatile
+    private var mirrorPositionAtRealtimeMs = 0L
+
+    @Volatile
+    private var mirrorSpeed = 1f
+
     @Volatile
     private var videoWidthPx = 0
 
@@ -193,7 +203,14 @@ class Media3Player(context: Context) : IMediaPlayer {
     }
 
     override fun seekTo(msec: Long) {
-        runOnMain { if (!released) player?.seekTo(msec) }
+        runOnMain {
+            if (!released) {
+                player?.seekTo(msec)
+                // seek 是异步生效的，直接以目标位置为锚点，避免后台线程在 seek 生效前外插旧位置
+                mirrorPositionMs = msec
+                mirrorPositionAtRealtimeMs = SystemClock.elapsedRealtime()
+            }
+        }
     }
 
     override fun reset() {
@@ -337,7 +354,28 @@ class Media3Player(context: Context) : IMediaPlayer {
 
     override fun getCurrentPosition(): Long {
         val p = player ?: return mirrorPositionMs
-        return if (Looper.myLooper() == mainLooper) p.currentPosition else mirrorPositionMs
+        if (Looper.myLooper() != mainLooper) return interpolatedPositionMs()
+        // 主线程直读顺手重锚，后台线程的外插基线始终新鲜
+        refreshPositionMirror(p)
+        return mirrorPositionMs
+    }
+
+    /** 主线程采样锚点：位置 + 采样时刻 + 倍速 */
+    private fun refreshPositionMirror(p: Player) {
+        mirrorPositionMs = p.currentPosition
+        mirrorPositionAtRealtimeMs = SystemClock.elapsedRealtime()
+        mirrorSpeed = p.playbackParameters.speed
+    }
+
+    /** 后台线程用的平滑位置：锚点 + 经过墙钟 × 倍速外插 */
+    private fun interpolatedPositionMs(): Long {
+        val pos = mirrorPositionMs
+        if (!mirrorPlaying) return pos
+        val elapsed = SystemClock.elapsedRealtime() - mirrorPositionAtRealtimeMs
+        if (elapsed <= 0L) return pos
+        val interpolated = pos + (elapsed * mirrorSpeed).toLong()
+        val duration = mirrorDurationMs
+        return if (duration > 0L && interpolated > duration) duration else interpolated
     }
 
     override fun getDuration(): Long {
@@ -564,6 +602,11 @@ class Media3Player(context: Context) : IMediaPlayer {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             mirrorPlaying = isPlaying
+            // 暂停瞬间重锚，后台线程从此静止在当前位置（不再外插）
+            if (!isPlaying) {
+                val p = player
+                if (p != null && Looper.myLooper() == mainLooper) refreshPositionMirror(p)
+            }
         }
 
         override fun onPositionDiscontinuity(
@@ -574,7 +617,10 @@ class Media3Player(context: Context) : IMediaPlayer {
             if (reason == Player.DISCONTINUITY_REASON_SEEK ||
                 reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT
             ) {
-                runOnMain { seekCompleteListener?.onSeekComplete(this@Media3Player) }
+                runOnMain {
+                    player?.let { refreshPositionMirror(it) }
+                    seekCompleteListener?.onSeekComplete(this@Media3Player)
+                }
             }
         }
 
@@ -627,7 +673,7 @@ class Media3Player(context: Context) : IMediaPlayer {
             if (released) return
             val p = player
             if (p != null) {
-                mirrorPositionMs = p.currentPosition
+                refreshPositionMirror(p)
                 mirrorDurationMs = clampDuration(p.duration)
                 mirrorPlaying = p.isPlaying
                 val state = p.playbackState
