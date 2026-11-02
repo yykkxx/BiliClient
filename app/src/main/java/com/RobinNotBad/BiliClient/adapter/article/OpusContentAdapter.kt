@@ -21,10 +21,10 @@ import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.ArticleApi
 import com.RobinNotBad.BiliClient.model.Opus
 import com.RobinNotBad.BiliClient.model.OpusParagraph
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DecodeFormat
@@ -199,8 +199,10 @@ class OpusContentAdapter(val context: Activity, val article: Opus) : RecyclerVie
                 like.setOnClickListener {
                     CenterThreadPool.run(Runnable {
                         try {
-                            if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0L) {
-                                context.runOnUiThread(Runnable { MsgUtil.showMsg("还没有登录喵~") })
+                            // 门槛型（写操作）：任一通道有账号即可点赞
+                            if (!AccountManager.isLoggedIn()) {
+                                // MsgUtil.showMsg 内部已切主线程，这里无需再包 runOnUiThread
+                                MsgUtil.showMsg(AccountManager.loginHint())
                                 return@Runnable
                             }
                             val result = ArticleApi.like(article.id, !article.stats!!.liked)
@@ -229,8 +231,10 @@ class OpusContentAdapter(val context: Activity, val article: Opus) : RecyclerVie
                     CenterThreadPool.run(Runnable {
                         if (article.stats!!.coined < article.stats!!.coin_limit) {
                             try {
-                                if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0L) {
-                                    context.runOnUiThread(Runnable { MsgUtil.showMsg("还没有登录喵~") })
+                                // 门槛型（写操作）：任一通道有账号即可投币
+                                if (!AccountManager.isLoggedIn()) {
+                                    // MsgUtil.showMsg 内部已切主线程，这里无需再包 runOnUiThread
+                                    MsgUtil.showMsg(AccountManager.loginHint())
                                     return@Runnable
                                 }
                                 val result = ArticleApi.addCoin(article.id, article.upInfo!!.mid, 1)

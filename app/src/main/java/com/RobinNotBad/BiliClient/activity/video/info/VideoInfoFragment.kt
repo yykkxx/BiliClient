@@ -56,6 +56,7 @@ import com.RobinNotBad.BiliClient.model.Stats
 import com.RobinNotBad.BiliClient.model.VideoInfo
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.util.GlideUtil
@@ -377,8 +378,9 @@ class VideoInfoFragment : BaseFragment() {
         //点赞
         rootview.findViewById<View>(R.id.layout_like).setOnClickListener { view1 ->
             CenterThreadPool.run(Runnable {
-                if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
-                    MsgUtil.showMsg("还没有登录喵~")
+                // 门槛型（写操作）：任一通道有账号即可点赞
+                if (!AccountManager.isLoggedIn()) {
+                    MsgUtil.showMsg(AccountManager.loginHint())
                     return@Runnable
                 }
                 try {
@@ -414,8 +416,9 @@ class VideoInfoFragment : BaseFragment() {
         //投币
         rootview.findViewById<View>(R.id.layout_coin).setOnClickListener { view1 ->
             CenterThreadPool.run(Runnable {
-                if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
-                    MsgUtil.showMsg("还没有登录喵~")
+                // 门槛型（写操作）：任一通道有账号即可投币
+                if (!AccountManager.isLoggedIn()) {
+                    MsgUtil.showMsg(AccountManager.loginHint())
                     return@Runnable
                 }
                 if (videoInfo.stats!!.coined < videoInfo.stats!!.coin_limit) {
@@ -506,8 +509,8 @@ class VideoInfoFragment : BaseFragment() {
             true
         }
 
-        //未登录隐藏按钮
-        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
+        //显隐型：只有「真的一个账号都没有」时才藏按钮；退出 web 登录但端口还登录着时保持可见
+        if (!AccountManager.isLoggedIn()) {
             addWatchlater.setVisibility(View.GONE)
             relay.setVisibility(View.GONE)
         }
@@ -529,7 +532,7 @@ class VideoInfoFragment : BaseFragment() {
         // 一键三连
         rootview.findViewById<View>(R.id.layout_like).setOnLongClickListener {
             if (SharedPreferencesUtil.getBoolean("like_one_triple", true) &&
-                SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) != 0L
+                AccountManager.isLoggedIn()
             ) {
 
                 if (shakeAnimation == null) {

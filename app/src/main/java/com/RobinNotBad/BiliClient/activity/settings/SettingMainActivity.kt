@@ -13,6 +13,7 @@ import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity
 import com.RobinNotBad.BiliClient.api.AppInfoApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -42,14 +43,20 @@ class SettingMainActivity : InstanceActivity() {
                 startActivity(intent)
             }
 
-            //登录
+            //登录（v5.1.4 账号解耦：这里只代表「Web 登录」，与端口账号无关）
+            //
+            // 历史行为：web mid==0 就把「查看登录信息」藏掉、露出「登录」按钮。
+            // 三级模式下用户可能只登录了端口、完全不用 web，此时：
+            // - 不该再把「查看登录信息」藏起来（那是 web 工具栏，仍有用）；
+            // - 但「登录」入口本身是 web 登录入口，web 没登录时它确实该出现。
+            // 所以判断口径保持 web（这是 web 专属入口），同时**不再隐藏** login_cookie，
+            // 并在文案上说明「这里只影响 Web 通道」，避免用户以为整个 App 没登录。
             val login = findViewById<MaterialCardView>(R.id.login)
-            if (SharedPreferencesUtil.getLong("mid", 0L) == 0L) {
-                login_cookie.visibility = View.GONE
+            if (!AccountManager.isWebLoggedIn()) {
                 login.visibility = View.VISIBLE
                 login.setOnClickListener { view ->
                     val intent = Intent()
-                    intent.setClass(this, LoginActivity::class.java)   //去扫码登录页面
+                    intent.setClass(this, LoginActivity::class.java)   //去扫码登录页
                     startActivity(intent)
                 }
             }

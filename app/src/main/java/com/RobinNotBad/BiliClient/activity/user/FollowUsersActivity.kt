@@ -10,6 +10,7 @@ import com.RobinNotBad.BiliClient.adapter.user.UserListAdapter
 import com.RobinNotBad.BiliClient.api.FollowApi
 import com.RobinNotBad.BiliClient.model.FollowTag
 import com.RobinNotBad.BiliClient.model.UserInfo
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -40,7 +41,8 @@ class FollowUsersActivity : RefreshListActivity() {
             return
         }
 
-        val currentUserMid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L)
+        // 我是谁：当前主账号 mid（分组模式只对自己的关注列表有意义）
+        val currentUserMid = AccountManager.accountMid()
         groupMode = mode == 0 && mid == currentUserMid && SharedPreferencesUtil.getBoolean("follow_group_mode", false)
 
         setPageName(if (mode == 0) "关注列表" else "粉丝列表")

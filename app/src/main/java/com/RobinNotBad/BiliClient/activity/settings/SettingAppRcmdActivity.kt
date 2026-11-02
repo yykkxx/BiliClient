@@ -12,6 +12,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.AppRcmdLoginActivity
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -83,40 +84,74 @@ class SettingAppRcmdActivity : BaseActivity() {
         refreshStatus()
     }
 
-    /** 身份选择弹窗：HD / TV / 手机 */
+    /**
+     * 身份选择弹窗。
+     *
+     * 二级/三级下可选三个 APP 端口（HD / TV / 手机）；
+     * **三级额外多一个「Web 端」**（用户明确要求）——选中后推荐页退回 web 推荐接口，
+     * 其余接口仍走所选端口。这样「推荐页想用 Web、其它想用端口」也能做到。
+     */
     @SuppressLint("SetTextI18n")
     private fun showIdentityDialog() {
-        val identities = arrayOf(
-            AppRcmdApi.IDENTITY_HD to "HD版（android_hd）",
-            AppRcmdApi.IDENTITY_TV to "TV版（云视听小电视）",
-            AppRcmdApi.IDENTITY_PHONE to "手机版（与官方手机客户端一致）"
-        )
-        val currentId = AppRcmdApi.getIdentity().id
+        val identities = ArrayList<Pair<String, String>>(4)
+        if (showWebIdentityOption()) {
+            // 用空串代表「Web 端」：AppRcmdApi 的身份 id 里没有 web 这一派，
+            // 这里只是 UI 上的一个选项，落到偏好键 APP_RCMD_USE_WEB，不参与身份体系
+            identities.add("" to "Web 端（推荐页走 Web 接口，与软件登录共用）")
+        }
+        identities.add(AppRcmdApi.IDENTITY_HD to "HD版（android_hd）")
+        identities.add(AppRcmdApi.IDENTITY_TV to "TV版（云视听小电视）")
+        identities.add(AppRcmdApi.IDENTITY_PHONE to "手机版（与官方手机客户端一致）")
+
+        val usingWeb = isWebChannelChosen()
+        val currentId = if (usingWeb) "" else AppRcmdApi.getIdentity().id
         // 每个身份后面直接标出登录状态，避免"选了哪端、哪端登没登录"看不出来
         val labels = identities.map { (id, label) ->
-            label + if (AppRcmdApi.isIdentityLogin(id)) " · 已登录" else " · 未登录"
+            if (id.isEmpty()) label else label + if (AppRcmdApi.isIdentityLogin(id)) " · 已登录" else " · 未登录"
         }.toTypedArray()
         val checked = identities.indexOfFirst { it.first == currentId }
 
         AlertDialog.Builder(this)
-            .setTitle("选择客户端身份")
+            .setTitle("推荐页使用哪个通道")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
-                val (newId, _) = identities[which]
-                if (newId != currentId) {
-                    SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_IDENTITY, newId)
-                    refreshStatus()
-                    // v5.0.0 重构：三端登录态独立保留，切换身份只是换“当前用哪一派”，
-                    // 已登录的端切回来还在，不要求重新登录
-                    if (AppRcmdApi.isLogin()) {
-                        MsgUtil.showMsg("已切换为${AppRcmdApi.getIdentity().displayName}（已登录），刷新推荐页生效")
-                    } else {
-                        MsgUtil.showMsg("已切换为${AppRcmdApi.getIdentity().displayName}（该端未登录），刷新推荐页生效")
-                    }
-                }
+                onIdentityChosen(identities[which].first, currentId)
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /** 三级模式下才显示「Web 端」选项 */
+    private fun showWebIdentityOption(): Boolean {
+        return AccountManager.currentTier() == AccountManager.TIER_FULL
+    }
+
+    /** 当前推荐页是否被指定走 Web 接口 */
+    private fun isWebChannelChosen(): Boolean {
+        if (!showWebIdentityOption()) return false
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.APP_RCMD_USE_WEB, false)
+    }
+
+    /** 处理身份/通道选择（拆出来避免 onCheckedChange 回调里嵌套过深） */
+    @SuppressLint("SetTextI18n")
+    private fun onIdentityChosen(newId: String, currentId: String) {
+        if (newId == currentId) return
+        if (newId.isEmpty()) {
+            // 选 Web 端：推荐页退回 web，其余接口仍受三级路由控制
+            SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.APP_RCMD_USE_WEB, true)
+            refreshStatus()
+            MsgUtil.showMsg("推荐页已改用 Web 接口（其余接口仍走端口），刷新推荐页生效")
+            return
+        }
+        // 选具体端口：清掉 Web 端标记，并把该端设为当前身份
+        SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.APP_RCMD_USE_WEB, false)
+        SharedPreferencesUtil.putString(SharedPreferencesUtil.APP_RCMD_IDENTITY, newId)
+        refreshStatus()
+        if (AppRcmdApi.isIdentityLogin(newId)) {
+            MsgUtil.showMsg("已切换为" + AppRcmdApi.getIdentity().displayName + "（已登录），刷新推荐页生效")
+        } else {
+            MsgUtil.showMsg("已切换为" + AppRcmdApi.getIdentity().displayName + "（该端未登录），刷新推荐页生效")
+        }
     }
 
     @SuppressLint("SetTextI18n")
@@ -124,13 +159,17 @@ class SettingAppRcmdActivity : BaseActivity() {
         val identity = AppRcmdApi.getIdentity()
         val logged = AppRcmdApi.isLogin()
         val mid = AppRcmdApi.getIdentityMid(identity.id)
+        val webChannel = isWebChannelChosen()
 
         // 三端独立登录状态总览（可同时登录）。
         // 第一行固定是「当前身份 + 该端登录状态」，后面三行才是各端明细——
         // 旧版布局高度写死 35sp，四行文字被裁得只剩「HD 已登录」，看起来像是
         // 当前身份永远是 HD（本轮 bug 的根因之一）。
         val sb = StringBuilder()
-        sb.append("当前身份：").append(identity.displayName)
+        sb.append("推荐页通道：")
+        sb.append(if (webChannel) "Web（三级模式下可选）" else identity.displayName)
+        sb.append(if (!webChannel && logged) "（已登录）" else if (!webChannel) "（未登录）" else "")
+        sb.append("\n当前身份：").append(identity.displayName)
         sb.append(if (logged) "（已登录）" else "（未登录）")
         val identities = listOf(
             AppRcmdApi.IDENTITY_HD to "HD",

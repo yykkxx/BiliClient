@@ -17,9 +17,9 @@ import com.RobinNotBad.BiliClient.api.ReplyApi
 import com.RobinNotBad.BiliClient.event.ReplyEvent
 import com.RobinNotBad.BiliClient.model.Reply
 import com.RobinNotBad.BiliClient.model.UserInfo
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 import java.util.ArrayList
 import java.util.Objects
@@ -97,20 +97,22 @@ class ReplyFragment : RefreshListFragment() {
     }
 
     fun setManager(source: Any?) {
-        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) return
+        // 门槛型：一个账号都没有时 setManager 没有意义
+        if (!AccountManager.isLoggedIn()) return
 
         try {
             if (source != null) {
                 if (source is List<*>) {
                     val staffs = source as List<UserInfo>
                     for (userInfo in staffs) {
-                        if (userInfo.mid == SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L)) {
+                        // 我是谁：多通道下任一通道命中即算「我」
+                        if (AccountManager.isSelf(userInfo.mid)) {
                             isManager = true
                             break
                         }
                     }
                 } else if (source is UserInfo) {
-                    isManager = (source as UserInfo).mid == SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L)
+                    isManager = AccountManager.isSelf((source as UserInfo).mid)
                 }
             }
         } catch (e: Exception) {

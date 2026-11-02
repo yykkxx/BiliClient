@@ -4,6 +4,7 @@ import android.util.Log
 
 import com.RobinNotBad.BiliClient.model.Bangumi
 import com.RobinNotBad.BiliClient.model.VideoCard
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
@@ -19,8 +20,9 @@ object BangumiApi {
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
     fun getFollowingList(page: Int, cardList: MutableList<VideoCard>): Int {
+        // v5.1.4 账号解耦：vmid 只是"看谁的追番列表"，用 accountMid()（三级模式下端口账号也认）
         val url = "https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=" + page +
-                "&ps=15&vmid=" + SharedPreferencesUtil.getLong("mid", 0)
+                "&ps=15&vmid=" + AccountManager.accountMid()
 
         val all = NetWorkUtil.getJson(url)
         if (all.getInt("code") != 0) throw JSONException(all.getString("message"))

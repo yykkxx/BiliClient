@@ -25,6 +25,13 @@ object SharedPreferencesUtil {
     @JvmField
     val APP_RCMD_IDENTITY = "app_rcmd_identity"
 
+    // v5.1.4 三级模式专用：推荐页是否强制走 Web 接口。
+    // 背景：三级模式下「推荐 API 迁移」栏目要增设「Web 端」选项（用户明确要求），
+    // 选中后推荐页退回 web 推荐，其余接口仍走端口——两个开关各管一件事，互不干扰。
+    // 独立键的好处：不动 APP_RCMD_ENABLED 的既有语义（那个键代表"推荐页用不用 APP 接口"，
+    // 且被 AppRcmdLoginActivity 登录成功后自动置 true，直接复用它会被登录流程覆盖）。
+    const val APP_RCMD_USE_WEB = "app_rcmd_use_web"
+
     // 全 API 迁移（实验性，默认关）：开启后 NetWorkUtil 的 bilibili 请求先尝试
     // APP 通道（复用上面的三身份 appkey / token 槽位），失败自动回退 web 原请求。
     // 统计与最近失败端点由 api/migration/ApiRouter 自己维护（api_migration_stat_* 等键）。

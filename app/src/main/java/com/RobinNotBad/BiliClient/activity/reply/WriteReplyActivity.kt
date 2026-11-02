@@ -17,6 +17,7 @@ import com.RobinNotBad.BiliClient.api.EmoteApi
 import com.RobinNotBad.BiliClient.api.ReplyApi
 import com.RobinNotBad.BiliClient.event.ReplyEvent
 import com.RobinNotBad.BiliClient.model.Reply
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -47,8 +48,9 @@ class WriteReplyActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_write_reply)
 
-        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
-            MsgUtil.showMsg("还没有登录喵~")
+        // 门槛型：任一通道有账号即可发评论（web / HD / TV / 手机）
+        if (!AccountManager.isLoggedIn()) {
+            MsgUtil.showMsg(AccountManager.loginHint())
             finish()
         }
 

@@ -104,6 +104,39 @@
                     tools:ignore="RtlCompat" />
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 级别说明卡：当前级别名 + 该级别的含义 + 是否需要 Web 登录（v5.1.4 三级迁移模型） -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="这一级意味着什么"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/loginOptionsTierText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:alpha="0.9"
+                        android:lineSpacingExtra="2dp"
+                        android:text="当前级别"
+                        android:textAlignment="textStart"
+                        android:textSize="12sp"
+                        tools:ignore="RtlCompat" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 端口选择 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -256,6 +289,41 @@
                     android:textAlignment="textStart"
                     android:textSize="13sp"
                     tools:ignore="RtlCompat" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 一键退出全部账号：web + 三个端口一次性全清（三级模式下用户可能同时登录多个端） -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/loginOptionsLogoutAll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="10dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="退出全部账号"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/loginOptionsLogoutAllText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:alpha="0.9"
+                        android:lineSpacingExtra="2dp"
+                        android:text="一次清掉 Web 与 Android手机/HD/TV 三端的登录"
+                        android:textAlignment="textStart"
+                        android:textSize="11sp"
+                        tools:ignore="RtlCompat" />
+                </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <!-- 迁移统计卡（与「全 API 迁移状态」页同源） -->

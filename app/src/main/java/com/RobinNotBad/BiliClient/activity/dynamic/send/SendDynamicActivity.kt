@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.adapter.video.VideoCardHolder
 import com.RobinNotBad.BiliClient.api.EmoteApi
 import com.RobinNotBad.BiliClient.model.Dynamic
 import com.RobinNotBad.BiliClient.model.VideoInfo
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
@@ -47,10 +48,11 @@ class SendDynamicActivity : BaseActivity() {
 
         asyncInflate(R.layout.activity_send_dynamic) { layoutView, resId ->
 
-            if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
+            // 门槛型：任一通道有账号即可发动态
+            if (!AccountManager.isLoggedIn()) {
                 setResult(RESULT_CANCELED)
                 finish()
-                MsgUtil.showMsg("还没有登录喵~")
+                MsgUtil.showMsg(AccountManager.loginHint())
             }
 
             editText = findViewById(R.id.editText)

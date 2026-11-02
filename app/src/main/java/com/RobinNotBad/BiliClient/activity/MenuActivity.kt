@@ -29,6 +29,7 @@ import com.RobinNotBad.BiliClient.activity.video.RankingActivity
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity
 import com.RobinNotBad.BiliClient.activity.video.TimelineActivity
 import com.RobinNotBad.BiliClient.activity.video.local.LocalListActivity
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
@@ -86,7 +87,8 @@ class MenuActivity : BaseActivity() {
             btnList = defaultSortList
         }
 
-        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0L) {
+        //显隐型：只有「真的一个账号都没有」时才把动态/消息/我的换成登录入口
+        if (!AccountManager.isLoggedIn()) {
             btnList.add(0, "login")
             btnList.remove("dynamic")
             btnList.remove("message")

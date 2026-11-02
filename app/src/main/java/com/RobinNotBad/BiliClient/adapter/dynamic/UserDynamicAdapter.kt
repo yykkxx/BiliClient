@@ -37,10 +37,10 @@ import com.RobinNotBad.BiliClient.model.Dynamic
 import com.RobinNotBad.BiliClient.model.ElectricPanel
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
@@ -243,8 +243,9 @@ class UserDynamicAdapter(private val context: Context, private val dynamicList: 
             } else
                 this.liveRoom.visibility = View.GONE
 
-            if ((userInfo.mid == SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0))
-                    || (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0L) || (userInfo.mid == 0L))
+            // 显隐型 + 我是谁：自己 / 无账号 / 对方 uid 未知时不显示关注按钮
+            if (AccountManager.isSelf(userInfo.mid)
+                    || !AccountManager.isLoggedIn() || (userInfo.mid == 0L))
                 this.followBtn.visibility = View.GONE
             else
                 this.followBtn.isChecked = userInfo.followed
@@ -281,7 +282,7 @@ class UserDynamicAdapter(private val context: Context, private val dynamicList: 
                 context.startActivity(intent)
             }
 
-            val currentMid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0)
+            val currentMid = AccountManager.accountMid()
             if (userInfo.mid != currentMid && currentMid != 0L && userInfo.mid != 0L && userInfo.is_follow_display) {
                 this.contractBtn.visibility = View.VISIBLE
                 val layout = itemView as ConstraintLayout

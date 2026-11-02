@@ -4,6 +4,7 @@ import android.util.Log
 
 import com.RobinNotBad.BiliClient.model.ApiResult
 import com.RobinNotBad.BiliClient.model.VideoInfo
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -51,8 +52,13 @@ object LikeCoinFavApi {
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
     fun favorite(aid: Long, fid: Long): Int {
-        val strMid = SharedPreferencesUtil.getLong("mid", 0).toString()
-        val addFid = fid.toString() + strMid.substring(strMid.length - 2)
+        // v5.1.4：改用 AccountManager.accountMid()（三级模式下端口账号也算），
+        // 并去掉原来的 `strMid.substring(strMid.length - 2)` —— 未登录时 mid="0"，
+        // length-2 = -1 会直接抛 StringIndexOutOfBoundsException（老版本潜在崩溃点），
+        // 而且「取 mid 末两位拼到收藏夹 id 后面」这个约定对短 mid 也会算出错的 addFid。
+        val strMid = AccountManager.accountMid().toString()
+        val suffix = if (strMid.length >= 2) strMid.substring(strMid.length - 2) else strMid
+        val addFid = fid.toString() + suffix
         val url = "https://api.bilibili.com/medialist/gateway/coll/resource/deal"
         val per = "rid=" + aid + "&type=2&add_media_ids=" + addFid + "&del_media_ids=&csrf=" + SharedPreferencesUtil.getString("csrf", "")
 
@@ -64,7 +70,10 @@ object LikeCoinFavApi {
     @JvmStatic
     fun getVideoStats(videoInfo: VideoInfo): ApiResult {
         val apiResult = ApiResult()
-        if (SharedPreferencesUtil.getLong("mid", 0) == 0L) return apiResult
+        // v5.1.4：门槛从「web 有 mid」改成「任一通道有账号」。
+        // 老写法在三级模式下（只登了端口、退了 web）会把互动状态整个跳过，
+        // 表现为点赞/投币/收藏的选中态永远不亮。
+        if (!AccountManager.isLoggedIn()) return apiResult
         try {
             val url = "https://api.bilibili.com/x/web-interface/archive/relation?aid=" + videoInfo.aid
             val result = NetWorkUtil.getJson(url)

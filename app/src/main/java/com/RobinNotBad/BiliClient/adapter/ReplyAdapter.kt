@@ -31,6 +31,7 @@ import com.RobinNotBad.BiliClient.listener.OnItemClickListener
 import com.RobinNotBad.BiliClient.model.Reply
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.ui.widget.RadiusBackgroundSpan
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
@@ -315,7 +316,8 @@ class ReplyAdapter(
 
             replyHolder.likeCount.setOnClickListener { view ->
                 CenterThreadPool.run {
-                    if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0) == 0L) {
+                    // 门槛型（写操作）：任一通道有账号即可给评论点赞
+                    if (!AccountManager.isLoggedIn()) {
                         (context as Activity).runOnUiThread { MsgUtil.showMsg("还没有登录喵~") }
                         return@run
                     }
@@ -362,7 +364,8 @@ class ReplyAdapter(
             }
 
             // 删除按钮
-            if (isManager || sender.mid == SharedPreferencesUtil.getLong("mid", 0)) {
+            // 我是谁：评论作者是不是我（多通道任一命中）
+            if (isManager || AccountManager.isSelf(sender.mid)) {
                 val onDeleteClick = View.OnClickListener { view -> MsgUtil.showMsg("长按删除") }
                 replyHolder.item_reply_delete.setOnClickListener(onDeleteClick)
                 val onDeleteLongClick: View.OnLongClickListener = object : View.OnLongClickListener {

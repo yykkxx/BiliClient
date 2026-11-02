@@ -10,6 +10,7 @@ import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.DynamicApi
 import com.RobinNotBad.BiliClient.api.MessageApi
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -41,7 +42,7 @@ class BiliTerminal : Application() {
             // （AppRcmdApi.ensureMigrated，幂等；读任何 app_rcmd 槽位前也会自动触发）
             CenterThreadPool.run(Runnable { com.RobinNotBad.BiliClient.api.AppRcmdApi.touchMigration() })
 
-            if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE, true) && SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) != 0L) {
+            if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE, true) && AccountManager.isLoggedIn()) {
                 CenterThreadPool.run(Runnable {
                     try {
                         val updateBaseline = SharedPreferencesUtil.getLong("dynamic_update_baseline", 0)
@@ -53,7 +54,7 @@ class BiliTerminal : Application() {
                 })
             }
 
-            if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.MESSAGE_UPDATE_CHECK_ENABLE, true) && SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) != 0L) {
+            if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.MESSAGE_UPDATE_CHECK_ENABLE, true) && AccountManager.isLoggedIn()) {
                 CenterThreadPool.run(Runnable {
                     try {
                         val messageUnread = MessageApi.checkMessageUnread()

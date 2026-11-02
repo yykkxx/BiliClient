@@ -12,6 +12,7 @@ import android.widget.TextView
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.api.UserInfoApi
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -33,8 +34,9 @@ class EditSignActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_edit_sign)
 
-        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
-            MsgUtil.showMsg("还没有登录喵~")
+        // 门槛型：任一通道有账号即可改签名
+        if (!AccountManager.isLoggedIn()) {
+            MsgUtil.showMsg(AccountManager.loginHint())
             finish()
             return
         }

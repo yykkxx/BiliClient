@@ -6,6 +6,7 @@ import android.os.Bundle
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.favorite.FolderChooseAdapter
 import com.RobinNotBad.BiliClient.api.FavoriteApi
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -32,8 +33,9 @@ class AddFavoriteActivity : RefreshListActivity() {
         val intent = getIntent()
         aid = intent.getLongExtra("aid", 0)
 
-        if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
-            MsgUtil.showMsg("还没有登录喵~")
+        // 门槛型：任一通道有账号即可进收藏夹选择
+        if (!AccountManager.isLoggedIn()) {
+            MsgUtil.showMsg(AccountManager.loginHint())
             finish()
             return
         }

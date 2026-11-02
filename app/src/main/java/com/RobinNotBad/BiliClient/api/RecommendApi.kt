@@ -4,7 +4,9 @@ import android.text.TextUtils
 import android.util.Log
 
 import com.RobinNotBad.BiliClient.model.VideoCard
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 
 import org.json.JSONArray
@@ -40,11 +42,22 @@ object RecommendApi {
     @JvmSuppressWildcards
     @Throws(IOException::class, JSONException::class)
     fun getRecommend(videoCardList: MutableList<VideoCard>, isRefresh: Boolean) {
-        if (AppRcmdApi.isEnabled()) {
+        if (AppRcmdApi.isEnabled() && !isWebChannelChosen()) {
             getRecommendApp(videoCardList, isRefresh)
         } else {
             getRecommendWeb(videoCardList)
         }
+    }
+
+    /**
+     * 三级模式下用户是否在「推荐 API 迁移」里主动选了「Web 端」。
+     *
+     * 这个选项只在三级（全 API 迁移）里出现，因为只有那时"推荐页走 Web、其余走端口"
+     * 才是一个有意义的组合；一/二级下忽略该键（避免历史脏值或误设导致推荐页行为异常）。
+     */
+    private fun isWebChannelChosen(): Boolean {
+        if (AccountManager.currentTier() != AccountManager.TIER_FULL) return false
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.APP_RCMD_USE_WEB, false)
     }
 
     /** 原有 web 端推荐逻辑（与旧版一致） */

@@ -12,9 +12,9 @@ import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.adapter.LoginRecordAdapter
 import com.RobinNotBad.BiliClient.api.LoginRecordApi
 import com.RobinNotBad.BiliClient.model.LoginRecord
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 
 
@@ -43,7 +43,8 @@ class LoginRecordActivity : BaseActivity() {
 
         CenterThreadPool.run(Runnable {
             try {
-                val mid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L)
+                // 我是谁：登录记录查的是主账号
+                val mid = AccountManager.accountMid()
                 val buvid = ""
 
                 recordList = LoginRecordApi.getLoginRecord(mid, buvid)

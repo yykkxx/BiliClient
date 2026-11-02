@@ -24,9 +24,9 @@ import com.RobinNotBad.BiliClient.activity.CopyTextActivity
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity
 import com.RobinNotBad.BiliClient.api.PrivateMsgApi
 import com.RobinNotBad.BiliClient.model.PrivateMessage
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.GlideUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
 import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.bumptech.glide.Glide
@@ -89,7 +89,9 @@ class PrivateMsgAdapter(msgList: MutableList<PrivateMessage>?, emoteArray: JSONA
         try {
             holder.nameTv.setText(msg.name)
             if (selfUid == -1L) {
-                selfUid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, -1)
+                // 我是谁：主账号 mid（没有账号则保持 -1，表示不知道）
+                // 用 takeIf 而非 let + if：本方法已接近 NestedBlockDepth 上限，不再叠一层控制流
+                selfUid = AccountManager.accountMid().takeIf { it > 0L } ?: -1L
             }
             if (msg.uid == selfUid) {
                 holder.root.setGravity(Gravity.END)

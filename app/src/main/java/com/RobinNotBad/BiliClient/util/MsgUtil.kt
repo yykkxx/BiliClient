@@ -176,7 +176,7 @@ object MsgUtil {
                 e.printStackTrace(printWriter)
                 showText(output.toString(), writer.toString())
                 return
-            } else if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L) {
+            } else if (!AccountManager.isLoggedIn()) {
                 output.append(context.getString(R.string.err_login_first))
             } else if (e_str.contains("-352") || e_str.contains("22015") || e_str.contains("65056"))
                 output.append(context.getString(R.string.err_rejected))

@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.adapter.message.PrivateMsgAdapter
 import com.RobinNotBad.BiliClient.api.PrivateMsgApi
 import com.RobinNotBad.BiliClient.model.PrivateMessage
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -150,7 +151,12 @@ class PrivateMsgActivity : BaseActivity() {
                     if (contentEt!!.getText().toString() != "") {
                         val content = contentEt!!.getText().toString()
                         runOnUiThread { contentEt!!.setText("") }
-                        val result = PrivateMsgApi.sendMsg(SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 114514L), uid, PrivateMessage.TYPE_TEXT, System.currentTimeMillis() / 1000, "{\"content\":\"" + content + "\"}")
+                        // 我是谁：发送方 uid 用主账号 mid（web 未登录时退到端口账号；都没有才用旧兜底值）
+                        val senderUid = AccountManager.accountMid().let { if (it > 0) it else 114514L }
+                        val msgContent = "{\"content\":\"" + content + "\"}"
+                        val result = PrivateMsgApi.sendMsg(
+                                senderUid, uid, PrivateMessage.TYPE_TEXT,
+                                System.currentTimeMillis() / 1000, msgContent)
                         runOnUiThread {
                             try {
                                 if (result.getInt("code") == 0) {

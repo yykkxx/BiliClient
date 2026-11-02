@@ -7,6 +7,7 @@ import com.RobinNotBad.BiliClient.model.Collection
 import com.RobinNotBad.BiliClient.model.FavoriteFolder
 import com.RobinNotBad.BiliClient.model.Opus
 import com.RobinNotBad.BiliClient.model.VideoCard
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
@@ -385,7 +386,9 @@ object FavoriteApi {
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
     fun getFavoriteState(aid: Long, folderList: ArrayList<String>, fidList: ArrayList<Long>, stateList: ArrayList<Boolean>) {
-        val mid = SharedPreferencesUtil.getLong("mid", 0)
+        // v5.1.4 账号解耦：这里只是"我是谁"（用于 up_mid 参数），改用 AccountManager.accountMid()，
+        // 三级模式下端口账号也能正确取到自己的收藏夹状态。
+        val mid = AccountManager.accountMid()
         val url = "https://api.bilibili.com/x/v3/fav/folder/created/list-all?type=2&jsonp=jsonp&rid=" + aid + "&up_mid=" + mid
         val result = NetWorkUtil.getJson(url)
 
@@ -413,7 +416,7 @@ object FavoriteApi {
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
     fun addFavorite(aid: Long, fid: Long): Int {
-        return addFavoriteByMediaId(aid, folderMediaId(SharedPreferencesUtil.getLong("mid", 0), fid))
+        return addFavoriteByMediaId(aid, folderMediaId(AccountManager.accountMid(), fid))
     }
 
     @Throws(IOException::class, JSONException::class)
@@ -433,7 +436,7 @@ object FavoriteApi {
     @JvmStatic
     fun deleteFavorite(aid: Long, fid: Long): Int {
         //旧代码是 fid 后面拼上 mid 的后两位，本质就是 media_id = fid * 100 + mid % 100，这里统一走下面的函数
-        return deleteFavoriteByMediaId(aid, folderMediaId(SharedPreferencesUtil.getLong("mid", 0), fid))
+        return deleteFavoriteByMediaId(aid, folderMediaId(AccountManager.accountMid(), fid))
     }
 
     @Throws(IOException::class, JSONException::class)

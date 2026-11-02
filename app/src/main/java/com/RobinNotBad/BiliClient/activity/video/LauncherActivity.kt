@@ -12,7 +12,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.CatchActivity
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.setup.SetupUIActivity
-import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CrashStore
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
@@ -20,10 +20,14 @@ import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
  * 启动页（#9）。
  *
  * 打开软件先进入这个名为「哔哩终端」的空 Activity，由它再跳到
- * 推荐 / 登录 / 初次设置；渠道包构建脚本只改它的 label（QQ音乐），
+ * 推荐 / 初次设置；渠道包构建脚本只改它的 label（QQ音乐），
  * 桌面上显示的应用名与这里保持一致。
  *
- * 逻辑尽量薄：未完成初次设置 → 设置页；未登录 → 登录页；否则 → 推荐页。
+ * 逻辑尽量薄：未完成初次设置 → 设置页；其余情况（**无论有没有账号**）→ 推荐页。
+ *
+ * v5.1.4 账号解耦起，这里不再把用户扔进登录页：B 站匿名本身就能看推荐/搜索/视频，
+ * 「点进 APP 就提示登录」是用户抱怨的核心之一；需要登录的操作由各页面自己轻提示。
+ * 账号态只用 [AccountManager.isLoggedIn]（web 与三端任一登录都算），不再直接读 web 的 mid 键。
  */
 class LauncherActivity : BaseActivity() {
 
@@ -60,22 +64,33 @@ class LauncherActivity : BaseActivity() {
             intent.putExtra("stack", stack)
             startActivity(intent)
         } catch (e: Exception) {
-            Log.w("launcher", "show last crash failed", e)
+            Log.w(TAG, "show last crash failed", e)
         }
     }
 
     private fun route() {
-        if (!isDestroyed && !isFinishing) {
-            if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.setup, false)) {
-                //没完成初次设置，先去设置页
-                startActivity(Intent(this, SetupUIActivity::class.java))
-            } else if (SharedPreferencesUtil.getLong("mid", 0L) == 0L) {
-                //未登录进登录页
-                startActivity(Intent(this, LoginActivity::class.java))
-            } else {
-                startActivity(Intent(this, RecommendActivity::class.java))
-            }
+        if (isDestroyed || isFinishing) return
+
+        // 没完成初次设置，先去设置页（首启引导，跟账号态无关，保持原有流程）
+        if (!SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.setup, false)) {
+            startActivity(Intent(this, SetupUIActivity::class.java))
             finish()
+            return
         }
+
+        // 账号态**不再决定能不能进主界面**：B 站匿名本身就能看推荐/搜索/视频，
+        // 「点进 APP 就提示登录」是用户抱怨的核心之一；需要登录的操作由各页面自己轻提示。
+        // 首次使用引导登录已经放在上面的 setup=false 分支里（设置页 → 介绍页 → 登录页，
+        // 登录页还有「但是我拒绝」可直接跳过），跟这里的账号态无关。
+        // 账号态只记一行日志，方便排查「明明登录了却没显示」这类问题。
+        Log.i(TAG, "route: isLoggedIn=" + AccountManager.isLoggedIn()
+                + ", source=" + AccountManager.accountSource() + "，进入推荐页")
+        startActivity(Intent(this, RecommendActivity::class.java))
+        finish()
+    }
+
+    private companion object {
+        /** 启动页日志标签；showLastCrashIfAny 与 route 共用，方便 logcat 过滤 */
+        const val TAG = "launcher"
     }
 }
