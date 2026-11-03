@@ -352,7 +352,7 @@ object AppRcmdApi {
     }
 
     /**
-     * 获取扫码登录二维码（指定身份版）：「登录选项」页按端口进入时用，
+     * 获取扫码登录二维码（指定身份版）：「账号管理」页按端口进入时用，
      * 保证二维码协议（appkey/mobi_app）与登录成功后要写入的槽位是同一端。
      */
     @Throws(JSONException::class, IOException::class)
@@ -391,7 +391,7 @@ object AppRcmdApi {
         return getLoginStateFor(getIdentity())
     }
 
-    /** 轮询扫码状态（指定身份版，「登录选项」页按端口登录用） */
+    /** 轮询扫码状态（指定身份版，「账号管理」页按端口登录用） */
     @Throws(JSONException::class, IOException::class)
     @JvmStatic
     fun getLoginState(identity: RcmdIdentity): JSONObject {
@@ -439,7 +439,7 @@ object AppRcmdApi {
     }
 
     /**
-     * 登录成功后把登录信息写入**指定身份**的独立槽位（「登录选项」页按端口登录用；
+     * 登录成功后把登录信息写入**指定身份**的独立槽位（「账号管理」页按端口登录用；
      * 不带身份的 [saveLogin] 写当前身份槽位）。两种入口都只写自己的端，
      * 不影响 web Cookie 与其他端槽位（禁止跨端转移）。
      */

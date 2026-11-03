@@ -18,7 +18,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 「全 API 迁移（实验）」路由器。
+ * APP 通道路由器（「设置 → 账号管理 → 其它页面 API」选非 Web 端口时启用）。
  *
  * 调用链：`NetWorkUtil.get()/post()` → [planGet]/[planPost] → 成功则 [classify] 判定 →
  * 命中就返回 APP 通道响应；不命中/失败就由 NetWorkUtil 回退 web 原请求一次。

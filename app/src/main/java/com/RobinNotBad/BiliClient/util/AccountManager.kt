@@ -190,7 +190,7 @@ object AccountManager {
     private const val LOGIN_HINT = "还没有登录，请先在「设置 → 账号管理」里选择端口并登录账号"
 
     /**
-     * 当前账号状况的一句话描述（设置页/登录选项页展示用）。
+     * 当前账号状况的一句话描述（账号管理页展示用）。
      * 形如「Web 已登录（uid 123）＋ TV 已登录」。
      */
     @JvmStatic

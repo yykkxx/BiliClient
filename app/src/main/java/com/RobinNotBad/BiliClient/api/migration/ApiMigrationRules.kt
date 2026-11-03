@@ -4,7 +4,7 @@ import com.RobinNotBad.BiliClient.api.AppRcmdApi
 import com.RobinNotBad.BiliClient.util.AccountStore
 
 /**
- * 「全 API 迁移」的映射表（alpha10：真·全量迁移）。
+ * APP 通道的端点映射表（「账号管理 → 其它页面 API」选非 Web 端口时生效）。
  *
  * ## 这个功能在做什么
  *
@@ -648,11 +648,11 @@ object ApiMigrationRules {
      * 评论主接口是否走 APP 的 pn/ps 分页端点（`/x/v2/reply`）。
      *
      * 三个条件缺一不可：
-     * 1. 全 API 迁移开关开启；
+     * 1. 「账号管理 → 其它页面 API」选了非 Web 端口；
      * 2. 请求将要使用的身份已登录 —— 匿名下 pn>=2 实测返回空（page.num=0/count=0），
      *    web 与 APP 两条通道都一样，硬走 pn 分页会让第 2 页被判成「到底了」。
      *    单端口模式（实验室「重构账号体系」）看端口身份的登录态，
-     *    普通模式跟随「移动端推荐逻辑」当前身份，与 [ApiRouter] 的身份选择口径一致；
+     *    身份跟随「账号管理 → 其它页面 API」选的端口，与 [ApiRouter] 的身份选择口径一致；
      * 3. 调用方没有指定 `seek_rpid`（定位某条评论）—— pn 版没有这个语义，由调用方判断。
      *
      * 条件不满足时 [com.RobinNotBad.BiliClient.api.ReplyApi.getRepliesLazy]
