@@ -16,6 +16,7 @@ public interface IDanmakuView {
     public final static int THREAD_TYPE_MAIN_THREAD = 0x1;
     public final static int THREAD_TYPE_HIGH_PRIORITY = 0x2;
     public final static int THREAD_TYPE_LOW_PRIORITY = 0x3;
+    
 
     public boolean isPrepared();
     
@@ -77,15 +78,33 @@ public interface IDanmakuView {
 
     public void seekTo(Long ms);
 
+    /**
+     * 设置播放倍速（BiliClient 本地补丁 19b28595：让弹幕时间轴跟随播放器倍速）
+     */
     public void setSpeed(float speed);
 
+    /**
+     * 主动校准弹幕时间轴（BiliClient 本地补丁 19b28595：见 DrawHandler#syncTimerIfNeeded）
+     */
     public void adjust();
+
+    /**
+     * 取底层绘制 handler（BiliClient 本地补丁 19b28595：播放器需要判断弹幕层是否存活、
+     * 以及运行时下发温控帧率）
+     */
+    public DrawHandler getHandler();
+
+    /**
+     * 圆屏适配（BiliClient 本地补丁 f1e2b44b）：把布局参数能力暴露到接口上，
+     * 供播放器在不同屏幕形态下统一调整弹幕层。
+     */
+    public ViewGroup.LayoutParams getLayoutParams();
+
+    public void setLayoutParams(ViewGroup.LayoutParams params);
 
     public void start();
 
     public void start(long postion);
-
-    public DrawHandler getHandler();
 
     public void stop();
 
@@ -117,24 +136,29 @@ public interface IDanmakuView {
 
     public void clearDanmakusOnScreen();
 
- // ------------- Click Listener -------------------
+    // ------------- Click Listener -------------------
     public interface OnDanmakuClickListener {
-     /**
-      *
-      * @param latest the latest one is clicked
-      */
-      void onDanmakuClick(BaseDanmaku latest);
+        /**
+         * @param danmakus all to be clicked, this value may be empty;
+         *                 danmakus.last() is the latest danmaku which may be null;
+         * @return True if the event was handled, false otherwise.
+         */
+        boolean onDanmakuClick(IDanmakus danmakus);
 
-     /**
-      *
-      * @param danmakus all to be clicked
-      */
-        void onDanmakuClick(IDanmakus danmakus);
+        boolean onDanmakuLongClick(IDanmakus danmakus);
+
+        boolean onViewClick(IDanmakuView view);
     }
 
     public void setOnDanmakuClickListener(OnDanmakuClickListener listener);
+
+    public void setOnDanmakuClickListener(OnDanmakuClickListener listener, float xOff, float yOff);
+
     public OnDanmakuClickListener getOnDanmakuClickListener();
 
-    public ViewGroup.LayoutParams getLayoutParams();
-    public void setLayoutParams(ViewGroup.LayoutParams params);
+    public float getXOff();
+
+    public float getYOff();
+
+    void forceRender();
 }

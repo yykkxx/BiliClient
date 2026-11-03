@@ -11,19 +11,21 @@ import java.util.Map;
 
 import master.flame.danmaku.controller.DanmakuFilters;
 import master.flame.danmaku.controller.DanmakuFilters.IDanmakuFilter;
+import master.flame.danmaku.danmaku.model.AbsDanmakuSync;
 import master.flame.danmaku.danmaku.model.AbsDisplayer;
 import master.flame.danmaku.danmaku.model.AlphaValue;
 import master.flame.danmaku.danmaku.model.BaseDanmaku;
 import master.flame.danmaku.danmaku.model.GlobalFlagValues;
+import master.flame.danmaku.danmaku.model.IDanmakus;
 
-public class DanmakuContext {
+public class DanmakuContext implements Cloneable {
 
     public static DanmakuContext create() {
         return new DanmakuContext();
     }
 
     public enum DanmakuConfigTag {
-        FT_DANMAKU_VISIBILITY, FB_DANMAKU_VISIBILITY, L2R_DANMAKU_VISIBILITY, R2L_DANMAKU_VISIBILIY, SPECIAL_DANMAKU_VISIBILITY, TYPEFACE, TRANSPARENCY, SCALE_TEXTSIZE, MAXIMUM_NUMS_IN_SCREEN, DANMAKU_STYLE, DANMAKU_BOLD, COLOR_VALUE_WHITE_LIST, USER_ID_BLACK_LIST, USER_HASH_BLACK_LIST, SCROLL_SPEED_FACTOR, BLOCK_GUEST_DANMAKU, DUPLICATE_MERGING_ENABLED, MAXIMUN_LINES, OVERLAPPING_ENABLE;
+        FT_DANMAKU_VISIBILITY, FB_DANMAKU_VISIBILITY, L2R_DANMAKU_VISIBILITY, R2L_DANMAKU_VISIBILIY, SPECIAL_DANMAKU_VISIBILITY, TYPEFACE, TRANSPARENCY, SCALE_TEXTSIZE, MAXIMUM_NUMS_IN_SCREEN, DANMAKU_STYLE, DANMAKU_BOLD, COLOR_VALUE_WHITE_LIST, USER_ID_BLACK_LIST, USER_HASH_BLACK_LIST, SCROLL_SPEED_FACTOR, BLOCK_GUEST_DANMAKU, DUPLICATE_MERGING_ENABLED, MAXIMUN_LINES, OVERLAPPING_ENABLE, ALIGN_BOTTOM, DANMAKU_MARGIN, DANMAKU_SYNC;
 
         public boolean isVisibilityRelatedTag() {
             return this.equals(FT_DANMAKU_VISIBILITY) || this.equals(FB_DANMAKU_VISIBILITY)
@@ -45,6 +47,8 @@ public class DanmakuContext {
 
     public float scaleTextSize = 1.0f;
 
+    public int margin = 0;
+
     /**
      * 弹幕显示隐藏设置
      */
@@ -56,9 +60,9 @@ public class DanmakuContext {
 
     public boolean R2LDanmakuVisibility = true;
 
-    public boolean SecialDanmakuVisibility = true;
+    public boolean SpecialDanmakuVisibility = true;
     
-    final List<Integer> mFilterTypes = new ArrayList<>();
+    List<Integer> mFilterTypes = new ArrayList<Integer>();
 
     /**
      * 同屏弹幕数量 -1 按绘制效率自动调整 0 无限制 n 同屏最大显示n个弹幕
@@ -70,28 +74,21 @@ public class DanmakuContext {
      */
     public float scrollSpeedFactor = 1.0f;
 
-
     /**
-     * 绘制刷新率(毫秒)
+     * 弹幕层重绘间隔（毫秒，BiliClient 本地补丁 1cfb6c1a）。
+     * 原库只在 prepare 时按屏幕刷新率算一次，播放中无法调整；这里允许应用层
+     * 通过 DanmakuContext.refreshRateMS 限制重绘频率（降温/省电），
+     * DrawHandler.initRenderingConfigs 会读取它。
      */
     public int refreshRateMS = 15;
 
-    /**
-     * 描边/阴影类型
-     */
-    public enum BorderType {
-        NONE, SHADOW, STROKEN
-    }
+    public AbsDanmakuSync danmakuSync;
 
-    public BorderType shadowType = BorderType.SHADOW;
-
-    public int shadowRadius = 3;
-
-    final List<Integer> mColorValueWhiteList = new ArrayList<>();
+    List<Integer> mColorValueWhiteList = new ArrayList<Integer>();
     
-    final List<Integer> mUserIdBlackList = new ArrayList<>();
+    List<Integer> mUserIdBlackList = new ArrayList<Integer>(); 
     
-    final List<String> mUserHashBlackList = new ArrayList<>();
+    List<String> mUserHashBlackList = new ArrayList<String>();
 
     private List<WeakReference<ConfigChangedCallback>> mCallbackList;
 
@@ -99,23 +96,46 @@ public class DanmakuContext {
 
     private boolean mDuplicateMergingEnable = false;
 
+    private boolean mIsAlignBottom = false;
+
     private BaseCacheStuffer mCacheStuffer;
 
     private boolean mIsMaxLinesLimited;
 
     private boolean mIsPreventOverlappingEnabled;
 
-    private final AbsDisplayer mDisplayer = new AndroidDisplayer();
+    public AbsDisplayer mDisplayer = new AndroidDisplayer();
 
-    public final GlobalFlagValues mGlobalFlagValues = new GlobalFlagValues();
+    public GlobalFlagValues mGlobalFlagValues = new GlobalFlagValues();
 
-    public final DanmakuFilters mDanmakuFilters = new DanmakuFilters();
+    public DanmakuFilters mDanmakuFilters = new DanmakuFilters();
 
-    public final DanmakuFactory mDanmakuFactory = DanmakuFactory.create();
+    public DanmakuFactory mDanmakuFactory = DanmakuFactory.create();
+
+    public CachingPolicy cachingPolicy = CachingPolicy.POLICY_DEFAULT;
+
+    private IDanmakus.BaseComparator mBaseComparator;
+
+    public IDanmakus.BaseComparator getBaseComparator() {
+        return mBaseComparator;
+    }
+
+    public void setBaseComparator(IDanmakus.BaseComparator baseComparator) {
+        this.mBaseComparator = baseComparator;
+    }
 
     public AbsDisplayer getDisplayer() {
         return mDisplayer;
     }
+
+    /**
+     * 0 默认 Choreographer驱动DrawHandler线程刷新 <br />
+     * 1 "DFM Update"单独线程刷新 <br />
+     * 2 DrawHandler线程自驱动刷新
+     *
+     * Note: 在系统{@link android.os.Build.VERSION_CODES#JELLY_BEAN}以下, 0方式会被2方式代替
+     */
+    public byte updateMethod = 0;
 
     /**
      * set typeface
@@ -151,6 +171,22 @@ public class DanmakuContext {
             mGlobalFlagValues.updateVisibleFlag();
             notifyConfigureChanged(DanmakuConfigTag.SCALE_TEXTSIZE, p);
         }
+        return this;
+    }
+
+    public DanmakuContext setDanmakuMargin(int m) {
+        if (margin != m) {
+            margin = m;
+            mDisplayer.setMargin(m);
+            mGlobalFlagValues.updateFilterFlag();
+            mGlobalFlagValues.updateVisibleFlag();
+            notifyConfigureChanged(DanmakuConfigTag.DANMAKU_MARGIN, m);
+        }
+        return this;
+    }
+
+    public DanmakuContext setMarginTop(int m) {
+        mDisplayer.setAllMarginTop(m);
         return this;
     }
 
@@ -267,8 +303,8 @@ public class DanmakuContext {
     /**
      * @return 是否显示特殊弹幕
      */
-    public boolean getSecialDanmakuVisibility() {
-        return SecialDanmakuVisibility;
+    public boolean getSpecialDanmakuVisibility() {
+        return SpecialDanmakuVisibility;
     }
 
     /**
@@ -280,8 +316,8 @@ public class DanmakuContext {
         setDanmakuVisible(visible, BaseDanmaku.TYPE_SPECIAL);
         setFilterData(DanmakuFilters.TAG_TYPE_DANMAKU_FILTER, mFilterTypes);
         mGlobalFlagValues.updateFilterFlag();
-        if (SecialDanmakuVisibility != visible) {
-            SecialDanmakuVisibility = visible;
+        if (SpecialDanmakuVisibility != visible) {
+            SpecialDanmakuVisibility = visible;
             notifyConfigureChanged(DanmakuConfigTag.SPECIAL_DANMAKU_VISIBILITY, visible);
         }
         return this;
@@ -525,6 +561,19 @@ public class DanmakuContext {
         return mDuplicateMergingEnable;
     }
 
+    public DanmakuContext alignBottom(boolean enable) {
+        if (mIsAlignBottom != enable) {
+            mIsAlignBottom = enable;
+            notifyConfigureChanged(DanmakuConfigTag.ALIGN_BOTTOM, enable);
+            mGlobalFlagValues.updateVisibleFlag();
+        }
+        return this;
+    }
+
+    public boolean isAlignBottom() {
+        return mIsAlignBottom;
+    }
+
     /**
      * 设置最大显示行数
      * @param pairs map<K,V> 设置null取消行数限制
@@ -590,6 +639,16 @@ public class DanmakuContext {
         }
         return this;
     }
+
+    public DanmakuContext setDanmakuSync(AbsDanmakuSync danmakuSync) {
+        this.danmakuSync = danmakuSync;
+        return this;
+    }
+
+    public DanmakuContext setCachingPolicy(CachingPolicy cachingPolicy) {
+        this.cachingPolicy = cachingPolicy;
+        return this;
+    }
     
     public interface ConfigChangedCallback {
         public boolean onDanmakuConfigChanged(DanmakuContext config, DanmakuConfigTag tag,
@@ -598,14 +657,14 @@ public class DanmakuContext {
 
     public void registerConfigChangedCallback(ConfigChangedCallback listener) {
         if (listener == null || mCallbackList == null) {
-            mCallbackList = Collections.synchronizedList(new ArrayList<>());
+            mCallbackList = Collections.synchronizedList(new ArrayList<WeakReference<ConfigChangedCallback>>());
         }
         for (WeakReference<ConfigChangedCallback> configReferer : mCallbackList) {
             if (listener.equals(configReferer.get())) {
                 return;
             }
         }
-        mCallbackList.add(new WeakReference<>(listener));
+        mCallbackList.add(new WeakReference<ConfigChangedCallback>(listener));
     }
 
     public void unregisterConfigChangedCallback(ConfigChangedCallback listener) {
@@ -637,4 +696,29 @@ public class DanmakuContext {
         }
     }
 
+    public DanmakuContext registerFilter(DanmakuFilters.BaseDanmakuFilter filter) {
+        mDanmakuFilters.registerFilter(filter);
+        mGlobalFlagValues.updateFilterFlag();
+        return this;
+    }
+
+    public DanmakuContext unregisterFilter(DanmakuFilters.BaseDanmakuFilter filter) {
+        mDanmakuFilters.unregisterFilter(filter);
+        mGlobalFlagValues.updateFilterFlag();
+        return this;
+    }
+
+    public DanmakuContext resetContext() {
+        mDisplayer = new AndroidDisplayer();
+        mGlobalFlagValues = new GlobalFlagValues();
+//        mDanmakuFilters = new DanmakuFilters();
+        mDanmakuFilters.clear();
+        mDanmakuFactory = DanmakuFactory.create();
+        return this;
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
 }

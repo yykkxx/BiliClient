@@ -11,6 +11,7 @@ import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.DynamicApi
 import com.RobinNotBad.BiliClient.api.MessageApi
 import com.RobinNotBad.BiliClient.util.AccountManager
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -38,8 +39,10 @@ class BiliTerminal : Application() {
             Logu.LOGD_ENABLED = SharedPreferencesUtil.getBoolean("dev_logd", debugBuild)
             Logu.LOGI_ENABLED = SharedPreferencesUtil.getBoolean("dev_logi", debugBuild)
 
-            // v5.0.0 登录体系重构：老版本单 token 迁移到对应身份的独立槽位
-            // （AppRcmdApi.ensureMigrated，幂等；读任何 app_rcmd 槽位前也会自动触发）
+            // v5.1.5 账号管理：把旧版单账号凭据（web Cookie / 三端 token）与旧开关
+            // 迁进「端口 × 多账号」模型（AccountStore.ensureMigrated，幂等，只读旧键一次）；
+            // 随后 v5.0.0 的单 token → 独立槽位迁移（AppRcmdApi.ensureMigrated，同样是幂等的）。
+            AccountStore.ensureMigrated()
             CenterThreadPool.run(Runnable { com.RobinNotBad.BiliClient.api.AppRcmdApi.touchMigration() })
 
             if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.DYNAMIC_UPDATE_CHECK_ENABLE, true) && AccountManager.isLoggedIn()) {

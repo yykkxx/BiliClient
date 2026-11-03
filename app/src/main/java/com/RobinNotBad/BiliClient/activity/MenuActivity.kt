@@ -19,7 +19,7 @@ import com.RobinNotBad.BiliClient.activity.dynamic.DynamicActivity
 import com.RobinNotBad.BiliClient.activity.live.RecommendLiveActivity
 import com.RobinNotBad.BiliClient.activity.message.MessageActivity
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity
-import com.RobinNotBad.BiliClient.activity.settings.SettingAppRcmdActivity
+import com.RobinNotBad.BiliClient.activity.settings.SettingAccountActivity
 import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.user.MySpaceActivity
@@ -135,11 +135,12 @@ class MenuActivity : BaseActivity() {
                 else -> materialButton.text = btnNames[btn]!!.first
             }
             materialButton.setOnClickListener { killAndJump(btn) }
-            // 长按「推荐」= 打开推荐 API 设置（移动端推荐逻辑：登录身份 / 开关 / 状态）
+            // 长按「推荐」= 直接进「账号管理」的页签 1（推荐页 API：选端口 / 管账号）
             if (btn == "recommend") {
                 materialButton.setOnLongClickListener {
                     val intent = Intent()
-                    intent.setClass(this@MenuActivity, SettingAppRcmdActivity::class.java)
+                    intent.setClass(this@MenuActivity, SettingAccountActivity::class.java)
+                    intent.putExtra(SettingAccountActivity.EXTRA_TAB, SettingAccountActivity.TAB_RCMD)
                     startActivity(intent)
                     true
                 }

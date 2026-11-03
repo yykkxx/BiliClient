@@ -13,14 +13,14 @@ import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteFolderListActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
-import com.RobinNotBad.BiliClient.api.AppRcmdApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.model.UserInfo
-import com.RobinNotBad.BiliClient.util.AccountManager
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.GlideUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
+import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 import com.bumptech.glide.Glide
@@ -90,7 +90,7 @@ class MySpaceActivity : InstanceActivity() {
             // 请求就拿不到数据 → 整页停在空白，用户看到的就是「退出 web 后『我的』界面没了」。
             //
             // 现在的策略是「先铺好页面，再用能拿到的资料去填充」：
-            // 1. 立刻用 AccountManager 的本地信息（昵称/头像/uid）把头部渲染出来，不等网络；
+            // 1. 立刻用 AccountStore 的本地信息（昵称/头像/uid）把头部渲染出来，不等网络；
             // 2. 再把本页所有卡片点击事件绑好（它们只依赖 mid，不依赖网络结果）；
             // 3. 最后才尝试联网补全 fans/exp/硬币这些**装饰性**数据，失败就保持占位。
             // 这样无论哪种登录组合，页面都是可用的，最差也只是少几行数字。
@@ -108,7 +108,7 @@ class MySpaceActivity : InstanceActivity() {
      * 真的一个号都没有时，点击会由各子页面自己给出「去登录」提示。
      */
     private fun bindPageActions() {
-        val uid = AccountManager.accountMid()
+        val uid = AccountStore.primaryMid()
         myInfo?.setOnClickListener {
             if (uid <= 0L) {
                 jumpToLogin()
@@ -160,7 +160,7 @@ class MySpaceActivity : InstanceActivity() {
      */
     @SuppressLint("SetTextI18n")
     private fun renderLocalProfile() {
-        val loggedIn = AccountManager.isLoggedIn()
+        val loggedIn = AccountStore.hasAnyAccount()
         if (!loggedIn) {
             userName?.text = "未登录"
             userFans?.text = "登录后可使用收藏、历史、稍后再看"
@@ -168,10 +168,10 @@ class MySpaceActivity : InstanceActivity() {
             editSign?.visibility = View.GONE
             return
         }
-        userName?.text = AccountManager.displayName()
+        userName?.text = AccountStore.primaryName()
         // 联网数据未到时先给一句中性文案，避免看起来像"加载失败"
         userFans?.text = "正在获取账号信息…"
-        val avatar = AccountManager.avatarUrl()
+        val avatar = AccountStore.primaryFace()
         val avatarView = userAvatar
         if (avatar.isNotEmpty() && avatarView != null) {
             Glide.with(this)
@@ -192,11 +192,11 @@ class MySpaceActivity : InstanceActivity() {
      */
     @SuppressLint("SetTextI18n")
     private fun loadRemoteProfile() {
-        if (!AccountManager.isWebLoggedIn()) {
+        if (AccountStore.activeMid(AccountStore.PORT_WEB) <= 0L) {
             // web 未登录：没有可靠途径拿到粉丝/硬币/EXP（端口 token 只有 mid 和昵称）。
             // 直接给一句诚实的说明，不要空着让人以为在加载。
-            if (AccountManager.isLoggedIn()) {
-                val uid = AccountManager.accountMid()
+            if (AccountStore.hasAnyAccount()) {
+                val uid = AccountStore.primaryMid()
                 userFans?.text = "uid " + uid + "（端口账号，详细数据需登录 Web）"
                 userExp?.text = ""
             }
@@ -207,7 +207,8 @@ class MySpaceActivity : InstanceActivity() {
                 val userInfo = UserInfoApi.getCurrentUserInfo()
                 currentUserInfo = userInfo
                 // 缓存昵称/头像，供「web 未登录时也能显示」的场景复用
-                AccountManager.cacheWebProfile(userInfo.name, userInfo.avatar)
+                val webMid = AccountStore.activeMid(AccountStore.PORT_WEB)
+                AccountStore.updateProfile(AccountStore.PORT_WEB, webMid, userInfo.name, userInfo.avatar)
                 val userCoin = UserInfoApi.getCurrentUserCoin()
                 if (isDestroyed) return@Runnable
                 CoroutineScopes.launchUi {
@@ -240,15 +241,16 @@ class MySpaceActivity : InstanceActivity() {
     /**
      * 退出登录。
      *
-     * 三级模式下「退出登录」必须退掉**用户感知到的那一个账号**，否则会出现
-     * 「点了退出、页面还显示已登录」的困惑（端口 token 没被清掉）。
-     * 因此这里的语义按当前实际登录情况决定：
-     * - web 已登录 → 退 web（保持历史行为，端口账号不动，因为它们本就是独立的）；
-     * - web 未登录、只有端口账号 → 退掉**当前选中的那个端口**，并清掉展示缓存；
-     * - 都没有 → 直接去登录页。
+     * 必须退掉**用户感知到的那一个账号**，否则会出现「点了退出、页面还显示已登录」的困惑。
+     * v5.1.5 起账号有多份（同一端口也能多号并存），所以一律按「激活账号」退：
+     * - web 端口有激活账号 → 退 web 的那个激活账号（`AccountStore.logout(PORT_WEB, activeMid)`）；
+     * - web 没有 → 退「页签 2（其它页面 API）」端口的激活账号；
+     * - 都没有 → 直接去登录页（用户主动触发，不是强制跳转）。
+     *
+     * 退出激活账号后 AccountStore 会自动把该端口的下一个账号切为激活（没有则变「未登录」）。
      */
     private fun onLogoutClicked() {
-        if (!AccountManager.isLoggedIn()) {
+        if (!AccountStore.hasAnyAccount()) {
             jumpToLogin()
             return
         }
@@ -258,31 +260,35 @@ class MySpaceActivity : InstanceActivity() {
             return
         }
         confirmLogout = false
-        if (AccountManager.isWebLoggedIn()) {
-            doWebLogout()
+        val webMid = AccountStore.activeMid(AccountStore.PORT_WEB)
+        if (webMid > 0L) {
+            doWebLogout(webMid)
         } else {
             doPortLogout()
         }
     }
 
-    /** 退 web：与历史行为一致（协议退出 + 清 web 键），绝不碰 app_rcmd 槽位 */
-    private fun doWebLogout() {
+    /** 退 web 激活账号：协议退出 + 交给 AccountStore 清该账号槽位并自动切换下一个 */
+    private fun doWebLogout(webMid: Long) {
         CenterThreadPool.run(Runnable { UserInfoApi.exitLogin() })
-        SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookies)
-        SharedPreferencesUtil.removeValue(SharedPreferencesUtil.mid)
-        SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf)
-        SharedPreferencesUtil.removeValue(SharedPreferencesUtil.refresh_token)
-        SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookie_refresh)
-        AccountManager.clearWebProfile()
+        AccountStore.logout(AccountStore.PORT_WEB, webMid)
+        // 换号后 Cookie 变了，请求头必须同步刷新，否则后面的请求还带着旧号的 Cookie
+        NetWorkUtil.refreshHeaders()
         MsgUtil.showMsg("Web 账号已退出")
         afterAccountChanged()
     }
 
-    /** 退端口：只清当前选中的那个端口的 token，不影响 web 与其他端 */
+    /** 退端口激活账号：按「页签 2」选的端口退，不影响 web 与其他端口 */
     private fun doPortLogout() {
-        val identity = AppRcmdApi.getIdentity()
-        AppRcmdApi.logoutIdentity(identity.id)
-        MsgUtil.showMsg("已退出" + identity.displayName + "登录")
+        val port = AccountStore.mainPort()
+        val mid = AccountStore.activeMid(port)
+        if (mid <= 0L) {
+            // 该端口没有激活账号（可能是别的端口登录着），退掉真正登录着的那个端口
+            AccountStore.logoutActive(AccountStore.primaryPort())
+        } else {
+            AccountStore.logout(port, mid)
+        }
+        MsgUtil.showMsg("已退出" + AccountStore.portDisplayName(port) + "端账号")
         afterAccountChanged()
     }
 

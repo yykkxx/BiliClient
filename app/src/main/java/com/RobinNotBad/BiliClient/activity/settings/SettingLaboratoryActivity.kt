@@ -7,10 +7,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
-import com.RobinNotBad.BiliClient.api.migration.ApiRouter
 import com.RobinNotBad.BiliClient.model.SettingSection
-import android.content.Intent
-import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -30,52 +27,9 @@ class SettingLaboratoryActivity : RefreshListActivity() {
 
         val sectionList = ArrayList<SettingSection>()
 
-        // ==================== 三级迁移模型（v5.1.4） ====================
-        // 用户需求把 API 迁移分成三级，这里按级别顺序展示，并在每个开关文案里
-        // 写清「打开后进入第几级、会带来什么变化」。级别判定收敛在 AccountManager.currentTier()。
-        sectionList.add(SettingSection("title", "API 迁移（三级）", "", "", ""))
-        sectionList.add(SettingSection("click", "当前级别", "",
-                AccountManager.tierName(AccountManager.currentTier()) +
-                        "。一级=纯Web；二级=仅推荐页走APP接口；三级=全部接口走端口且账号与页面解耦。" +
-                        "点此查看迁移统计与命中情况", "false",
-                Runnable {
-                    startActivity(Intent(this, SettingApiMigrationActivity::class.java))
-                }))
-        // 推荐 API 迁移（第二级）：只影响推荐页
-        sectionList.add(SettingSection("click", "推荐 API 迁移", "",
-                "打开后：推荐页改用移动端（APP端）接口，其余功能仍全部走 Web（二级）。" +
-                        "需要在进入的页面里扫码登录该端后开启。" +
-                        "三级模式下，此栏目还会多出「Web 端」选项，可让推荐页改回 Web 接口。", "false",
-                Runnable {
-                    startActivity(Intent(this, SettingAppRcmdActivity::class.java))
-                }))
-        // 全 API 迁移（第三级）：所有接口走端口
-        sectionList.add(SettingSection("switch", "全 API 迁移（三级）",
-                SharedPreferencesUtil.API_MIGRATION_ENABLED,
-                "打开后进入三级：所有接口都走所选端口（身份/签名/登录复用上面的推荐 API 设置），" +
-                        "失败自动回退 Web。推荐 API 栏目会增设 Web 端选项。" +
-                        "此级别下账号与页面彻底解耦——退出 Web 登录后，「我的」「稍后再看」「动态」「消息」等照常可用，" +
-                        "只要任一端口已登录。关闭则回到二级（若推荐 API 也关则回到一级纯 Web）。",
-                // 注意：ApiRouter 里这个键的读取默认值是 true（5.0.4 起默认开启）。
-                // 这里的 default 必须与之一致，否则开关会显示"关"而实际行为是"开"。
-                "true"))
-        sectionList.add(SettingSection("click", "全 API 迁移状态", "",
-                "查看当前身份/登录、APP 命中次数、回退次数、最近失败端点，并可清空统计", "false",
-                Runnable {
-                    startActivity(Intent(this, SettingApiMigrationActivity::class.java))
-                }))
-        // 重构账号体系（实验，v5.1.1）：单端口模式总开关。打开后到「设置 → 登录选项」选端口并登录该端口；
-        // 路由是否生效由 ApiRouter.isEnabled 综合判断（端口=web 时本开关不改变请求行为），
-        // 与旧「全 API 迁移」开关相互独立、旧开关默认值不动。切换时清掉连续失败暂停，
-        // 让端点立刻按新配置重试（幂等操作，重复触发无副作用）。
-        sectionList.add(SettingSection("switch", "重构账号体系（单端口）",
-                SharedPreferencesUtil.LAB_ACCOUNT_REFACTOR,
-                "打开后请在「设置 → 登录选项」里选择端口并登录该端口：全接口统一走所选端，" +
-                        "并可在此处完全退出 Web 登录（该端登录后，收藏/历史/动态/消息等全部功能照常可用）。" +
-                        "本开关只决定全 API 路由走哪个端口；推荐页移动端逻辑的身份仍由其自身设置控制。" +
-                        "实验特性：降级回老版本后本开关自动失效，旧登录不受影响。",
-                "false",
-                Runnable { ApiRouter.clearSuspensions() }))
+        // 说明：v5.1.4 的「API 迁移（三级）」「推荐 API 迁移」「全 API 迁移」「重构账号体系」整段
+        // 已在 v5.1.5 由「设置 → 账号管理」取代（端口选择 + 多账号都收敛到那一页），
+        // 这里不再保留任何与登录 API 相关的开关，避免留下无效入口。
 
         sectionList.add(SettingSection("title", "其他实验性功能", "", "", ""))
 

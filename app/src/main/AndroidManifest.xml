@@ -227,19 +227,9 @@
             android:label="实验性功能"
             android:screenOrientation="locked" />
         <activity
-            android:name=".activity.settings.SettingAppRcmdActivity"
+            android:name=".activity.settings.SettingAccountActivity"
             android:exported="false"
-            android:label="移动端推荐逻辑"
-            android:screenOrientation="locked" />
-        <activity
-            android:name=".activity.settings.SettingApiMigrationActivity"
-            android:exported="false"
-            android:label="全 API 迁移"
-            android:screenOrientation="locked" />
-        <activity
-            android:name=".activity.settings.SettingLoginActivity"
-            android:exported="false"
-            android:label="登录选项"
+            android:label="账号管理"
             android:screenOrientation="locked" />
         <activity
             android:name=".activity.settings.login.AppRcmdLoginActivity"

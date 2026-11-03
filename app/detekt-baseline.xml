@@ -619,7 +619,6 @@
     <ID>PackageNaming:SeriesApi.kt$package com.RobinNotBad.BiliClient.api</ID>
     <ID>PackageNaming:SeriesCardAdapter.kt$package com.RobinNotBad.BiliClient.adapter.video</ID>
     <ID>PackageNaming:SeriesInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.video.series</ID>
-    <ID>PackageNaming:SettingAppRcmdActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
     <ID>PackageNaming:SettingInfoActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
     <ID>PackageNaming:SettingLaboratoryActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>
     <ID>PackageNaming:SettingMainActivity.kt$package com.RobinNotBad.BiliClient.activity.settings</ID>

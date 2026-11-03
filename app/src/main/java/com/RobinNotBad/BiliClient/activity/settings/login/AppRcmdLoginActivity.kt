@@ -11,9 +11,9 @@ import androidx.appcompat.app.AlertDialog
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.google.android.material.card.MaterialCardView
 
 import org.json.JSONObject
@@ -22,22 +22,26 @@ import java.util.Timer
 import java.util.TimerTask
 
 /**
- * 移动端推荐逻辑的扫码登录页（电视端扫码协议）。
+ * APP 端口（Android手机 / HD / TV）的扫码登录页。
  *
  * 与 web 端扫码登录的区别：
  * - 接口为 passport-tv-login（auth_code / poll），返回 access_token 而非 web Cookie；
- * - 登录信息只写入 app_rcmd_ 前缀的独立键，完全不动软件的 web 登录；
- * - 登录成功后弹窗询问「是否打开推荐页面的移动端逻辑」。
+ * - 登录信息写进 [AccountStore] 的该端口多账号槽位，完全不动软件的 web 登录；
+ * - 同一端口可以同时登录多个账号（每次扫码成功都新增/更新一个账号实例）。
  *
- * v5.1.1「登录选项」入口：支持可选 extra [EXTRA_IDENTITY]（hd / tv / phone）指定登录身份，
- * 二维码协议与登录成功后写入的槽位都是该身份对应的端；不带 extra 时行为与原来完全一致
- * （登录「当前身份」，槽位互不影响）。
+ * v5.1.5「账号管理」入口：extra 为 [EXTRA_PORT]（取值 [AccountStore.PORT_ANDROID] /
+ * [AccountStore.PORT_HD] / [AccountStore.PORT_TV]，正好等于 AccountStore 的端口常量）。
+ * web 端口不走本页（web 扫码走既有的 [LoginActivity]）；不带 extra 时用「页签 2」选的端口
+ * （若那是 web，则本页退回 HD —— 本页不做 web 扫码）。
  */
 class AppRcmdLoginActivity : BaseActivity() {
 
     companion object {
-        /** 指定登录身份的 extra（取值 AppRcmdApi.IDENTITY_*）；不带 = 登录当前身份（旧行为） */
-        const val EXTRA_IDENTITY = "identity"
+        /**
+         * 指定登录端口的 extra（取值 web / android / hd / tv，与 [AccountStore] 的端口常量一致）；
+         * 不带 = 用「页签 2（其它页面 API）」选的端口。
+         */
+        const val EXTRA_PORT = "port"
     }
 
     private var qrImageView: ImageView? = null
@@ -46,23 +50,25 @@ class AppRcmdLoginActivity : BaseActivity() {
     private var timer: Timer? = null
     private var needRefresh = false
 
-    /** 本次扫码要登录的身份（默认当前身份；带 extra 时为指定身份） */
-    private var loginIdentity: AppRcmdApi.RcmdIdentity = AppRcmdApi.getIdentity()
+    /** 本次扫码要登录的端口（[AccountStore] 端口常量） */
+    private var loginPort: String = AccountStore.PORT_HD
 
-    /** 是否由「登录选项」页按端口进入（决定登录成功后的引导文案，不写推荐页开关） */
-    private var fromLoginOptions = false
+    /** 本次扫码要登录的身份（由 [loginPort] 换算，web 端口不会出现在本页） */
+    private var loginIdentity: AppRcmdApi.RcmdIdentity =
+        AccountStore.identityOf(AccountStore.PORT_HD) ?: AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_HD)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_rcmd_login)
-        val identityExtra = intent?.getStringExtra(EXTRA_IDENTITY)
-        fromLoginOptions = identityExtra != null
-        loginIdentity = when (identityExtra) {
-            AppRcmdApi.IDENTITY_HD, AppRcmdApi.IDENTITY_TV, AppRcmdApi.IDENTITY_PHONE ->
-                AppRcmdApi.getIdentityById(identityExtra)
-            else -> AppRcmdApi.getIdentity()
-        }
-        setPageName("移动端登录（" + loginIdentity.displayName + "）")
+
+        // 不带 extra 时用「页签 2」选的端口；若那个端口是 web（本页不处理 web 扫码），退回 HD。
+        val resolvedPort = intent?.getStringExtra(EXTRA_PORT)
+            ?.let { AccountStore.normalizePort(it) }
+            ?: AccountStore.mainPort().ifEmpty { AccountStore.PORT_HD }
+        loginPort = if (resolvedPort == AccountStore.PORT_WEB) AccountStore.PORT_HD else resolvedPort
+        loginIdentity = AccountStore.identityOf(loginPort)
+            ?: AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_HD)
+        setPageName("登录" + AccountStore.portDisplayName(loginPort) + "端账号")
         setTopbarExit()
 
         qrImageView = findViewById(R.id.appRcmdQrImage)
@@ -136,9 +142,10 @@ class AppRcmdLoginActivity : BaseActivity() {
                             CenterThreadPool.runOnUiThread(Runnable {
                                 if (isDestroyed) return@Runnable
                                 try {
-                                    val mid = AppRcmdApi.saveLogin(data, loginIdentity.id)
+                                    // 凭据写入 AccountStore 的该端口多账号槽位（同端口可多号并存）
+                                    val mid = loginWithAccountStore(data)
                                     scanStat!!.text = "登录成功！"
-                                    showEnableDialog(mid)
+                                    showSuccessDialog(mid)
                                 } catch (e: Exception) {
                                     //token_info 缺失（风控）等
                                     scanStat!!.text = "登录失败：" + (e.message ?: "未知错误")
@@ -187,32 +194,58 @@ class AppRcmdLoginActivity : BaseActivity() {
         }, 500, 1000)
     }
 
-    /** 登录成功后的引导：从「登录选项」进入只提示成功；普通入口保持旧行为（问推荐页开关） */
-    private fun showEnableDialog(mid: Long) {
-        if (fromLoginOptions) {
-            // 按端口登录（实验室「重构账号体系」）：登录槽位由端口决定，
-            // 推荐页开关与本入口无关，绝不代替用户写 app_rcmd_enabled
-            AlertDialog.Builder(this)
-                .setTitle("登录成功")
-                .setMessage("已登录${loginIdentity.displayName}（uid：$mid）。\n\n可在「设置 → 登录选项」里选择端口让全接口走该端。")
-                .setPositiveButton("好的") { _, _ -> finish() }
-                .setCancelable(false)
-                .show()
-            return
+    /**
+     * 把扫码成功的凭据写进 [AccountStore] 的该端口多账号槽位，返回登录的 mid。
+     *
+     * 只调 AccountStore：它内部负责「先把当前激活账号快照回自己的槽位、再写新号」，
+     * 若这里再手动写一遍激活槽位就会把快照对象弄错（上一个号会被新号覆盖）。
+     *
+     * 回包里没有 token_info（多为风控）时抛出 IllegalStateException（用 checkNotNull()），由调用方展示失败原因。
+     */
+    private fun loginWithAccountStore(data: JSONObject): Long {
+        val tokenInfo = data.optJSONObject("token_info")
+        checkNotNull(tokenInfo) { "接口未返回身份信息，可能被风控，请尝试重新登录" }
+        val mid = tokenInfo.optLong("mid", 0L)
+        val accessToken = tokenInfo.optString("access_token", "")
+        val refreshToken = tokenInfo.optString("refresh_token", "")
+        AccountStore.loginApp(
+            loginPort, mid, accessToken, refreshToken, cookiesTextOf(data), null, null
+        )
+        return mid
+    }
+
+    /** 从登录回包提取 "name=value; name2=value2" 形式的 Cookie 串（token 响应的 cookie_info） */
+    private fun cookiesTextOf(data: JSONObject): String {
+        val cookies = data.optJSONObject("cookie_info")?.optJSONArray("cookies") ?: return ""
+        val pairs = ArrayList<String>()
+        for (i in 0 until cookies.length()) {
+            val pair = cookiePairOf(cookies.optJSONObject(i))
+            if (pair != null) pairs.add(pair)
         }
+        return pairs.joinToString("; ")
+    }
+
+    /** 单条 Cookie 拼成 "name=value"；缺名或缺值返回 null（调用方跳过这条） */
+    private fun cookiePairOf(cookie: JSONObject?): String? {
+        if (cookie == null) return null
+        val name = cookie.optString("name")
+        val value = cookie.optString("value")
+        if (name.isEmpty() || value.isEmpty()) return null
+        return name + "=" + value
+    }
+
+    /**
+     * 登录成功后的单一提示（v5.1.5 起不再询问「是否打开推荐页面的移动端逻辑」，
+     * 也不再写 app_rcmd_enabled —— 该键已删除，推荐页走哪个端口由「设置 → 账号管理」页签 1 决定）。
+     */
+    private fun showSuccessDialog(mid: Long) {
         AlertDialog.Builder(this)
             .setTitle("登录成功")
-            .setMessage("已使用移动端方式登录（uid：$mid）。\n\n是否打开推荐页面的移动端逻辑？")
-            .setPositiveButton("打开") { _, _ ->
-                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.APP_RCMD_ENABLED, true)
-                MsgUtil.showMsg("已开启移动端推荐逻辑，刷新推荐页生效")
-                finish()
-            }
-            .setNegativeButton("暂不") { _, _ ->
-                MsgUtil.showMsg("可稍后在实验室-移动端推荐逻辑中开启")
-                finish()
-            }
+            .setMessage("已登录 " + AccountStore.portDisplayName(loginPort) + " 端账号（uid：$mid），" +
+                    "可在「设置 → 账号管理」里切换账号。")
+            .setPositiveButton("好的") { _, _ -> finish() }
             .setCancelable(false)
             .show()
     }
+
 }

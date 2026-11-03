@@ -4,9 +4,8 @@ import android.text.TextUtils
 import android.util.Log
 
 import com.RobinNotBad.BiliClient.model.VideoCard
-import com.RobinNotBad.BiliClient.util.AccountManager
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 
 import org.json.JSONArray
@@ -42,22 +41,13 @@ object RecommendApi {
     @JvmSuppressWildcards
     @Throws(IOException::class, JSONException::class)
     fun getRecommend(videoCardList: MutableList<VideoCard>, isRefresh: Boolean) {
-        if (AppRcmdApi.isEnabled() && !isWebChannelChosen()) {
+        // 推荐页走哪个端口由「设置 → 账号管理 → 推荐页 API」决定（v5.1.5）：
+        // 选 Web = 老的 web 推荐；选 Android手机 / HD / TV = 该端口的 APP 推荐接口。
+        if (AccountStore.rcmdIdentity() != null) {
             getRecommendApp(videoCardList, isRefresh)
         } else {
             getRecommendWeb(videoCardList)
         }
-    }
-
-    /**
-     * 三级模式下用户是否在「推荐 API 迁移」里主动选了「Web 端」。
-     *
-     * 这个选项只在三级（全 API 迁移）里出现，因为只有那时"推荐页走 Web、其余走端口"
-     * 才是一个有意义的组合；一/二级下忽略该键（避免历史脏值或误设导致推荐页行为异常）。
-     */
-    private fun isWebChannelChosen(): Boolean {
-        if (AccountManager.currentTier() != AccountManager.TIER_FULL) return false
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.APP_RCMD_USE_WEB, false)
     }
 
     /** 原有 web 端推荐逻辑（与旧版一致） */
@@ -105,13 +95,14 @@ object RecommendApi {
     private fun getRecommendApp(videoCardList: MutableList<VideoCard>, isRefresh: Boolean) {
         if (isRefresh) rcmdIdx = 0
 
-        var accessToken = AppRcmdApi.getAccessToken()
+        // 当前推荐页端口的激活账号 token（未登录则匿名）
+        var accessToken = AccountStore.activeAccessToken(AccountStore.rcmdPort())
         var result = requestAppRcmd(accessToken)
 
-        //access_key 失效：清掉本地移动端登录信息，匿名重试一次
+        //access_key 失效：清掉该端口的激活账号登录信息，匿名重试一次
         if (result.optInt("code", -1) == -101 && accessToken.isNotEmpty()) {
             Log.d("BiliClient", "RecommendApi getRecommendApp: access_key 失效，降级为匿名")
-            AppRcmdApi.logout()
+            AccountStore.logoutActive(AccountStore.rcmdPort())
             accessToken = ""
             result = requestAppRcmd(accessToken)
         }
@@ -163,8 +154,8 @@ object RecommendApi {
     }
 
     private fun requestAppRcmd(accessToken: String): JSONObject {
-        //按当前客户端身份（HD/TV/手机）取请求参数与签名密钥
-        val identity = AppRcmdApi.getIdentity()
+        //按「推荐页 API」选定的端口身份（Android手机/HD/TV）取请求参数与签名密钥
+        val identity = AccountStore.rcmdIdentity() ?: AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_HD)
         val formData = NetWorkUtil.FormData().setUrlParam(true)
             .put("build", identity.feedBuild)
             .put("c_locale", "zh_CN")
@@ -196,10 +187,10 @@ object RecommendApi {
         if (accessToken.isNotEmpty()) formData.put("access_key", accessToken)
 
         //PiliPlus 对 app 域名请求一律签名（appkey+ts+sign），与官方客户端行为一致
-        AppRcmdApi.sign(formData)
+        AppRcmdApi.sign(formData, identity)
 
         //APP端请求头（buvid 识别设备）；app 请求不走 Cookie，登录态由 access_key 表达
-        val headers = AppRcmdApi.appHeaders()
+        val headers = AppRcmdApi.appHeaders(identity)
         headers.add("fp_local")
         headers.add(FP)
         headers.add("fp_remote")

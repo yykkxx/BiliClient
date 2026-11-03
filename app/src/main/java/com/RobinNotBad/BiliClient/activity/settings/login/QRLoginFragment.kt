@@ -22,6 +22,7 @@ import com.RobinNotBad.BiliClient.activity.video.RecommendActivity
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.api.CookiesApi
 import com.RobinNotBad.BiliClient.api.LoginApi
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
@@ -125,6 +126,11 @@ class QRLoginFragment : Fragment() {
             }
         }
 
+        // v5.1.5 多账号：进入扫码页先把「当前激活的 web 会话」快照进它自己的账号槽位，
+        // 否则再登一个号时，激活槽位会被新号覆盖，上一个 web 账号就直接丢了。
+        // 幂等（无激活账号时内部直接返回），不发起网络请求。
+        AccountStore.persistActiveWeb()
+
         if (isAdded()) refreshQrCode()
     }
 
@@ -200,12 +206,15 @@ class QRLoginFragment : Fragment() {
                         }
                         0 -> {
                             this.cancel()
-                            CenterThreadPool.runOnUiThread { scanStat!!.text = "正在处理登录……" }
-                            val cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")
+                            CenterThreadPool.runOnUiThread { scanStat!!.text = "正在处理登录……" } // quality-allow
+                            val cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
+                            // web 扫码回包只带 Cookie，mid/csrf 从 Cookie 里解析（v5.1.5 起交给 AccountStore
+                            // 统一写激活槽位 + 该账号自己的 account_mgmt_web_<mid>_* 槽位，支持同端口多账号）。
+                            val mid = NetWorkUtil.getInfoFromCookie("DedeUserID", cookies).trim().toLongOrNull() ?: 0L
+                            val csrf = NetWorkUtil.getInfoFromCookie("bili_jct", cookies)
+                            val refreshToken = loginJson.getJSONObject("data").optString("refresh_token", "")
 
-                            SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, NetWorkUtil.getInfoFromCookie("DedeUserID", cookies ?: "").toLong())
-                            SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies ?: ""))
-                            SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, loginJson.getJSONObject("data").getString("refresh_token"))
+                            AccountStore.loginWeb(mid, cookies, csrf, refreshToken, null, null)
 
                             SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.cookie_refresh, true)
 

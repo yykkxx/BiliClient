@@ -1,7 +1,7 @@
 package com.RobinNotBad.BiliClient.api.migration
 
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
-import com.RobinNotBad.BiliClient.util.AccountManager
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -91,17 +91,6 @@ object ApiRouter {
 
     private const val TAG = "api-migrate"
 
-    /**
-     * 三级模式下「当前身份未登录时，按顺序借用哪个已登录端口」的优先级。
-     *
-     * 手机端（android appkey）排第一：它是与官方手机客户端一致的一派，兼容的接口最多；
-     * HD 次之（本功能历史默认身份）；TV 最后。
-     * 只影响「这次请求用谁的 token」，不会改动用户设置的当前身份。
-     */
-    private val BORROW_ORDER = arrayOf(
-        AppRcmdApi.IDENTITY_PHONE, AppRcmdApi.IDENTITY_HD, AppRcmdApi.IDENTITY_TV
-    )
-
     private val STAT_LOCK = Any()
 
     private val CODE_REGEX = Regex("\"code\"\\s*:\\s*(-?\\d+)")
@@ -150,118 +139,27 @@ object ApiRouter {
     data class Verdict(val isOk: Boolean, val reason: String)
 
     /**
-     * 全 API 迁移开关。
+     * 是否启用 APP 通道路由。
      *
-     * **v5.0.4 起默认开启**（用户要求「尽我所能迁移所有东西」）。之所以敢默认开，是因为
-     * 三道护栏都在：① 任何端点失败（-101/-352/-400/HTTP/非JSON）自动回退 web；
-     * ② 账号相关接口只在「APP 身份与 web 账号是同一个号」时才迁移（[isAccountMismatch]）；
-     * ③ 非幂等写操作一旦可能发出就绝不重放。
-     * 用户仍可在「设置 → 实验室 → 全 API 迁移」里一键关掉，关掉后行为与老版本完全一致。
+     * 唯一的开关来源是「账号管理 → 其它页面 API」里选的端口（v5.1.5）：
+     * - 端口 = Web → 不路由，一切走 web（与 5.1.0 的纯 web 行为逐行为一致）；
+     * - 端口 = Android手机 / HD / TV → 所有接口先走该端口的 APP 通道，失败自动回退 web。
      *
-     * v5.1.1 起新增第二个开关来源：实验室「重构账号体系」选中**非 web 端口**时
-     * 也启用路由（单端口模式，见 [singlePortIdentity]）。旧开关 [SharedPreferencesUtil.API_MIGRATION_ENABLED]
-     * 的默认值与语义保持不动：它仍是 true，任何存量用户行为不变。
+     * 推荐页端口（页签 1）不影响这里，推荐页有自己的分支（见 RecommendApi）。
      */
     @JvmStatic
     fun isEnabled(): Boolean {
-        // 旧开关（全 API 迁移）保持原样：默认值/读写键一律不动
-        if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_MIGRATION_ENABLED, true)) return true
-        // 实验室「重构账号体系」：选了非 web 端口才启用路由（选 web = 维持现状）
-        return singlePortIdentity() != null
-    }
-
-    // ==================== 单端口模式（实验室「重构账号体系」，v5.1.1） ====================
-
-    /** 端口取值，与 [SharedPreferencesUtil.ACCOUNT_REFACTOR_PORT] 的合法值一致 */
-    const val PORT_WEB = "web"
-    const val PORT_ANDROID = "android"
-    const val PORT_HD = "hd"
-    const val PORT_TV = "tv"
-
-    /**
-     * 实验室「重构账号体系」总开关（与端口无关；页面显隐用它判断）。
-     * 只读 [SharedPreferencesUtil.LAB_ACCOUNT_REFACTOR]，不产生任何副作用。
-     */
-    @JvmStatic
-    fun isAccountRefactorLabEnabled(): Boolean {
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.LAB_ACCOUNT_REFACTOR, false)
+        return AccountStore.mainIdentity() != null
     }
 
     /**
-     * 当前端口（归一化后）。web / android / hd / tv；历史脏数据或非法值一律按 web 处理
-     * （web = 不进单端口模式，路由保持现状）。
+     * 本次请求使用的端口身份：账号管理里选的**其它页面端口**对应的身份。
+     *
+     * web 端口时返回 null（[isEnabled] 为 false，planGet/planPost 直接放弃迁移）。
+     * 不再有「跟随某条规则的 preferredIdentity」或「借用别的已登录端口」——
+     * 用户在账号管理里显式选定了端口，语义就是「所有接口都走这一端」，没有歧义。
      */
-    @JvmStatic
-    fun currentPort(): String {
-        val raw = SharedPreferencesUtil.getString(SharedPreferencesUtil.ACCOUNT_REFACTOR_PORT, PORT_WEB) ?: ""
-        return when (raw.trim().lowercase(Locale.ROOT)) {
-            PORT_ANDROID -> PORT_ANDROID
-            PORT_HD -> PORT_HD
-            PORT_TV -> PORT_TV
-            else -> PORT_WEB
-        }
-    }
-
-    /** 端口的显示名（登录选项页 / 提示文案用） */
-    @JvmStatic
-    fun portDisplayName(port: String): String {
-        return when (port) {
-            PORT_ANDROID -> "Android手机"
-            PORT_HD -> "HD"
-            PORT_TV -> "TV"
-            else -> "Web"
-        }
-    }
-
-    /**
-     * 单端口模式的身份：实验室开关开且端口**不是 web** 时返回对应身份，否则 null。
-     *
-     * - android → [AppRcmdApi.IDENTITY_PHONE]；hd → IDENTITY_HD；tv → IDENTITY_TV；
-     * - 身份对象/请求头/签名/参数生成全部复用 [AppRcmdApi] 既有体系，token 读写也落在
-     *   既有槽位 app_rcmd_{phone|hd|tv}_*，不新增存储；web 端口走既有 Cookie，互不转移；
-     * - 单端口模式下 [ApiMigrationRules] 的 KEEP_WEB 条目（共 13 条）**仍然保持 web**：
-     *   它们多为匿名可访问（弹幕 XML / 搜索联想 / pbp / 页面地址 / 埋点），
-     *   登录协议两条在「不用 web 端口」时也用不到，维持 web 无损；
-     * - 返回 null 时 [isEnabled] 不因本功能打开，行为与 5.1.0 完全一致。
-     */
-    @JvmStatic
-    fun singlePortIdentity(): AppRcmdApi.RcmdIdentity? {
-        if (!isAccountRefactorLabEnabled()) return null
-        return when (currentPort()) {
-            PORT_ANDROID -> AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_PHONE)
-            PORT_HD -> AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_HD)
-            PORT_TV -> AppRcmdApi.getIdentityById(AppRcmdApi.IDENTITY_TV)
-            else -> null
-        }
-    }
-
-    /** 是否处于单端口模式（[singlePortIdentity] 非 null 的便捷判断） */
-    @JvmStatic
-    fun isSinglePortMode(): Boolean {
-        return singlePortIdentity() != null
-    }
-
-    /**
-     * 当前 APP 身份与 web 登录账号是否**不是同一个号**。
-     *
-     * `AppRcmdApi` 的四个登录体系（web Cookie / HD / TV / 手机）互相独立，用户完全可能
-     * 在 web 登 A 号、在 TV 身份登 B 号。这时如果把「收藏夹 / 历史 / 关注」这类
-     * **账号相关**接口迁到 APP 通道，就会静默返回 B 号的数据（甚至把点赞投到 B 号）——
-     * 这是回退检测兜不住的错误，比「多一个 RTT」严重得多。
-     *
-     * 规则：两边都有 mid 且不相等 → 判定为不一致，账号相关接口一律保持 web。
-     * 只要有一边没登录（mid=0）就不算不一致（登录态检查另有 isLoginRequired 把关）。
-     *
-     * @param identity 本次请求将要使用的身份
-     */
-    @JvmStatic
-    fun isAccountMismatch(identity: AppRcmdApi.RcmdIdentity): Boolean {
-        val webMid = SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L)
-        if (webMid <= 0L) return false
-        val appMid = AppRcmdApi.getIdentityMid(identity.id)
-        if (appMid <= 0L) return false
-        return webMid != appMid
-    }
+    private fun routingIdentity(): AppRcmdApi.RcmdIdentity? = AccountStore.mainIdentity()
 
     /**
      * 为一次 GET 请求生成 APP 通道计划。
@@ -308,17 +206,16 @@ object ApiRouter {
             return null
         }
 
-        // 规则可以定点指定身份（preferredIdentity）；默认跟随用户在设置里选的当前身份。
-        // 单端口模式（实验室「重构账号体系」）覆盖规则的 preferredIdentity；
-        // v5.1.4 三级模式（全 API 迁移）下当前身份没登录时自动换成**已登录**的端口，
-        // 见 [pickUsableIdentity]——否则「只登了 TV、web 又退出」会把账号接口全推回没 Cookie 的 web。
-        val identity = pickUsableIdentity(rule.preferredIdentity)
+        // 身份一律取「账号管理 → 其它页面 API」里选的端口（v5.1.5）。
+        // 不再看规则里的 preferredIdentity，也不存在「借用别的端口 token」：
+        // 用户在账号管理里显式选定端口，语义就是所有接口都走这一端。
+        val identity = routingIdentity() ?: return null
         val accessToken = AppRcmdApi.getAccessToken(identity.id)
         // 未登录当前客户端身份时：只有明确标记为公共接口的规则才迁移。
         // 原因见 ApiMigrationRules.Rule.isLoginRequired：匿名 APP 请求对收藏/历史/动态等
         // 可能返回 code=0 但数据为空，这种「静默空数据」无法靠回退检测兜住。
-        // 未登录 / 串号两种情况下，账号相关接口一律保持 web（见 mustKeepWebForAccount）
-        if (mustKeepWebForAccount(rule, identity, accessToken)) return null
+        // 当前端口没有激活账号时，账号相关接口一律保持 web（见 mustKeepWebForAccount）
+        if (mustKeepWebForAccount(rule, accessToken)) return null
 
         val target = resolveTarget(host, path, rule)
         val targetHost = target.first
@@ -351,120 +248,20 @@ object ApiRouter {
     }
 
     /**
-     * 选出这次请求要用的端口身份（v5.1.4 三级模式的关键补丁）。
+     * 账号相关接口是否必须保持 web。
      *
-     * # 为什么需要它
+     * 唯一理由：`isLoginRequired` 但当前端口的激活账号没有 token。
+     * 匿名 APP 请求对收藏/历史/动态这类接口可能回 code=0 但数据为空——这种「静默空数据」
+     * 回退检测抓不住，所以没登录就老老实实回 web（那里要么有 Cookie，要么同样提示登录）。
      *
-     * v5.1.3 及以前的写法是 `singlePortIdentity() ?: AppRcmdApi.getIdentityById(rule.preferredIdentity)`
-     * —— 身份默认跟随用户在「移动端推荐逻辑」里选的当前身份（出厂默认 HD）。
-     * 于是三级模式下出现这个死结：**用户只登录了 TV 端、又把 Web 退出了**：
-     *
-     * 1. 当前身份是 HD → HD 没登录 → `accessToken` 为空；
-     * 2. [mustKeepWebForAccount] 见 token 为空 → 判定「保持 web」；
-     * 3. 可 web 已经被用户退出了，Cookie 是空的 → 请求必然失败。
-     *
-     * 用户的体感就是「退出 Web 登录后，收藏/历史/稍后再看/动态全不能用了」。
-     * 端口明明登录着却没人去用它，这是纯粹的路由选择缺陷，不是账号体系的问题。
-     *
-     * # 选择顺序
-     *
-     * 1. **单端口模式**（实验室「重构账号体系」选了非 web 端口）：端口就是唯一账号，直接用它，
-     *    与 v5.1.1 行为完全一致；
-     * 2. 规则/设置指定的身份**已登录**：用它（第一级、第二级、以及三级下已登录用户，
-     *    行为全部保持不变——这条保证本次改动对存量用户零影响）；
-     * 3. **三级模式**（全 API 迁移开关打开）且指定身份未登录：按 手机 → HD → TV 挑第一个已登录的。
-     *    为什么是这个顺序：手机端 appkey 与官方手机客户端一致，兼容的接口最多；
-     *    HD/TV 次之。这里只影响「挑谁」，不影响用户设置；
-     * 4. 都不满足：返回指定身份（即维持原行为，账号接口照旧回退 web）。
-     *
-     * # 不做的事
-     *
-     * - **不修改** `app_rcmd_identity`（用户选的当前身份保持不变，只是本次请求临时借另一个端口的 token）；
-     * - **不打印**任何 token / cookie，日志只有身份 id。
-     *
-     * @param preferredIdentity 规则声明的首选身份 id，null = 跟随当前身份
-     */
-    private fun pickUsableIdentity(preferredIdentity: String?): AppRcmdApi.RcmdIdentity {
-        // 1. 单端口模式：端口就是唯一账号（v5.1.1 既有行为，不动）
-        singlePortIdentity()?.let { return it }
-
-        val preferred = AppRcmdApi.getIdentityById(preferredIdentity)
-        // 2. 指定身份已登录：一切都按原样（存量用户零影响）
-        if (AppRcmdApi.isIdentityLogin(preferred.id)) return preferred
-
-        // 3. 三级模式才有资格"借"别的端口；一/二级保持原行为
-        if (!isThirdTier()) return preferred
-        if (!isAccountMismatchSafeForBorrow()) return preferred
-
-        // 4. 在已登录的端口里挑第一个（挑不到就维持 preferred，让上层按老规矩回退 web）
-        return firstLoggedIdentity(preferred.id) ?: preferred
-    }
-
-    /**
-     * 在 [BORROW_ORDER] 里找第一个已登录、且不是 [excludeId] 的端口身份。
-     *
-     * 抽成独立函数有两个原因：① [pickUsableIdentity] 的循环里 continue/break 太多会触发
-     * detekt 的 LoopWithTooManyJumpStatements；② 「挑一个已登录端口」这个语义本身值得单独命名。
-     *
-     * @return null 表示没有任何其他端口已登录
-     */
-    private fun firstLoggedIdentity(excludeId: String): AppRcmdApi.RcmdIdentity? {
-        val candidateId = BORROW_ORDER.firstOrNull {
-            it != excludeId && AppRcmdApi.isIdentityLogin(it)
-        } ?: return null
-        Logu.d(TAG, "当前身份未登录，本次借用已登录端口：" + candidateId)
-        return AppRcmdApi.getIdentityById(candidateId)
-    }
-
-    /**
-     * 是否处于「全 API 迁移」这一级（第三级）。
-     *
-     * 注意**不能**用 `isEnabled()`：那个方法在单端口模式下也返回 true，
-     * 而单端口模式在 [pickUsableIdentity] 第 1 步就返回了，这里只关心旧开关本身。
-     */
-    private fun isThirdTier(): Boolean {
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_MIGRATION_ENABLED, true)
-    }
-
-    /**
-     * 「借用」另一个端口的 token 是否安全。
-     *
-     * 只有当 web 没登录、或 web 与要借的端口是同一个人时才是安全的：
-     * 否则用户在 web 登 A 号、在端口登 B 号，借 B 的 token 去发请求会让 A 号用户
-     * 莫名其妙操作了 B 号的账号（收藏到 B 的收藏夹、给 B 的关注列表加人）。
-     *
-     * 这与 [isAccountMismatch] 的口径一致：两边都有 mid 且不相等才算串号。
-     * web 没登录（mid=0）时没有"串号"可言——用户本来就没在用 web 那个号。
-     */
-    private fun isAccountMismatchSafeForBorrow(): Boolean {
-        return !AccountManager.isWebLoggedIn()
-    }
-
-    /**
-     * 账号相关接口是否必须保持 web（两个理由之一即保持）：
-     * 1. `isLoginRequired` 但当前 APP 身份没登录 —— 匿名 APP 请求可能返回 code=0 却是空数据；
-     * 2. APP 身份与 web 账号**不是同一个号** —— 否则会静默读写另一个账号的数据。
-     *
-     * 单端口模式（实验室「重构账号体系」）跳过第 2 条 [isAccountMismatch] 检查：
-     * 端口账号就是唯一账号，web 没登录是预期状态（这正是本功能的意义）；
-     * 即使 web 登了别的号，APP 通道请求也根本不读 web Cookie，不存在串号路径。
-     * 第 1 条「无 token → 保持 web」分支**保留**：没登录的端口无法替登录接口，
-     * 这类接口在未登录时本来就该保持 web（提示登录），绝不匿名硬闯。
-     *
-     * v5.1.4 补充：**web 没登录时也跳过第 2 条**。用户已经把 web 退出了，
-     * 此时端口账号就是他的唯一账号，没有任何"串号"风险（见 [isAccountMismatchSafeForBorrow]）。
-     * 否则「退出 web 登录 → 端口账号明明登录着 → 账号接口却全部回退到空 Cookie 的 web → 失败」。
+     * v5.1.5 去掉了「串号」判定：端口由用户在账号管理里显式选定，
+     * APP 通道根本不读 web Cookie，不存在读写另一个账号的路径。
      */
     private fun mustKeepWebForAccount(
         rule: ApiMigrationRules.Rule,
-        identity: AppRcmdApi.RcmdIdentity,
         accessToken: String
     ): Boolean {
-        if (!rule.isLoginRequired) return false
-        if (accessToken.isEmpty()) return true
-        if (isSinglePortMode()) return false
-        if (!AccountManager.isWebLoggedIn()) return false
-        return isAccountMismatch(identity)
+        return rule.isLoginRequired && accessToken.isEmpty()
     }
 
     /**
@@ -523,12 +320,10 @@ object ApiRouter {
             return null
         }
 
-        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份），且不能串号；
-        // 单端口模式下身份被端口覆盖（同 buildGetPlan 的口径）；
-        // 三级模式下若当前身份未登录则借用已登录端口（同 buildGetPlan，见 pickUsableIdentity）
-        val identity = pickUsableIdentity(rule.preferredIdentity)
+        // 写操作全部要求已登录（两种清单里的接口都依赖账号身份）；身份同样取账号管理里选的端口
+        val identity = routingIdentity() ?: return null
         val accessToken = AppRcmdApi.getAccessToken(identity.id)
-        if (mustKeepWebForAccount(rule, identity, accessToken)) return null
+        if (mustKeepWebForAccount(rule, accessToken)) return null
 
         val target = resolveTarget(host, path, rule)
         val targetHost = target.first

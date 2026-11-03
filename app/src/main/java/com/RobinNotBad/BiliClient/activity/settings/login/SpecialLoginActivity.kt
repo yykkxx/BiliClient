@@ -14,6 +14,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
@@ -53,10 +54,22 @@ class SpecialLoginActivity : BaseActivity() {
                 try {
                     val jsonObject = JSONObject(loginInfo)
                     val cookies = jsonObject.getString("cookies")
-                    SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, NetWorkUtil.getInfoFromCookie("DedeUserID", cookies).toLong())
-                    SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, NetWorkUtil.getInfoFromCookie("bili_jct", cookies))
-                    SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies)
-                    SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, jsonObject.getString("refresh_token"))
+                    // v5.1.5：手工 Cookie 导入与扫码登录走同一条写入路径（web 端口多账号槽位）。
+                    // mid 从 Cookie 里的 DedeUserID 解析；解析不出来就按 0 处理，让 AccountStore
+                    // 拒绝写入而不是写进一个 uid 0 的假账号。
+                    val mid = NetWorkUtil.getInfoFromCookie("DedeUserID", cookies).trim().toLongOrNull() ?: 0L
+                    if (mid <= 0L) {
+                        MsgUtil.showMsg("Cookie 里没有有效的 DedeUserID，请重新复制")
+                        return@setOnClickListener
+                    }
+                    AccountStore.loginWeb(
+                        mid,
+                        cookies,
+                        NetWorkUtil.getInfoFromCookie("bili_jct", cookies),
+                        jsonObject.optString("refresh_token", ""),
+                        null,
+                        null
+                    )
                     runOnUiThread { MsgUtil.showMsg("登录成功！") }
                     SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.setup, true)
 
@@ -89,7 +102,21 @@ class SpecialLoginActivity : BaseActivity() {
                     try {
                         val input = JSONObject(textInput!!.getText().toString())
                         val cookies = input.getString("cookies")
-                        SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, cookies)
+                        // debug 分支也要记进账号槽位：否则「导入 cookies」后账号管理页看不到这个号。
+                        // 昵称/头像留空，由账号管理页懒加载。
+                        val mid = NetWorkUtil.getInfoFromCookie("DedeUserID", cookies).trim().toLongOrNull() ?: 0L
+                        if (mid <= 0L) {
+                            MsgUtil.showMsg("Cookie 里没有有效的 DedeUserID")
+                            return@setOnClickListener
+                        }
+                        AccountStore.loginWeb(
+                            mid,
+                            cookies,
+                            NetWorkUtil.getInfoFromCookie("bili_jct", cookies),
+                            input.optString("refresh_token", ""),
+                            null,
+                            null
+                        )
                         runOnUiThread { MsgUtil.showMsg("导入cookies成功") }
 
                         NetWorkUtil.refreshHeaders()

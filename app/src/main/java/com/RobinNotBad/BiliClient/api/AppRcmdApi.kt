@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.QRCodeUtil
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
 import org.json.JSONArray
@@ -116,26 +117,34 @@ object AppRcmdApi {
         "android", 8430300, 2, "android", "phone", 8)
 
     /**
+     * 当前操作的身份 id。
+     *
+     * v5.1.5：身份不再是一个独立开关，而是从「账号管理」里选的两个端口推导出来的——
+     * 优先「其它页面 API」端口（所有接口都走它），其次「推荐页 API」端口；
+     * 两个端口都是 Web 或未设置时回退 HD（与 v5.0.0 起的默认一致）。
+     *
+     * 只在函数内引用 AccountStore，避免两个 object 的顶层初始化互相依赖。
+     */
+    @JvmStatic
+    fun getIdentityId(): String {
+        val main = AccountStore.mainIdentity()
+        if (main != null) return main.id
+        val rcmd = AccountStore.rcmdIdentity()
+        if (rcmd != null) return rcmd.id
+        return IDENTITY_HD
+    }
+
+    /**
      * 当前选中的客户端身份（默认 HD，与旧版本行为一致）。
-     * 读取时做一次归一化（去空格/转小写），避免历史版本写入了大小写不一致的值后
-     * 永远回退成 HD——那会表现为「不管选哪端，当前身份都显示 HD」。
      */
     @JvmStatic
     fun getIdentity(): RcmdIdentity {
-        val raw = (SharedPreferencesUtil.getString(SharedPreferencesUtil.APP_RCMD_IDENTITY, IDENTITY_HD) ?: "")
-                .trim()
-                .lowercase()
-        return when (raw) {
+        val identityId = getIdentityId()
+        return when (identityId) {
             IDENTITY_TV -> TV_IDENTITY
             IDENTITY_PHONE -> PHONE_IDENTITY
             else -> HD_IDENTITY
         }
-    }
-
-    /** 移动端推荐逻辑是否开启 */
-    @JvmStatic
-    fun isEnabled(): Boolean {
-        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.APP_RCMD_ENABLED, false)
     }
 
     /**

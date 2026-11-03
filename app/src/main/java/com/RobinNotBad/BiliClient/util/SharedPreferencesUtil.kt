@@ -17,27 +17,33 @@ object SharedPreferencesUtil {
     @JvmField
     val RCMD_API_NEW_PARAM = "rcmd_api_new_param"
 
-    // 移动端推荐逻辑（实验性）：全部使用独立前缀 app_rcmd_，与 web 登录互不影响
-    @JvmField
-    val APP_RCMD_ENABLED = "app_rcmd_enabled"
+    // ==================== 账号管理（v5.1.5：端口 × 多账号） ====================
+    // 取代 v5.1.1~v5.1.4 的「登录选项」/「三级迁移」/「实验室重构账号体系」三套实验开关。
+    // 这里只放**键名常量**，全部读写逻辑收敛在 util/AccountStore（唯一事实来源）。
+    // 旧键（app_rcmd_enabled / app_rcmd_identity / app_rcmd_use_web / api_migration_enabled /
+    // lab_account_refactor / account_refactor_port）已删除常量：只由 AccountStore.ensureMigrated()
+    // 用字面量一次性读取做迁移，此后全 App 不再读写它们。
 
-    // 移动端推荐客户端身份（当前激活的一派）：hd（默认）/ tv / phone
-    @JvmField
-    val APP_RCMD_IDENTITY = "app_rcmd_identity"
+    // 推荐页 API 端口（页签 1）：web / android / hd / tv
+    const val ACCOUNT_MGMT_RCMD_PORT = "account_mgmt_rcmd_port"
 
-    // v5.1.4 三级模式专用：推荐页是否强制走 Web 接口。
-    // 背景：三级模式下「推荐 API 迁移」栏目要增设「Web 端」选项（用户明确要求），
-    // 选中后推荐页退回 web 推荐，其余接口仍走端口——两个开关各管一件事，互不干扰。
-    // 独立键的好处：不动 APP_RCMD_ENABLED 的既有语义（那个键代表"推荐页用不用 APP 接口"，
-    // 且被 AppRcmdLoginActivity 登录成功后自动置 true，直接复用它会被登录流程覆盖）。
-    const val APP_RCMD_USE_WEB = "app_rcmd_use_web"
+    // 其它页面 API 端口（页签 2）：web / android / hd / tv
+    const val ACCOUNT_MGMT_MAIN_PORT = "account_mgmt_main_port"
 
-    // 全 API 迁移（实验性，默认关）：开启后 NetWorkUtil 的 bilibili 请求先尝试
-    // APP 通道（复用上面的三身份 appkey / token 槽位），失败自动回退 web 原请求。
-    // 统计与最近失败端点由 api/migration/ApiRouter 自己维护（api_migration_stat_* 等键）。
-    // 用 const 而非 @JvmField：字符串常量用 const 更准确（detekt MayBeConst），
-    // 对 Java 端同样是 public static final，可直接访问。
-    const val API_MIGRATION_ENABLED = "api_migration_enabled"
+    // 当前激活的 web 账号 mid（空 = 无激活账号）
+    const val ACCOUNT_MGMT_WEB_ACTIVE = "account_mgmt_web_active"
+
+    // 某个 APP 端口的激活账号 mid：account_mgmt_app_active_<identityId>
+    const val ACCOUNT_MGMT_APP_ACTIVE_PREFIX = "account_mgmt_app_active_"
+
+    // 端口下的账号 mid 有序列表：account_mgmt_list_<port> = "mid1,mid2,..."
+    const val ACCOUNT_MGMT_LIST_PREFIX = "account_mgmt_list_"
+
+    // 账号凭据槽：account_mgmt_<port>_<mid>_cookies|csrf|access_token|refresh_token|name|face
+    const val ACCOUNT_MGMT_ACCOUNT_PREFIX = "account_mgmt_"
+
+    // 迁移完成哨兵（幂等）
+    const val ACCOUNT_MGMT_MIGRATED = "account_mgmt_migrated"
 
     // ==================== 三端独立登录（v5.0.0 重构） ====================
     // 每个身份（hd / tv / phone）各有一套独立 token，可同时登录、互不干扰；
@@ -46,19 +52,6 @@ object SharedPreferencesUtil {
 
     @JvmField
     val APP_RCMD_BUVID = "app_rcmd_buvid"
-
-    // ==================== 重构账号体系（实验室实验，v5.1.1） ====================
-    // 全新命名键（lab_ / account_refactor_ 前缀），升级/降级兼容红线：只新增、绝不改写旧键；
-    // 老版本读不到新键就当不存在，行为回到老版。
-    // 用 const 而非 @JvmField：字符串常量用 const 更准确（detekt MayBeConst），
-    // 对 Java 端同样是 public static final，可直接访问（与上方 API_MIGRATION_ENABLED 同理）。
-    // 实验室总开关：打开后 ApiRouter 才可能启用单端口模式（是否真启用还看端口是否非 web）。
-    const val LAB_ACCOUNT_REFACTOR = "lab_account_refactor"
-
-    // 单端口模式端口：web / android / hd / tv。web = 维持 web Cookie 通道不变；
-    // 其余三端复用 AppRcmdApi 既有槽位 app_rcmd_{phone|hd|tv}_*，不新增任何凭据存储，
-    // 也绝不把 web Cookie 写进 app_rcmd 槽位（禁止跨端转移）。
-    const val ACCOUNT_REFACTOR_PORT = "account_refactor_port"
 
     // ==================== 旧版本（v5.0.0-alpha 时代）单 token 键，仅用于迁移 ====================
     @JvmField

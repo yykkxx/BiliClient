@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.api.migration
 
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
+import com.RobinNotBad.BiliClient.util.AccountStore
 
 /**
  * 「全 API 迁移」的映射表（alpha10：真·全量迁移）。
@@ -660,8 +661,10 @@ object ApiMigrationRules {
     @JvmStatic
     fun isReplyAppPagingEnabled(): Boolean {
         if (!ApiRouter.isEnabled()) return false
-        val identity = ApiRouter.singlePortIdentity() ?: return AppRcmdApi.isLogin()
-        return AppRcmdApi.isIdentityLogin(identity.id)
+        // 身份与路由口径一致：都是「账号管理 → 其它页面 API」里选的那个端口
+        val identity = AccountStore.mainIdentity() ?: return false
+        return AccountStore.activeAccessToken(AccountStore.mainPort()).isNotEmpty() &&
+                AppRcmdApi.isIdentityLogin(identity.id)
     }
 
     /** 默认策略是否允许对该 host 做 GET 迁移（未命中显式规则时） */
