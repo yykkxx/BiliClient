@@ -9,7 +9,6 @@ import android.view.View
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
-import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity
 import com.RobinNotBad.BiliClient.api.AppInfoApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
@@ -43,20 +42,19 @@ class SettingMainActivity : InstanceActivity() {
                 startActivity(intent)
             }
 
-            //登录（v5.1.4 账号解耦：这里只代表「Web 登录」，与端口账号无关）
+            //登录（v5.1.5：入口统一到「账号管理」，这里只在**一个账号都没有**时露出快捷入口）
             //
-            // 历史行为：web mid==0 就把「查看登录信息」藏掉、露出「登录」按钮。
-            // 三级模式下用户可能只登录了端口、完全不用 web，此时：
-            // - 不该再把「查看登录信息」藏起来（那是 web 工具栏，仍有用）；
-            // - 但「登录」入口本身是 web 登录入口，web 没登录时它确实该出现。
-            // 所以判断口径保持 web（这是 web 专属入口），同时**不再隐藏** login_cookie，
-            // 并在文案上说明「这里只影响 Web 通道」，避免用户以为整个 App 没登录。
+            // 历史行为：web mid==0 就露出「登录」按钮并直跳 web 扫码页。现在登录方式有四种端口、
+            // 且同一端口可多账号，直接跳 web 扫码头会让人误以为只能登 web。所以：
+            // - 判断口径改成「任意端口有没有账号」（AccountManager.isLoggedIn），
+            //   只登录了 HD/TV/手机端时不再显示这个快捷入口；
+            // - 点它进「账号管理」，让用户先选端口再登录，和设置主页的其它入口一致。
             val login = findViewById<MaterialCardView>(R.id.login)
-            if (!AccountManager.isWebLoggedIn()) {
+            if (!AccountManager.isLoggedIn()) {
                 login.visibility = View.VISIBLE
                 login.setOnClickListener { view ->
                     val intent = Intent()
-                    intent.setClass(this, LoginActivity::class.java)   //去扫码登录页
+                    intent.setClass(this, SettingAccountActivity::class.java)
                     startActivity(intent)
                 }
             }

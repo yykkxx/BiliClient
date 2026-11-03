@@ -21,7 +21,6 @@ import com.RobinNotBad.BiliClient.activity.message.MessageActivity
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity
 import com.RobinNotBad.BiliClient.activity.settings.SettingAccountActivity
 import com.RobinNotBad.BiliClient.activity.settings.SettingMainActivity
-import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.activity.user.MySpaceActivity
 import com.RobinNotBad.BiliClient.activity.video.PopularActivity
 import com.RobinNotBad.BiliClient.activity.video.PreciousActivity
@@ -196,8 +195,10 @@ class MenuActivity : BaseActivity() {
                     Process.killProcess(Process.myPid())
                 }
                 "login" -> { //登录按钮
+                    // v5.1.5：登录入口统一到「账号管理」——用户先选端口（Web / Android手机 / HD / TV）再登录，
+                    // 且同一端口可以登录多个账号；直接跳 web 扫码页会让人误以为只有 web 一种登录方式。
                     val intent = Intent()
-                    intent.setClass(this@MenuActivity, LoginActivity::class.java)
+                    intent.setClass(this@MenuActivity, SettingAccountActivity::class.java)
                     startActivity(intent)
                 }
             }

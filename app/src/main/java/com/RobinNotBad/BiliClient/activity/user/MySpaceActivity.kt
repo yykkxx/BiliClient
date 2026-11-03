@@ -10,7 +10,7 @@ import android.widget.TextView
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
-import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
+import com.RobinNotBad.BiliClient.activity.settings.SettingAccountActivity
 import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteFolderListActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.UserInfoApi
@@ -307,8 +307,14 @@ class MySpaceActivity : InstanceActivity() {
         bindPageActions()
     }
 
-    /** 仅供页面内「去登录」入口 / 无账号时点击卡片使用（用户主动触发，不是强制跳转） */
+    /**
+     * 仅供页面内「去登录」入口 / 无账号时点击卡片使用（用户主动触发，不是强制跳转）。
+     *
+     * v5.1.5 起登录入口统一收敛到「设置 → 账号管理」：那里能选端口（Web / Android手机 / HD / TV）
+     * 并登录任意端口的任意多个账号。这里不再直接跳 web 扫码页——否则用户会以为「只能用 web」，
+     * 而实际上哪个端口登录都能用全部功能。
+     */
     private fun jumpToLogin() {
-        startActivity(Intent(this, LoginActivity::class.java))
+        startActivity(Intent(this, SettingAccountActivity::class.java))
     }
 }
