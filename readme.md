@@ -79,9 +79,12 @@
 ## 下载与安装
 
 - 所有版本都在 [Gitee Releases](https://gitee.com/yykkxxykx/BiliClient/releases) 发布，**预发布版（alpha/beta）也只在 Gitee**。
-- 安装包分两种：
-  - **主包**：包名 `com.RobinNotBad.BiliClient`，正常安装即可；
-  - **渠道包**（`com.tencent.qqmusicwatchs`，应用名「QQ音乐」）：部分设备出于兼容性或规避检测需要时使用；其中 `*_hidden.apk` **没有启动器入口**（桌面不显示图标），需要借助其他方式启动。
+- 每个版本通常带 **3 个安装包 + 1 个校验文件**：
+  - **主包**（`BiliClient-<版本>-signed.apk`）：包名 `com.RobinNotBad.BiliClient`，正常安装即可；
+  - **渠道包·显示版**（`com.tencent.qqmusicwatchs_20260606.apk`，应用名「QQ音乐」）：部分设备出于兼容性或规避检测需要时使用；
+  - **渠道包·隐藏版**（`com.tencent.qqmusicwatchs_20260606_hidden.apk`）：在上面的基础上**没有启动器入口**（桌面不显示图标），需要借助其他方式启动；
+  - `SHA256SUMS.txt`：以上安装包的 SHA-256 校验值，下载后可自行核对。
+- **每次发版都会同时提供渠道包**（显示版 + 隐藏版），不再需要单独索要。
 - `*_sign.apk` 是使用**正式证书**重签的渠道包（与调试证书版本内容一致，仅签名不同）。**同一台设备上不同证书的包不能互相覆盖安装**，切换前请先卸载。
 - 卸载会清空本地数据（登录态、设置、缓存），升级前请注意。
 - **`5.0.2-alpha8` 及以后的包换了调试证书**（SHA-256 `9B:64:6A:7C:…:AE:8A`），与此前版本（`ebce91…`）不同。
