@@ -1,1 +1,3 @@
 9bb9c1f11cfe2e9148c5c3a03d8c7c2b82c080372304b6cbdf33ed36ce0161d8  BiliClient-5.1.5-signed.apk
+32d26ffd6e5795d5bd893c0eaf0e0507504450131d673d3d883b24a9ff09c01e  com.tencent.qqmusicwatchs_20260606.apk
+3832f0b1741c384e8f99092bd0e72043ea5b8cfaef47b447492ac3cd6951c2cd  com.tencent.qqmusicwatchs_20260606_hidden.apk
