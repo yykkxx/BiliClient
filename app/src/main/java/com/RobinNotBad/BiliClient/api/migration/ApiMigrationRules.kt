@@ -421,10 +421,19 @@ object ApiMigrationRules {
                     "首页推荐（web）。实测 APP 参数 → code=0（item[]/business_card/floor_info 齐全）"),
             get("/x/web-interface/popular/precious", "入站必刷。实测 code=0"),
             // —— 搜索（alpha9 的 KEEP_WEB 已被本轮实测推翻）——
+            // v5.1.6 修正：这两条原来是 required=null（只验 code==0），结果被**风控壳**穿透了——
+            // 「账号管理 → 其它页面 API」选 Android 端口后，服务端会回 code=0 但 data 只有
+            // `v_voucher`（既无 seid 也无 result），上游 SearchApi 解析 seid 直接抛
+            // 「No value for seid」。现在显式要求 seid + result：风控壳缺这些字段 → 回退 web。
+            // 注意 required 校验对「data 是数组」只看非空；这两个端点 data 都是对象，能正常下钻。
             get("/x/web-interface/wbi/search/type",
-                    "分类搜索。实测 APP 参数 → code=0，numResults=1000、result[] 20 条，结构与 web 完全一致"),
+                    "分类搜索。实测 APP 参数 → code=0、result[] 20 条与 web 一致；" +
+                            "风控态回 code=0 + 仅 v_voucher 的壳，故必须校验 seid/result 以触发回退",
+                    required = listOf("seid", "result")),
             get("/x/web-interface/wbi/search/all/v2",
-                    "综合搜索。实测 APP 参数 → code=0（seid/page/numResults/result 齐全）"),
+                    "综合搜索。实测 APP 参数 → code=0（seid/page/numResults/result 齐全）；" +
+                            "风控态回 v_voucher 壳，同样靠 seid/result 校验回退 web",
+                    required = listOf("seid", "result")),
             get("/x/web-interface/wbi/search/default",
                     "搜索默认词。实测 APP 参数 → code=0（show_name/goto_value 齐全）"),
             // —— 排行 / 热门（alpha9 记 -352，本轮复测推翻）——

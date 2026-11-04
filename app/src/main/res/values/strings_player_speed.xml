@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  播放器缓冲界面：网速占位文案（5.1.5 修复 Media3 内核恒显 0.0KB/s）。
+
+  单独成文件而不是塞进 strings.xml：那份是公共字符串表，播放器相关的新增文案
+  都收敛到本文件，避免和别的改动在同一批行上冲突。
+-->
+<resources>
+    <!-- 拿不到实时速率时显示（刚连上 / 还没开始拉流 / 暂停中）。用占位符而不是 0.0KB/s，
+         因为恒定的 0.0KB/s 会被当成"网速为 0"的假数据。 -->
+    <string name="player_speed_unknown">-- KB/s</string>
+</resources>

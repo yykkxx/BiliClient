@@ -9,6 +9,7 @@ import okhttp3.HttpUrl
 // quality-allow：这里只需要在 16KB 的响应前缀里做「字段存在性」判定，
 // 不是业务数据解析（业务解析仍在各 Api 对象里）。为一次浅层路径检查引入 Gson/序列化
 // 或新建 model 得不偿失，故允许在本文件用轻量 org.json。
+import org.json.JSONException // quality-allow：仅用于区分「前缀不是完整 JSON」这一预期分支
 import org.json.JSONObject // quality-allow：仅做 16KB 前缀里的字段存在性判定，不是业务数据解析
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Response
@@ -96,6 +97,22 @@ object ApiRouter {
     private val CODE_REGEX = Regex("\"code\"\\s*:\\s*(-?\\d+)")
 
     private val TIME_FORMAT = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+
+    /**
+     * 风控/校验类字段（小写，精确匹配）。
+     *
+     * 背景见 [riskControlShellReason]：APP 通道被风控时回 `code=0` + `data:{v_voucher}`，
+     * 上游解析 `seid`/`result` 必然抛异常。这里列出「已知不代表业务数据」的键。
+     */
+    private val RISK_CONTROL_KEYS = hashSetOf(
+        "v_voucher", "v_score", "risk_level", "gaia_source", "is_risk"
+    )
+
+    /**
+     * 风控类字段前缀（小写）：服务端既有 `gaia_*`（风控埋点）也有 `v_*`（校验票据）命名。
+     * 用前缀覆盖同族新字段，避免每次服务端改名都要发版。
+     */
+    private val RISK_CONTROL_PREFIXES = arrayOf("gaia_", "v_voucher_", "v_score_", "risk_")
 
     // ==================== 请求计划 ====================
 
@@ -458,7 +475,34 @@ object ApiRouter {
             val missing = firstMissingField(trimmed, plan.requiredDataFields, plan.loginRequired)
             if (missing != null) return Verdict(isOk = false, reason = "缺少字段 " + missing)
         }
+        // 风控空壳兜底（v5.1.6）：`code=0` + `data` 只有 v_voucher 这类校验票据，
+        // 一个业务字段都没有。这种回包必须回退 web，否则上层解析必然抛异常
+        // （「Android 端口搜索报 No value for seid」就是这条路径）。
+        // 放在最后一道：只有前面所有 code / 字段校验都放行了才走到这里。
+        val riskShell = riskControlShell(trimmed)
+        if (riskShell != null) return Verdict(isOk = false, reason = riskShell)
         return Verdict(isOk = true, reason = "")
+    }
+
+    /**
+     * 风控空壳判定（解析 JSON 后再交给 [riskControlShellReason]）。
+     *
+     * 单独抽一层的原因：`classifyJsonBody` 已被 detekt 盯上圈复杂度，
+     * 再加 try/catch 会顶破上限。
+     *
+     * 解析失败时**放行**（返回 null）而不是判失败：这里只读到响应体前 16KB 前缀，
+     * 大响应的 JSON 可能本来就被截断；那种情况下前面的 `firstMissingField` 已经因为
+     * 「不是完整 JSON」回退过 web 了，重复判失败没有额外价值，还容易误伤正常回包。
+     * 刻意不记录原异常：这只是「前缀无法解析成完整 JSON」的预期分支，不是错误路径。
+     */
+    private fun riskControlShell(trimmed: String): String? {
+        return try {
+            riskControlShellReason(JSONObject(trimmed))
+        } catch (ignored: JSONException) {
+            // 前缀不是完整 JSON（预期分支，见上方注释）：不视为风控壳。
+            // 变量名 ignored 是 detekt SwallowedException 的豁免约定，与仓库其它位置写法一致。
+            null
+        }
     }
 
     /**
@@ -509,6 +553,46 @@ object ApiRouter {
         if (presenceOnly) return null
         val checked = fields ?: return null
         return missingDataShape(root, checked)
+    }
+
+    /**
+     * 风控空壳判定（v5.1.6，修「Android 端口搜索报 No value for seid」）。
+     *
+     * B 站风控在「疑似异常流量」时会对 `search/all/v2`、`search/type` 等接口返回
+     * **code=0 但 `data` 只有一个 `v_voucher`** 的壳（实测复现：连续请求 12 次全部命中，
+     * 同一关键词走 web WBI 通道则正常带 seid/result）。这类回包：
+     * - 通过 `code=0` 检查 → 被当成「APP 通道可用」直接交给调用方；
+     * - 上游 `SearchApi` 解析 `data.getString("seid")` → 抛 `JSONException: No value for seid`；
+     * - 后台线程未捕获 → 用户看到的现象就是「搜索直接报错，一条结果都没有」。
+     *
+     * 所以：`data` 非空但**除风控字段外没有任何业务字段**时，一律判定「不可用」回退 web。
+     * 不写死只看 v_voucher：服务端可能换字段名（如 `v_voucher`/`gaia_*`），
+     * 这里用「白名单式风控键 + 没有其它业务键」的组合判定，比逐个枚举更耐演化。
+     *
+     * @return 命中风控壳时返回原因文案；正常回包返回 null
+     */
+    private fun riskControlShellReason(root: JSONObject): String? {
+        val data = root.optJSONObject("data") ?: return null
+        if (data.length() == 0) return null
+        val keys = data.keys()
+        var business = 0
+        while (keys.hasNext()) {
+            val key = keys.next().lowercase(Locale.ROOT)
+            if (!isRiskControlKey(key)) business++
+        }
+        return if (business == 0) "风控空壳(仅" + data.keys().next() + ")" else null
+    }
+
+    /**
+     * 风控/校验类字段名（小写）。这些键出现不代表有业务数据；
+     * 只有当 `data` 里**全是**这类键时才算风控壳。
+     */
+    private fun isRiskControlKey(key: String): Boolean {
+        if (RISK_CONTROL_KEYS.contains(key)) return true
+        for (prefix in RISK_CONTROL_PREFIXES) {
+            if (key.startsWith(prefix)) return true
+        }
+        return false
     }
 
     /**

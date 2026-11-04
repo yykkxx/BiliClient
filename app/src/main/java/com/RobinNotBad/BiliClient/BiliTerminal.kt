@@ -1,10 +1,13 @@
 package com.RobinNotBad.BiliClient
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
+import android.os.SystemClock
 import androidx.multidex.MultiDex
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
@@ -16,6 +19,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
+import com.RobinNotBad.BiliClient.util.UsageLimitManager
 import java.lang.ref.WeakReference
 
 class BiliTerminal : Application() {
@@ -69,7 +73,60 @@ class BiliTerminal : Application() {
                     }
                 })
             }
+
+            // v5.1.6 实验室「每日使用时长限制」的前台时长统计。
+            // 只在本 App 自己的 Activity 上触发（registerActivityLifecycleCallbacks 天然如此），
+            // 用 0→1 / 1→0 的边沿判定合并 Activity 频繁切换（推荐↔详情↔播放）时的一段前台时间。
+            registerActivityLifecycleCallbacks(ForegroundUsageTracker())
         }
+    }
+
+    /**
+     * 实验室「每日使用时长限制」的前台时长统计（v5.1.6）。
+     *
+     * 只统计本 App 自己的 Activity（`registerActivityLifecycleCallbacks` 天然如此），
+     * 用 [startedCount] 的 0→1 / 1→0 **边沿判定**把「推荐↔详情↔播放」这种频繁切换
+     * 合并成一段连续前台时间，不会重复累加，也不会在 Activity 之间跳转时丢掉时长：
+     * - 0→1（App 真正回到前台，第一个 Activity started）记下起点 [foregroundStartElapsed]；
+     * - 1→0（最后一个 Activity stopped）一次性 [UsageLimitManager.addUsage] 整段时长。
+     *
+     * 回调里**只做偏好读写**（SharedPreferencesUtil 是 apply 语义），不碰网络/IO/数据库。
+     */
+    private class ForegroundUsageTracker : Application.ActivityLifecycleCallbacks {
+        /** 处于 started 状态的 Activity 数量；只在 0/1 两个状态间判定边沿 */
+        private var startedCount = 0
+
+        /** 本轮前台的起点（SystemClock.elapsedRealtime，不受系统改时间影响）；0 = 未开始 */
+        private var foregroundStartElapsed = 0L
+
+        override fun onActivityStarted(activity: Activity) {
+            startedCount += 1
+            if (startedCount == 1) {
+                foregroundStartElapsed = SystemClock.elapsedRealtime()
+            }
+        }
+
+        override fun onActivityStopped(activity: Activity) {
+            if (startedCount <= 0) return
+            startedCount -= 1
+            // 还有别的 Activity 处于 started，说明只是页面切换，继续沿用同一个起点
+            if (startedCount > 0) return
+            val start = foregroundStartElapsed
+            foregroundStartElapsed = 0L
+            if (start > 0L) {
+                UsageLimitManager.addUsage(SystemClock.elapsedRealtime() - start)
+            }
+        }
+
+        // 其余回调与本功能无关，保持空实现（detekt 对 `= Unit` 不报 EmptyFunctionBlock）
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+        override fun onActivityResumed(activity: Activity) = Unit
+
+        override fun onActivityPaused(activity: Activity) = Unit
+
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+        override fun onActivityDestroyed(activity: Activity) = Unit
     }
 
     companion object {

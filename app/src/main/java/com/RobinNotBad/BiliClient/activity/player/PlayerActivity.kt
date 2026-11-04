@@ -69,6 +69,7 @@ import com.RobinNotBad.BiliClient.model.PlayerData
 import com.RobinNotBad.BiliClient.model.Subtitle
 import com.RobinNotBad.BiliClient.model.SubtitleLink
 import com.RobinNotBad.BiliClient.model.ViewPoint
+import com.RobinNotBad.BiliClient.player.Media3Player
 import com.RobinNotBad.BiliClient.player.PlayerFactory
 import com.RobinNotBad.BiliClient.ui.widget.BatteryView
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar
@@ -1467,23 +1468,54 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         loadingTimer = Timer("loading-speed", true)
         loadingTimer!!.schedule(object : TimerTask() {
             override fun run() {
-                if (destroyed)
-                    return
-                val player = ijkPlayer ?: return
-                val text: String
-                try {
-                    // 5.1.2：getTcpSpeed 是 IjkMediaPlayer 独有 API；Media3 引擎下显示 0
-                    val speed = (player as? IjkMediaPlayer)?.getTcpSpeed() ?: 0L
-                    text = String.format(Locale.CHINA, "%.1f", speed / 1024f) + "KB/s"
-                } catch (e: Exception) {
-                    return
-                }
-                runOnUiThread {
-                    if (!destroyed)
-                        loading_text1!!.text = text
-                }
+                pollLoadingSpeedOnce()
             }
         }, 0, 500)
+    }
+
+    /**
+     * 网速定时器的一拍（在 java.util.Timer 线程执行）。
+     *
+     * 这里只做「取一个 Long + 拼字符串」，取数走 [currentTcpSpeed]，两种引擎都是廉价的无锁读，
+     * 不会在 Timer 线程碰播放器内部；UI 更新统一 post 回主线程。
+     */
+    private fun pollLoadingSpeedOnce() {
+        if (destroyed)
+            return
+        val player = ijkPlayer ?: return
+        val text = try {
+            formatLoadingSpeed(currentTcpSpeed(player))
+        } catch (ignored: Exception) {
+            return
+        }
+        mainHandler?.post {
+            if (!destroyed)
+                loading_text1?.text = text
+        }
+    }
+
+    /**
+     * 取当前引擎的实时网速（字节/秒）。两种引擎取值方式不同：
+     * - IjkMediaPlayer：原生 getTcpSpeed()（FFP_PROP_INT64_TCP_SPEED，B/s）；
+     * - Media3Player：适配器内用 TransferListener 做字节差分算出的 B/s。
+     *
+     * 两者没有继承关系，只能按类型分派。Timer 线程调用安全：Media3Player 的实现读的是
+     * @Volatile 字段，不会碰 ExoPlayer（media3 要求主线程访问）。
+     */
+    private fun currentTcpSpeed(player: IMediaPlayer): Long = when (player) {
+        is IjkMediaPlayer -> player.getTcpSpeed()
+        is Media3Player -> player.getTcpSpeed()
+        else -> 0L
+    }
+
+    /**
+     * 缓冲网速文案。速度拿不到（刚连上、还没开始拉流、暂停中）时显示占位符而不是 0.0KB/s：
+     * 恒定的 0.0KB/s 会被用户当成"网速真的是 0"的假数据（5.1.x 的回归点就是这个）。
+     */
+    private fun formatLoadingSpeed(speedBytesPerSec: Long): String {
+        if (speedBytesPerSec <= 0L)
+            return getString(R.string.player_speed_unknown)
+        return String.format(Locale.CHINA, "%.1f", speedBytesPerSec / 1024f) + "KB/s"
     }
 
     private fun changeVideoSize() {

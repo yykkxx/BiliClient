@@ -19,8 +19,10 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.FileDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -43,6 +45,7 @@ import tv.danmaku.ijk.media.player.misc.ITrackInfo
 import java.io.FileDescriptor
 import java.io.IOException
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Media3（ExoPlayer）→ IMediaPlayer 适配器（5.1.2 实验播放内核，见 notes/player_lib_512.md）。
@@ -144,12 +147,64 @@ class Media3Player(context: Context) : IMediaPlayer {
     @Volatile
     private var pendingSurface: Surface? = null
 
+    // ---- 真实下载速率（v5.1.5）------------------------------------------
+    // media3 没有 ijk 的 getTcpSpeed()，也没有"已下载字节数"的公开 getter。这里用官方
+    // TransferListener（BaseDataSource.bytesTransferred 每次网络 read 回调一次，
+    // DefaultBandwidthMeter 内部用的正是同一信号）在**加载线程**累加真实字节，
+    // 再由已有的 500ms ticker 在**主线程**做窗口差分 → B/s。不包 DataSource，不碰 ExoPlayer
+    // 内部状态，续传/重试产生的字节也都是真实网络流量。
+    private val transferredBytes = AtomicLong(0L)
+
+    /** 上一采样窗口的字节快照（只由主线程 ticker 写） */
+    private var speedSampleBytes = 0L
+
+    /** 上一采样时刻；0 表示尚无基线（下一个窗口只建基线不出值） */
+    private var speedSampleAtMs = 0L
+
+    /** 对外发布的速率（B/s）：后台/Timer 线程无锁读 */
+    @Volatile
+    private var tcpSpeedBytesPerSec = 0L
+
+    /** 挂到 HTTP DataSource.Factory 上；file:// 本地播放不计（不是网络流量） */
+    private val transferListener = object : TransferListener {
+        override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {
+            // 无需处理：只关心字节增量
+        }
+
+        override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {
+            // 无需处理：起止时刻由 ticker 的窗口边界决定
+        }
+
+        override fun onBytesTransferred(
+            source: DataSource,
+            dataSpec: DataSpec,
+            isNetwork: Boolean,
+            bytesTransferred: Int,
+        ) {
+            // 加载线程回调：只做一次原子累加，不做任何分发/加锁
+            if (isNetwork && bytesTransferred > 0) transferredBytes.addAndGet(bytesTransferred.toLong())
+        }
+
+        override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {
+            // 无需处理：窗口内没有新字节时 ticker 会自动归零（暂停/缓冲满/停读）
+        }
+    }
+
     private var preparedNotified = false
     private var completionNotified = false
     private var lastPlaybackState = Player.STATE_IDLE
 
     /** HTTP 数据源工厂：prepareAsync 时按当前 option / headers 重配，MediaSource 构建时引用 */
     private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+
+    /**
+     * 最近一次采样窗口内的真实下载速率（字节/秒），单位与 ijk 的 getTcpSpeed() 对齐。
+     *
+     * 供 PlayerActivity 的缓冲网速显示使用：读的是一个 @Volatile 字段，无锁、无分发，
+     * 可以在任意线程（含 java.util.Timer 线程）安全调用，不会碰 ExoPlayer 内部状态
+     * （media3 要求主线程访问，见类注释）。未起播/暂停/已 release 时返回 0。
+     */
+    fun getTcpSpeed(): Long = if (released) 0L else tcpSpeedBytesPerSec
 
     // ------------------------------------------------------------------
     // IMediaPlayer 动作入口：全部收敛到主线程
@@ -217,6 +272,8 @@ class Media3Player(context: Context) : IMediaPlayer {
         // story 连续切换复用实例：stop + 清列表，保留实例（media3 复用时 Surface 保留上一帧，
         // 与 story 注释里 ijk 的复用行为一致）
         runOnMain {
+            // 速率状态先清：即使实例已不在（player==null 的早退路径），也不能留上一段的旧值
+            resetSpeedSample()
             val p = player ?: return@runOnMain
             p.stop()
             p.clearMediaItems()
@@ -232,8 +289,11 @@ class Media3Player(context: Context) : IMediaPlayer {
 
     override fun release() {
         released = true
+        // 先清速率再停 ticker：release 后 Timer 线程仍在读 getTcpSpeed()，不能留旧值
+        tcpSpeedBytesPerSec = 0L
         runOnMain {
             mainHandler.removeCallbacks(ticker)
+            resetSpeedSample()
             player?.release()
             player = null
         }
@@ -417,6 +477,10 @@ class Media3Player(context: Context) : IMediaPlayer {
         // B 站 CDN 常见 http<->https 302：DefaultHttpDataSource 默认拒绝跨协议重定向，必须打开
         httpDataSourceFactory.setAllowCrossProtocolRedirects(true)
         httpDataSourceFactory.setDefaultRequestProperties(dataSourceHeaders ?: emptyMap())
+        // 真实下载字节来源：TransferListener 在每次网络 read 时回调（见字段注释）。
+        // 走官方 DataSource.Factory 的 listener 通道，不包一层 DataSource，续传/重试的字节
+        // 也会原样计入（它们是真实流量）。
+        httpDataSourceFactory.setTransferListener(transferListener)
 
         // ---- 起播行为：start-on-prepared（ijk 缺省 1=自动播；story 显式传 0 再手动 start）----
         p.playWhenReady = optionLong("start-on-prepared", 1L) == 1L
@@ -441,6 +505,7 @@ class Media3Player(context: Context) : IMediaPlayer {
             preparedNotified = false
             completionNotified = false
             lastPlaybackState = Player.STATE_IDLE
+            resetSpeedSample()
             null
         } else {
             existing
@@ -667,7 +732,7 @@ class Media3Player(context: Context) : IMediaPlayer {
         }
     }
 
-    /** 500ms 轻量轮询：驱动 onBufferingUpdate + 刷新后台线程 getter 用的镜像状态 */
+    /** 500ms 轻量轮询：驱动 onBufferingUpdate + 刷新后台线程 getter 用的镜像状态 + 更新网速 */
     private val ticker = object : Runnable {
         override fun run() {
             if (released) return
@@ -685,9 +750,58 @@ class Media3Player(context: Context) : IMediaPlayer {
                         listener.onBufferingUpdate(this@Media3Player, percent)
                     }
                 }
+                updateSpeedSample(p)
             }
             mainHandler.postDelayed(this, POLL_INTERVAL_MS)
         }
+    }
+
+    /**
+     * 清空速率采样状态（release/reset/重建播放器时调用）。
+     *
+     * 累计字节清零、基线丢弃、对外值归零：复用实例（story 切集）时新一段从零起算，
+     * 不会把上一段残留的字节算进第一拍。
+     */
+    private fun resetSpeedSample() {
+        transferredBytes.set(0L)
+        speedSampleBytes = 0L
+        speedSampleAtMs = 0L
+        tcpSpeedBytesPerSec = 0L
+    }
+
+    /**
+     * 一个采样窗口：累计下载字节做差分 → 上窗口的实际吞吐（B/s）。只由主线程 ticker 调用。
+     *
+     * 判据：只有"确实在该拉流"的窗口才计速——用户暂停后（playWhenReady=false 且不在缓冲态）
+     * 即使 media3 还在把缓冲区填满，也归零，避免暂停期间还挂着一个速度；
+     * 停止计速时同时**丢弃基线**，否则恢复拉流后第一拍会把"停读的那段时间"算进分母，
+     * 得出一个明显偏小的假速度。
+     */
+    private fun updateSpeedSample(p: Player) {
+        val now = SystemClock.elapsedRealtime()
+        val total = transferredBytes.get()
+        val buffering = p.playbackState == Player.STATE_BUFFERING
+        val active = p.isLoading && (p.playWhenReady || buffering)
+        if (!active) {
+            tcpSpeedBytesPerSec = 0L
+            speedSampleAtMs = 0L
+            speedSampleBytes = total
+            return
+        }
+        val lastAt = speedSampleAtMs
+        if (lastAt == 0L) {
+            // 本次拉流的第一拍只建基线（分母不能为 0）
+            speedSampleAtMs = now
+            speedSampleBytes = total
+            return
+        }
+        val elapsed = now - lastAt
+        if (elapsed < MIN_SPEED_WINDOW_MS) return
+        val delta = total - speedSampleBytes
+        speedSampleAtMs = now
+        speedSampleBytes = total
+        // 一个窗口内没有新字节（解析/等首包/弱网停顿）：归零，别显示上一拍的旧值
+        tcpSpeedBytesPerSec = if (delta <= 0L) 0L else delta * 1000L / elapsed
     }
 
     private class NoRetryLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy() {
@@ -702,6 +816,12 @@ class Media3Player(context: Context) : IMediaPlayer {
 
         /** 轮询间隔：与 PlayerActivity 的进度刷新节奏匹配 */
         const val POLL_INTERVAL_MS = 500L
+
+        /**
+         * 网速差分的最小窗口：ticker 名义 500ms，但主线程卡顿会让相邻两拍只差几十毫秒，
+         * 那样算出来的 B/s 会把抖动放大好几倍。短于这个值就跳过本拍（保留旧值）。
+         */
+        const val MIN_SPEED_WINDOW_MS = 200L
 
         /** max-buffer-size 缺省值：与 PlayerActivity 默认档一致（20MB） */
         const val DEFAULT_MAX_BUFFER_BYTES = 20L * 1024L * 1024L

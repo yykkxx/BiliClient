@@ -2,6 +2,8 @@ package com.RobinNotBad.BiliClient.adapter
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -122,24 +124,143 @@ class SettingsAdapter(
         @JvmField
         val switchMaterial: SwitchMaterial = itemView.findViewById(R.id.setting_switch)
 
+        /** 倒计时心跳所在线程（主线程；RecyclerView 的 bind 也在主线程） */
+        private val guardHandler = Handler(Looper.getMainLooper())
+
+        /** 当前挂着的倒计时任务；bind 开头 / 回收时移除，避免跑到别的行上 */
+        private var guardTask: Runnable? = null
+
+        /** 程序性 setChecked（回弹开关、绑定初值）期间屏蔽 OnCheckedChangeListener */
+        private var suppressChange = false
+
+        /** 当前倒计时对应的原始 desc 文案，结束后恢复 */
+        private var originalDesc: CharSequence = ""
+
         fun bind(settingSection: SettingSection) {
-            if (settingSection.desc == null || settingSection.desc.isEmpty())
-                desc.setVisibility(View.GONE)
-            else {
-                desc.setText(settingSection.desc)
-                desc.setVisibility(View.VISIBLE)
-            }
+            // 复用坑：ViewHolder 会被回收给别的行用，先把上一个倒计时彻底取消，
+            // 否则滑动列表会让倒计时跑到别的行上，或对着已经回收的 View 操作。
+            cancelGuard()
+            bindDescText(settingSection)
             switchMaterial.setText(settingSection.name)
+
+            val guard = settingSection.extra as? SwitchDisableGuard
+            val sideEffect = settingSection.extra as? Runnable
+
             switchMaterial.setOnCheckedChangeListener(
                 { buttonView, isChecked ->
-                    SharedPreferencesUtil.putBoolean(settingSection.id, isChecked)
-                    // extra 可选携带 Runnable：开关写入后执行副作用（如实验室「重构账号体系」
-                    // 切换时清掉 ApiRouter 的连续失败暂停，让端点立刻按新配置重试）。
-                    // 不带 extra 时纯持久化，与原行为完全一致。
-                    (settingSection.extra as? Runnable)?.run()
+                    if (!suppressChange) {
+                        onSwitchChanged(settingSection, guard, sideEffect, isChecked)
+                    }
                 })
-            switchMaterial.setChecked(SharedPreferencesUtil.getBoolean(settingSection.id,
-                java.lang.Boolean.parseBoolean(settingSection.defaultValue)))
+            val stored = SharedPreferencesUtil.getBoolean(settingSection.id,
+                java.lang.Boolean.parseBoolean(settingSection.defaultValue))
+            // 不带守卫的行：与旧版逐行为一致，照旧直接 setChecked（监听器会在值变化时触发一次）。
+            // 带守卫的行：必须挡住监听器——复用到的 View 可能还残留上一行的选中态，
+            // 不挡的话 setChecked(false) 会被当成「用户想关闭」而立刻启动倒计时。
+            if (guard == null) switchMaterial.setChecked(stored) else setCheckedProgrammatically(stored)
+        }
+
+        /** desc 文案：空则隐藏，否则显示；同时记下原始文案供倒计时结束后恢复 */
+        private fun bindDescText(settingSection: SettingSection) {
+            val text = settingSection.desc
+            if (text == null || text.isEmpty()) {
+                originalDesc = ""
+                desc.setVisibility(View.GONE)
+            } else {
+                originalDesc = text
+                desc.setText(text)
+                desc.setVisibility(View.VISIBLE)
+            }
+        }
+
+        /** 程序性改开关状态：必须挡住监听器，否则回弹会再次进入拦截逻辑死循环 */
+        private fun setCheckedProgrammatically(checked: Boolean) {
+            suppressChange = true
+            switchMaterial.setChecked(checked)
+            suppressChange = false
+        }
+
+        private fun onSwitchChanged(
+            settingSection: SettingSection,
+            guard: SwitchDisableGuard?,
+            sideEffect: Runnable?,
+            isChecked: Boolean
+        ) {
+            // 倒计时进行中又点了开关：忽略（开关已被顶回「开」），不允许叠加、也不允许取消
+            if (guardTask != null) {
+                setCheckedProgrammatically(true)
+                return
+            }
+            // 关闭方向 + 带守卫：不写偏好、把开关顶回「开」，原地倒计时 [SwitchDisableGuard.seconds] 秒
+            if (!isChecked && guard != null && guard.seconds > 0) {
+                setCheckedProgrammatically(true)
+                startDisableGuard(settingSection, guard)
+                return
+            }
+            SharedPreferencesUtil.putBoolean(settingSection.id, isChecked)
+            sideEffect?.run()
+        }
+
+        /** 原地倒计时：每秒刷新 desc，归零后真正写入 false、恢复文案、执行确认回调 */
+        private fun startDisableGuard(settingSection: SettingSection, guard: SwitchDisableGuard) {
+            cancelGuard()
+            tickGuard(settingSection, guard, guard.seconds)
+        }
+
+        private fun tickGuard(settingSection: SettingSection, guard: SwitchDisableGuard, remaining: Int) {
+            if (remaining <= 0) {
+                finishGuard(settingSection, guard)
+                return
+            }
+            desc.setText(itemView.context.getString(R.string.usage_limit_guard_tip, guard.seconds, remaining))
+            desc.setVisibility(View.VISIBLE)
+            val task = Runnable { tickGuard(settingSection, guard, remaining - 1) }
+            guardTask = task
+            guardHandler.postDelayed(task, GUARD_TICK_MS)
+        }
+
+        private fun finishGuard(settingSection: SettingSection, guard: SwitchDisableGuard) {
+            guardTask = null
+            SharedPreferencesUtil.putBoolean(settingSection.id, false)
+            setCheckedProgrammatically(false)
+            restoreDesc()
+            guard.onDisableConfirmed?.run()
+        }
+
+        private fun restoreDesc() {
+            if (originalDesc.isEmpty()) {
+                desc.setVisibility(View.GONE)
+            } else {
+                desc.setText(originalDesc)
+                desc.setVisibility(View.VISIBLE)
+            }
+        }
+
+        /**
+         * 取消挂着的倒计时并把 suppress 标志复位（bind 开头、行被回收、重新开始倒计时三处共用）。
+         * 顺手把 desc 恢复成原始文案，避免「取消后还停在『剩余 N 秒』」的假象。
+         */
+        private fun cancelGuard() {
+            val task = guardTask
+            guardTask = null
+            suppressChange = false
+            if (task == null) return
+            guardHandler.removeCallbacks(task)
+            restoreDesc()
+        }
+
+        init {
+            // 行被回收时也清掉，避免 Handler 持有已分离的 View
+            itemView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(view: View) = Unit
+
+                override fun onViewDetachedFromWindow(view: View) = cancelGuard()
+            })
+        }
+
+        private companion object {
+            /** 倒计时心跳间隔：1 秒 */
+            const val GUARD_TICK_MS = 1000L
         }
     }
 

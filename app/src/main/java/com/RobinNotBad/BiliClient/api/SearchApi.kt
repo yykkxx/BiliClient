@@ -20,6 +20,12 @@ import java.util.ArrayList
 
 object SearchApi {
 
+    /** 综合搜索（分类聚合）端点 */
+    private const val SEARCH_ALL_URL = "https://api.bilibili.com/x/web-interface/wbi/search/all/v2?"
+
+    /** 分类搜索端点（search_type=video/bili_user/article/live...） */
+    private const val SEARCH_TYPE_URL = "https://api.bilibili.com/x/web-interface/wbi/search/type?"
+
     @JvmField
     var seid: String = ""
 
@@ -34,22 +40,18 @@ object SearchApi {
             seid = ""
         }
 
-        var url = "https://api.bilibili.com/x/web-interface/wbi/search/all/v2?"
-        url += "page=" + page +
-                "&keyword=" + URLEncoder.encode(search_keyword, "UTF-8") + "&seid=" + seid
+        val url = SEARCH_ALL_URL + buildSearchQuery(page, null)
 
         val all = NetWorkUtil.getJson(ConfInfoApi.signWBI(url)) // 得到一整个json
 
-        if (all.isNull("data"))
-            return null
-        val data = all.getJSONObject("data") // 搜索列表中的data项又是一个json，把它提出来
+        val data = extractSearchData(all) ?: return null
 
-        seid = data.getString("seid")
+        seid = data.optString("seid", seid)
 
-        if (data.has("result") && !data.isNull("result"))
-            return data.getJSONArray("result") // 其实这还不是我们要的结果，下面的函数对它进行再次拆解 这里做了判空
+        return if (data.has("result") && !data.isNull("result"))
+            data.getJSONArray("result") // 其实这还不是我们要的结果，下面的函数对它进行再次拆解 这里做了判空
         else
-            return null
+            null
     }
 
     @JvmStatic
@@ -60,22 +62,62 @@ object SearchApi {
             seid = ""
         }
 
-        var url = "https://api.bilibili.com/x/web-interface/wbi/search/type?"
-        url += "page=" + page +
-                "&keyword=" + URLEncoder.encode(search_keyword, "UTF-8") + "&search_type=" + type + "&seid=" + seid
+        val url = SEARCH_TYPE_URL + buildSearchQuery(page, type)
 
         val all = NetWorkUtil.getJson(ConfInfoApi.signWBI(url)) // 得到一整个json
 
-        if (all.isNull("data"))
-            return null
-        val data = all.getJSONObject("data") // 搜索列表中的data项又是一个json，把它提出来
+        val data = extractSearchData(all) ?: return null
 
-        seid = data.getString("seid")
+        seid = data.optString("seid", seid)
 
-        if (data.has("result") && !data.isNull("result"))
-            return data.get("result") // 其实这还不是我们要的结果，下面的函数对它进行再次拆解 这里做了判空
+        return if (data.has("result") && !data.isNull("result"))
+            data.get("result") // 其实这还不是我们要的结果，下面的函数对它进行再次拆解 这里做了判空
         else
+            null
+    }
+
+    /**
+     * 拼搜索 query（all/v2 与 type 共用一个，差别只有 search_type）。
+     *
+     * v5.1.6：**不再带 `seid` 空参数**。原实现无条件拼 `&seid=`（首屏时 seid 为空串），
+     * 服务端对这种「有键无值」的 seid 更容易判定为异常请求并回风控壳；首屏本来也不需要 seid。
+     */
+    private fun buildSearchQuery(page: Int, type: String?): String {
+        val sb = StringBuilder()
+        sb.append("page=").append(page)
+        sb.append("&keyword=").append(URLEncoder.encode(search_keyword, "UTF-8"))
+        if (type != null) sb.append("&search_type=").append(type)
+        if (seid.isNotEmpty()) sb.append("&seid=").append(seid)
+        return sb.toString()
+    }
+
+    /**
+     * 从整包 JSON 里取出可用的 `data`，并把「风控空壳」与「正常空结果」都变成 null。
+     *
+     * 修复的线上问题（v5.1.6）：**账号管理里把「其它页面 API」选成 Android 端口后，
+     * 搜索直接报 `No value for seid at DebugStrings.kt at DispatchedTask.kt`**。
+     *
+     * 根因是两个原因叠加：
+     * 1. 走 APP 通道时服务端会返回**风控壳** —— `code=0`，但 `data` 只有一个 `v_voucher`，
+     *    既没有 `seid` 也没有 `result`（本机实测：连续请求全部命中；同关键词走 web 的
+     *    WBI 通道则正常带 seid/result。PiliPlus 的 `lib/http/search.dart` 同样专门判
+     *    `vVoucher != null` → 「触发风控」，可作第三方佐证）。
+     * 2. 原代码 `data.getString("seid")` 对缺失字段抛 `JSONException: No value for seid`；
+     *    异常从后台线程冒出去，用户看到的就是「搜索打不开、直接报错」。
+     *
+     * 现在的处理：缺 `seid` 不再抛异常（用 `optString` 保留旧值），
+     * 风控壳直接当「本次没有数据」返回 null，由列表页走正常的空态/失败分支。
+     * 上层 [ApiRouter] 也会识别风控壳并回退 web 重试（见 `riskControlShellReason`），
+     * 两层兜底：路由层能回退就回退，退不回来也不会崩。
+     */
+    private fun extractSearchData(all: JSONObject): JSONObject? {
+        if (all.isNull("data")) return null
+        val data = all.optJSONObject("data") ?: return null
+        // 风控壳：只有校验票据、没有任何业务数据
+        if (data.has("v_voucher") && !data.has("result") && !data.has("seid")) {
             return null
+        }
+        return data
     }
 
     @JvmStatic

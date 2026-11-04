@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v5.1.6 实验室「每日使用时长限制」文案。
+  独立文件（不塞进 strings.xml）以便与前一轮改动解耦；Android 允许任意文件名的 values xml。
+-->
+<resources>
+    <!-- 实验室入口那一行的标题与说明（由 SettingLaboratoryActivity 引用） -->
+    <string name="setting_lab_usage_limit_name">每日使用时长限制</string>
+    <string name="setting_lab_usage_limit_desc">记录每天在本应用内的前台使用时长：达到 30 分钟后开屏延时 5 秒，达到 60 分钟后延时 10 秒。\n为避免误触，关闭这个开关需要原地等待 30 秒。</string>
+
+    <!-- 启动页：今日已使用时长（无论开关是否开启都会显示） -->
+    <string name="usage_limit_today_used">今日已使用 %1$s</string>
+
+    <!-- 启动页：超过建议时长时的开屏倒计时 -->
+    <string name="usage_limit_countdown">已超过每日建议时长，%1$d 秒后进入</string>
+
+    <!-- 设置页：关闭开关时的原地等待倒计时（%1$d 总秒数，%2$d 剩余秒数） -->
+    <string name="usage_limit_guard_tip">需等待 %1$d 秒才能关闭（剩余 %2$d 秒）</string>
+</resources>
