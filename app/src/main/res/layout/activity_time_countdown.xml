@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  独立倒计时页（v5.2.0 §2.4）。FrameLayout 叠两层，靠 visibility 切换，不重建布局：
+  - countdown_detail：初始显示的详情层（标题 / 副标题 / 今日已使用 + 颜色 / 进度条）；
+  - countdown_big：单击后的大数字层（超大等宽秒数 + 一行小标题）。
+  字号与左右留白由 CountdownActivity.applyGeometry() 按屏宽 / 圆屏开关动态设置。
+  根节点 countdown_root 是整个可点击区域（单击切层）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/countdown_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/countdown_bg"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- 详情层：标题 + 副标题 + 今日已使用（绿/黄/红）+ 横向进度条 -->
+    <LinearLayout
+        android:id="@+id/countdown_detail"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/countdown_detail_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:maxLines="2"
+            android:text="@string/countdown_default_title"
+            android:textColor="@color/countdown_text_primary"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/countdown_detail_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:maxLines="3"
+            android:textColor="@color/countdown_text_secondary"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/countdown_detail_used"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="@color/countdown_used_green"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/countdown_detail_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_marginTop="10dp"
+            android:max="100"
+            android:progress="0"
+            android:progressBackgroundTint="@color/countdown_progress_track"
+            android:progressTint="@color/countdown_used_green" />
+
+        <!-- 归零后不自动关闭时（TimeBankBlockActivity 场景）才显示的一行提示 -->
+        <TextView
+            android:id="@+id/countdown_end_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:text="@string/countdown_tap_to_close"
+            android:textColor="@color/countdown_text_secondary"
+            android:textSize="13sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 大数字层：黑底 + 超大剩余秒数（monospace 等宽，数字翻动时不左右抖）+ 一行小标题 -->
+    <LinearLayout
+        android:id="@+id/countdown_big"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/countdown_big_seconds"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="0"
+            android:textColor="@color/countdown_text_primary"
+            android:textSize="72sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/countdown_big_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:text="@string/countdown_default_title"
+            android:textColor="@color/countdown_text_secondary"
+            android:textSize="14sp" />
+    </LinearLayout>
+</FrameLayout>

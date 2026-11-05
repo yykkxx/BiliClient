@@ -231,7 +231,9 @@ object ApiMigrationRules {
      * 1. 保留·协议 —— 登录协议 / WBI 引导 / 指纹 / gaia 风控，APP 侧是另一套机制；
      * 2. 保留·非REST —— 二进制 / gRPC-Web / JSONP / 页面地址 / 埋点；
      * 3. 保留·非B站 —— 自有服务器与第三方接口；
-     * 4. 保留·实测被拒 —— B 站 REST 业务接口里实测拿不到 APP 等价的（**只有 3 条**）。
+     * 4. 保留·实测被拒 —— B 站 REST 业务接口里实测拿不到 APP 等价的（**4 条**：
+     *    硬币 / 搜索联想 / 发动态 / 高能进度条）。其中「发动态」是**路由层不收 JSON body**
+     *    的死规则（原先误列在写操作清单里），P1-bis 已归到本组。
      */
     private fun keepWebRules(): List<Rule> = listOf(
             // —— 1. 登录握手本身（APP 侧是另一套协议，不是「没迁」）——
@@ -282,6 +284,12 @@ object ApiMigrationRules {
                             "仍无法迁：APP 侧只有卡片式 /x/v2/search/suggest3（code=0 但 list[] 是" +
                             "uri/goto/card_style 富卡片，无纯词条文本，匿名下 card_style 为空），" +
                             "而 /x/v2/search/suggest?term=&main_ver=v1&func=suggest 只回 trackid、无联想词"),
+            Rule(API_HOST, "/x/dynamic/feed/create/dyn", Kind.KEEP_WEB, category = "保留·无APP等价",
+                    note = "发动态。**仅 JSON body**（DynamicApi.publishComplex 用 NetWorkUtil.postJson），" +
+                            "而路由层 planPost 首行就要求 x-www-form-urlencoded（ApiRouter.planPost）" +
+                            "→ 这条原先的写规则**永远不会生效**，是死规则。PiliPlus 同样用 web + csrf" +
+                            "（lib/http/dynamics.dart），APP 侧只有 gRPC 的 dynamic_svr/create 无 REST 等价。" +
+                            "结论：保持 web，并在发动态入口提示「需 web 登录」"),
             // —— 6. 非 B 站服务器 ——
             Rule("api.biliterminal.cn", "*", Kind.KEEP_WEB, category = "保留·非B站",
                     note = "本软件自有服务器，不是 B 站接口"),
@@ -581,7 +589,6 @@ object ApiMigrationRules {
             post("/x/v2/reply/del", "删评论。**绝不重放**（重复删会报错误导用户）", write = true),
             post("/x/v2/dm/post", "发弹幕。**绝不重放**", write = true),
             post("/x/v3/fav/folder/add", "新建收藏夹。会真实建夹，**绝不重放**", write = true),
-            post("/x/dynamic/feed/create/dyn", "发动态。**绝不重放**", write = true),
             post("/x/vip/experience/add", "领取会员经验。领奖类，**绝不重放**", write = true),
             post("/x/member/web/sign/update", "修改签名。**绝不重放**", write = true),
             post("/x/v1/contract/add_contract", "签约/契约类。**绝不重放**", write = true),

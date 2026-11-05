@@ -1019,7 +1019,8 @@ class StoryPlayerActivity : BaseActivity() {
 
         val headers = HashMap<String, String>()
         headers["Referer"] = "https://www.bilibili.com/"
-        headers["Cookie"] = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
+        // web 未登录时不加 Cookie 头（P3-1）：短视频同样播放 CDN 直链，Cookie 非必需
+        NetWorkUtil.cookieHeaderOrNull()?.let { headers["Cookie"] = it }
         headers["User-Agent"] = NetWorkUtil.USER_AGENT_WEB
         currentHeaders = headers
 

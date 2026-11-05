@@ -138,6 +138,38 @@
                             android:lineSpacingExtra="1dp"
                             android:text="Web：用软件本身的网页扫码登录"
                             android:textSize="11sp" />
+
+                        <!-- v5.2.0 P0-2：手机端口签名口径开关（消除 -663「鉴权失败」）。
+                             默认关闭 = 沿用历史行为（扫码用 TV 密钥、请求用 android 密钥，跨源）。
+                             打开 = 扫码与请求都用 TV 密钥（同源），可消除部分严格接口的 -663。
+                             切换不会丢已登录 token（身份 id 仍是 IDENTITY_PHONE，槽位键不变）。 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/account_phone_tv_sign_title"
+                                android:textSize="12sp" />
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/accountPhoneTvSign"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:minWidth="0dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="2dp"
+                            android:text="@string/account_phone_tv_sign_desc"
+                            android:textSize="11sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 

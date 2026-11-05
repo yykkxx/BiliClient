@@ -143,9 +143,9 @@ class AppRcmdLoginActivity : BaseActivity() {
                                 if (isDestroyed) return@Runnable
                                 try {
                                     // 凭据写入 AccountStore 的该端口多账号槽位（同端口可多号并存）
-                                    val mid = loginWithAccountStore(data)
+                                    val outcome = loginWithAccountStore(data)
                                     scanStat!!.text = "登录成功！"
-                                    showSuccessDialog(mid)
+                                    showSuccessDialog(outcome)
                                 } catch (e: Exception) {
                                     //token_info 缺失（风控）等
                                     scanStat!!.text = "登录失败：" + (e.message ?: "未知错误")
@@ -194,15 +194,29 @@ class AppRcmdLoginActivity : BaseActivity() {
         }, 500, 1000)
     }
 
+    /** 一次扫码登录的结果：mid + 本轮是否把「其它页面 API」端口从 Web 切到了该 APP 端口 */
+    private data class LoginOutcome(val mid: Long, val mainPortSwitched: Boolean)
+
     /**
-     * 把扫码成功的凭据写进 [AccountStore] 的该端口多账号槽位，返回登录的 mid。
+     * 把扫码成功的凭据写进 [AccountStore] 的该端口多账号槽位，返回登录结果。
      *
      * 只调 AccountStore：它内部负责「先把当前激活账号快照回自己的槽位、再写新号」，
      * 若这里再手动写一遍激活槽位就会把快照对象弄错（上一个号会被新号覆盖）。
      *
      * 回包里没有 token_info（多为风控）时抛出 IllegalStateException（用 checkNotNull()），由调用方展示失败原因。
+     *
+     * ## 顺带把「其它页面 API」从 Web 切到本端口（P0-1）
+     *
+     * 背景：`ApiRouter.isEnabled()` 的唯一来源是「账号管理 → 其它页面 API」端口
+     * （`AccountStore.mainPort()`，默认 Web）。历史上该端口只由用户手动点选，
+     * 于是「扫码登了 APP 端口、却没登 web」的用户迁移层始终不启用，
+     * 一切请求继续带空 web Cookie 走 web —— 写操作全部失败。
+     *
+     * 口径：**只在该端口原本是 Web 时才切**。用户手动选过 Android手机/HD/TV 的，
+     * 说明那是他的明确选择，这里不动。web 登录不走本页，`loginPort` 天然非 web，
+     * 但仍显式判一次，避免将来调用方传 web 时误切。
      */
-    private fun loginWithAccountStore(data: JSONObject): Long {
+    private fun loginWithAccountStore(data: JSONObject): LoginOutcome {
         val tokenInfo = data.optJSONObject("token_info")
         checkNotNull(tokenInfo) { "接口未返回身份信息，可能被风控，请尝试重新登录" }
         val mid = tokenInfo.optLong("mid", 0L)
@@ -211,7 +225,10 @@ class AppRcmdLoginActivity : BaseActivity() {
         AccountStore.loginApp(
             loginPort, mid, accessToken, refreshToken, cookiesTextOf(data), null, null
         )
-        return mid
+        val switched = loginPort != AccountStore.PORT_WEB &&
+                AccountStore.mainPort() == AccountStore.PORT_WEB
+        if (switched) AccountStore.setMainPort(loginPort)
+        return LoginOutcome(mid, switched)
     }
 
     /** 从登录回包提取 "name=value; name2=value2" 形式的 Cookie 串（token 响应的 cookie_info） */
@@ -237,12 +254,22 @@ class AppRcmdLoginActivity : BaseActivity() {
     /**
      * 登录成功后的单一提示（v5.1.5 起不再询问「是否打开推荐页面的移动端逻辑」，
      * 也不再写 app_rcmd_enabled —— 该键已删除，推荐页走哪个端口由「设置 → 账号管理」页签 1 决定）。
+     *
+     * 本轮（P0-1）在「其它页面 API」端口本来还是 Web 时，登录成功会顺带把它切到该 APP 端口；
+     * 切换是隐式发生的，必须在这里告诉用户，否则用户会以为「其它页面」还是 web。
      */
-    private fun showSuccessDialog(mid: Long) {
+    private fun showSuccessDialog(outcome: LoginOutcome) {
+        val baseMsg = "已登录 " + AccountStore.portDisplayName(loginPort) + " 端账号（uid：${outcome.mid}），" +
+                "可在「设置 → 账号管理」里切换账号。"
+        val switchMsg = if (outcome.mainPortSwitched) {
+            "\n\n其它页面接口已切换到" + AccountStore.portDisplayName(loginPort) + "端" +
+                    "（原本是 Web）；如需改回，可在「设置 → 账号管理 → 其它页面 API」手动切换。"
+        } else {
+            ""
+        }
         AlertDialog.Builder(this)
             .setTitle("登录成功")
-            .setMessage("已登录 " + AccountStore.portDisplayName(loginPort) + " 端账号（uid：$mid），" +
-                    "可在「设置 → 账号管理」里切换账号。")
+            .setMessage(baseMsg + switchMsg)
             .setPositiveButton("好的") { _, _ -> finish() }
             .setCancelable(false)
             .show()

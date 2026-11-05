@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v5.2.0 倒计时独立页面文案（countdown-page 代理独占文件，前缀 countdown_*）。
+  独立文件是为了不和 strings.xml / strings_time_mgmt.xml 冲突（历史踩过 aapt2
+  "Found item String/... more than one time"）。
+-->
+<resources>
+    <!-- 页面名（setPageName 与 Manifest 的 android:label 都用它） -->
+    <string name="countdown_page_name">倒计时</string>
+
+    <!-- 标题缺省值：调用方没传 EXTRA_TITLE 时用 -->
+    <string name="countdown_default_title">请稍候</string>
+
+    <!-- 详情层「今日已使用」；%1$s 由 UsageLimitManager.formatUsed() 给出 -->
+    <string name="countdown_today_used">今日已使用 %1$s</string>
+
+    <!-- 归零后不自动关闭时（EXTRA_FINISH_ON_END=false）的提示 -->
+    <string name="countdown_tap_to_close">倒计时已结束，点击屏幕继续</string>
+    <string name="countdown_end_hint">时间到了</string>
+</resources>

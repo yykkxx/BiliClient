@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v5.2.0「使用时长统计」页文案（Lead 独占文件；timebank / countdown-ui 各自的文案在
+  自己的 strings_*.xml 里，互不干扰）。
+-->
+<resources>
+    <string name="usage_stats_page_name">使用时长统计</string>
+
+    <!-- 三个数字卡 -->
+    <string name="usage_stats_card_today">今日</string>
+    <string name="usage_stats_card_week">近 7 天</string>
+    <string name="usage_stats_card_month">近 30 天</string>
+
+    <!-- 图表标题 -->
+    <string name="usage_stats_chart_title">最近 7 天使用时长</string>
+    <string name="usage_stats_rank_title">今日各页面停留时长</string>
+
+    <!-- 分档说明（绿 / 黄 / 红） -->
+    <string name="usage_stats_level_hint">今日用量分档：不足 30 分钟为绿色，30 分钟到 1 小时为黄色，超过 1 小时为红色</string>
+
+    <!-- 口径说明 -->
+    <string name="usage_stats_note">说明：倒计时等待时间与「配额已用完」等待时间不计入使用时长；关闭「记录使用时长」后不再记录新的页面停留。</string>
+
+    <!-- 结论行 -->
+    <string name="usage_stats_top_page">今天停留最久的页面：%1$s（%2$s）</string>
+    <string name="usage_stats_top_page_none">今天还没有页面停留记录</string>
+    <string name="usage_stats_busiest_day">记录以来最久的一天：%1$s（%2$s）</string>
+    <string name="usage_stats_busiest_day_none">暂无多日记录</string>
+    <!-- 三档语义标签（UsageColorUtil.labelForUsed 用；无障碍/色弱用户靠文字而非颜色） -->
+    <string name="usage_level_under_half">不足 30 分钟</string>
+    <string name="usage_level_half_to_hour">30 分钟到 1 小时</string>
+    <string name="usage_level_over_hour">超过 1 小时</string>
+
+</resources>

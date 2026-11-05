@@ -107,6 +107,12 @@ object AppRcmdApi {
     //手机版（android）：推荐请求用 android 密钥（与官方手机客户端一致）；
     //扫码登录借 TV 密钥签发（android appkey 不被扫码接口接受），
     //但 token 存进手机端独立槽位，不与 TV 端共用（禁止跨端转移）
+    //
+    //注意（P0-2，2026-11-05）：上面这套「TV 密钥签发 token + android 密钥签名业务请求」
+    //正是 bilibili-API-collect《二维码登录》appkey 可用列表点名的 -663 组合
+    //（"通过某一组 APPKEY/APPSEC 获取到的 access_token，当接口需要 sign 签名时也只能使用该组
+    //APPKEY/APPSEC，否则出现 -663 鉴权失败"）。它**仍是默认身份**（历史行为，未改），
+    //同源签名版本见下面的 [PHONE_TV_IDENTITY]，由 [phoneIdentityOrTv] 按开关选择。
     private val PHONE_IDENTITY = RcmdIdentity(
         IDENTITY_PHONE, "手机版",
         "4409e2ce8ffd12b8", "59b43e04ad6965f34319062b478f83dd",
@@ -115,6 +121,58 @@ object AppRcmdApi {
         "android_tv",
         "Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2",
         "android", 8430300, 2, "android", "phone", 8)
+
+    /**
+     * 手机版「同源签名」身份（P0-2 备选方案）：扫码与业务请求**都用 TV 那对 appkey**。
+     *
+     * 与 [PHONE_IDENTITY] 的差别只有 `feedAppKey/feedAppSec`：由 android 密钥
+     * （`1d8b6e7d45225436`）换成 TV 密钥（`4409e2ce8ffd12b8`），其余（UA / app-key 头 /
+     * loginMobiApp / mobi_app / build / device_name）全部沿用手机端。
+     * 这样 token 与签名同源，按文档不会再触发 -663。
+     *
+     * 代价：业务请求的 appkey 变成 TV 那套，推荐参数与风控画像按 TV 走。
+     * 因此**不接任何默认路径**——要启用必须在 [phoneIdentityOrTv] 的开关里显式打开，
+     * 或在「账号管理」页接一个 UI 开关（见 [PHONE_TV_APPKEY_KEY]）。
+     *
+     * **未实测**：本机没有可用 token，无法验证「同源后 -663 是否消失、TV appkey 下业务
+     * 端点是否仍返回与手机端一致的数据」。启用前请按
+     * `notes/impl_api_p0.md` 的验证清单真机连测。
+     */
+    private val PHONE_TV_IDENTITY = RcmdIdentity(
+        IDENTITY_PHONE, "手机版（TV 同源签名）",
+        "4409e2ce8ffd12b8", "59b43e04ad6965f34319062b478f83dd",
+        "4409e2ce8ffd12b8", "59b43e04ad6965f34319062b478f83dd",
+        "android",
+        "android_tv",
+        "Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2",
+        "android", 8430300, 2, "android", "phone", 8)
+
+    /**
+     * 手机端口是否改用 [PHONE_TV_IDENTITY] 的偏好键（默认 **false** = 沿用 [PHONE_IDENTITY]）。
+     *
+     * v5.2.0 接线后由「账号管理 → 其它页面 API」页签的开关读写（见 `SettingAccountActivity`），
+     * 故提升为 `public const` 供设置页引用（仍留在本类里，避免再动 `SharedPreferencesUtil`）。
+     */
+    const val PHONE_TV_APPKEY_KEY = "app_rcmd_phone_tv_sign"
+
+    /**
+     * 选择手机端口该用哪套签名身份（P0-2 的**可切换入口**）。
+     *
+     * - 默认（开关未开）：[PHONE_IDENTITY] —— 与历史行为逐字段一致，登录链路零改动；
+     * - 开关打开：[PHONE_TV_IDENTITY] —— token 与签名同源，用于消除 -663。
+     *
+     * 身份 id 始终是 [IDENTITY_PHONE]，所以 token 槽位键（`app_rcmd_phone_*`）与
+     * 账号槽位都不变，切换开关**不会丢已登录的 token**。
+     *
+     * 目前全仓库只有 [getIdentityById] 调用它；「账号管理」页还没有这个开关的 UI，
+     * 所以线上行为 = 纯默认。**留给下一轮的接线点**：设置页写
+     * [PHONE_TV_APPKEY_KEY] 这个布尔键即可启用，无需再改任何身份映射。
+     */
+    @JvmStatic
+    fun phoneIdentityOrTv(): RcmdIdentity {
+        val useTv = SharedPreferencesUtil.getBoolean(PHONE_TV_APPKEY_KEY, false)
+        return if (useTv) PHONE_TV_IDENTITY else PHONE_IDENTITY
+    }
 
     /**
      * 当前操作的身份 id。
@@ -142,7 +200,7 @@ object AppRcmdApi {
         val identityId = getIdentityId()
         return when (identityId) {
             IDENTITY_TV -> TV_IDENTITY
-            IDENTITY_PHONE -> PHONE_IDENTITY
+            IDENTITY_PHONE -> phoneIdentityOrTv()
             else -> HD_IDENTITY
         }
     }
@@ -269,7 +327,7 @@ object AppRcmdApi {
         if (identityId == null || identityId.isEmpty()) return getIdentity()
         return when (identityId.trim().lowercase()) {
             IDENTITY_TV -> TV_IDENTITY
-            IDENTITY_PHONE -> PHONE_IDENTITY
+            IDENTITY_PHONE -> phoneIdentityOrTv()
             IDENTITY_HD -> HD_IDENTITY
             else -> getIdentity()
         }

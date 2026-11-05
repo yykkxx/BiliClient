@@ -103,6 +103,16 @@ class SettingMainActivity : InstanceActivity() {
                 startActivity(intent)
             }
 
+            //时间管理（v5.2.0）：使用时长统计 / 时间银行 / 定时提醒 / 倒计时独立页面
+            //这四组功能的开关与配置项全部收敛在独立子页里（用户要求「都在设置-时间管理里面」），
+            //主页只留一个入口卡片，避免把设置主页撑长。
+            val timeManager = findViewById<MaterialCardView>(R.id.timeManager)
+            timeManager.setOnClickListener { view ->
+                val intent = Intent()
+                intent.setClass(this, SettingTimeActivity::class.java)
+                startActivity(intent)
+            }
+
             //实验性设置
             val laboratorySetting = findViewById<MaterialCardView>(R.id.laboratory)
             //laboratorySetting.setVisibility(View.GONE);

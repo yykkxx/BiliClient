@@ -4,6 +4,7 @@ import com.RobinNotBad.BiliClient.model.ArticleCard
 import com.RobinNotBad.BiliClient.model.LiveRoom
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.model.VideoCard
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.DmImgParamUtil
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
@@ -20,6 +21,9 @@ import java.net.URLEncoder
 //用户信息API
 
 object UserInfoApi {
+
+    /** 硬币余额的 APP 端点（[getAppUserCoin] 自签请求用；规则表未收录，故此处直连） */
+    private const val APP_MYINFO_URL = "https://app.bilibili.com/x/v2/account/myinfo"
 
     @Throws(IOException::class, JSONException::class)
     @JvmStatic
@@ -224,8 +228,36 @@ object UserInfoApi {
         } else return UserInfo(0, "加载失败", "", "", 0, 0, 0, false, "", 0, "", 0)
     }
 
+    /**
+     * 硬币余额。
+     *
+     * v5.2.0（P2-2）：先试 **APP 通道** `app.bilibili.com/x/v2/account/myinfo` 的 `data.coins`
+     * （PiliPlus `lib/pages/member_profile/view.dart:80-100` + `lib/models_new/account_myinfo/data.dart`
+     * 实证该字段），失败/字段缺失/非 0 code 再回退历史接口 `account.bilibili.com/site/getCoin`。
+     *
+     * ## 为什么在这里自签，而不走 ApiRouter
+     *
+     * `app.bilibili.com` 在 `ApiMigrationRules` 里**没有任何规则**，而默认策略
+     * （`allowsDefaultAppParams()`）只放行 `api.bilibili.com` —— 所以这个 APP 端点经
+     * `NetWorkUtil.get` 只会按 web 通道原样发出去，达不到迁移目的。
+     * 本轮写域不含规则表，所以照 [RecommendApi.requestAppRcmd] 的既有范式**显式自签**：
+     * 取「其它页面 API」端口身份 + 该端口激活 token，补 APP 公共参数、`AppRcmdApi.sign`、
+     * `AppRcmdApi.appHeaders`，然后 `NetWorkUtil.getJson(url, headers)`。
+     *
+     * 这条自签链路**与既有代码同构**（RecommendApi 已经这么发推荐流），不是新造范式；
+     * 且失败一律吞掉回退旧接口，对现有功能零影响。
+     *
+     * **未实测**：本机无 token，无法验证 `data.coins` 是否存在、数值是否与网页一致。
+     */
     @JvmStatic
     fun getCurrentUserCoin(): Int {
+        try {
+            val appCoin = getAppUserCoin()
+            if (appCoin != null) return appCoin
+        } catch (e: Exception) {
+            // APP 通道不可用（未登录/网络/风控/结构异常）→ 回退旧接口，不弹错误弹窗
+            Logu.d("userinfo", "硬币 APP 通道失败，回退 web：" + e.javaClass.simpleName)
+        }
         try {
             val url = "https://account.bilibili.com/site/getCoin"
             val all = NetWorkUtil.getJson(url)
@@ -239,6 +271,37 @@ object UserInfoApi {
             e.printStackTrace()
         }
         return 0
+    }
+
+    /**
+     * APP 通道取硬币余额：`app.bilibili.com/x/v2/account/myinfo` 的 `data.coins`。
+     *
+     * @return 硬币数；**未登录 / 非 0 code / 无 coins 字段**都返回 null（交给调用方回退 web）
+     */
+    private fun getAppUserCoin(): Int? {
+        // 没有 APP 端口身份或该端口没有 token 时不必发：该端点必须 access_key
+        val identity = AccountStore.mainIdentity() ?: return null
+        val accessToken = AccountStore.activeAccessToken(AccountStore.mainPort())
+        if (accessToken.isEmpty()) return null
+
+        val formData = NetWorkUtil.FormData().setUrlParam(true)
+            .put("build", identity.feedBuild)
+            .put("c_locale", "zh_CN")
+            .put("channel", "master")
+            .put("device", identity.feedDevice)
+            .put("device_name", identity.feedDeviceName)
+            .put("mobi_app", identity.feedMobiApp)
+            .put("platform", "android")
+            .put("s_locale", "zh_CN")
+            .put("access_key", accessToken)
+        AppRcmdApi.sign(formData, identity)
+
+        val headers = AppRcmdApi.appHeaders(identity)
+        val all = NetWorkUtil.getJson(APP_MYINFO_URL + formData, headers)
+        if (all.optInt("code", -1) != 0) return null
+        val data = all.optJSONObject("data") ?: return null
+        if (!data.has("coins") || data.isNull("coins")) return null
+        return data.optInt("coins", 0)
     }
 
 

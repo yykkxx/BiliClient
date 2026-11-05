@@ -460,13 +460,14 @@ object StoryApi {
         var ok = false
         try {
             dest.parentFile?.mkdirs()
-            val request = okhttp3.Request.Builder()
+            val requestBuilder = okhttp3.Request.Builder()
                 .url(url)
                 .header("Referer", "https://www.bilibili.com/")
                 .header("User-Agent", NetWorkUtil.USER_AGENT_WEB)
-                .header("Cookie", com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
-                    .getString(com.RobinNotBad.BiliClient.util.SharedPreferencesUtil.cookies, "") ?: "")
-                .build()
+            // web 未登录时不加 Cookie 头（P3-1）：预下载拿到的是媒体 CDN 直链，
+            // 直链自带签名，空 Cookie 无意义
+            NetWorkUtil.cookieHeaderOrNull()?.let { requestBuilder.header("Cookie", it) }
+            val request = requestBuilder.build()
             val response = NetWorkUtil.getOkHttpInstance().newCall(request).execute()
             val body = response.body
             if (response.code != 200 || body == null) {

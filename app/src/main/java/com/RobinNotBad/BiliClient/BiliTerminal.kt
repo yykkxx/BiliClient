@@ -19,7 +19,10 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
+import com.RobinNotBad.BiliClient.util.TimeTracking
 import com.RobinNotBad.BiliClient.util.UsageLimitManager
+import com.RobinNotBad.BiliClient.util.UsageReminder
+import com.RobinNotBad.BiliClient.util.UsageStatsManager
 import java.lang.ref.WeakReference
 
 class BiliTerminal : Application() {
@@ -82,15 +85,26 @@ class BiliTerminal : Application() {
     }
 
     /**
-     * 实验室「每日使用时长限制」的前台时长统计（v5.1.6）。
+     * 前台时长与页面停留统计（v5.1.6 起，v5.2.0 扩为时间管理套件的挂载点）。
      *
      * 只统计本 App 自己的 Activity（`registerActivityLifecycleCallbacks` 天然如此），
      * 用 [startedCount] 的 0→1 / 1→0 **边沿判定**把「推荐↔详情↔播放」这种频繁切换
      * 合并成一段连续前台时间，不会重复累加，也不会在 Activity 之间跳转时丢掉时长：
-     * - 0→1（App 真正回到前台，第一个 Activity started）记下起点 [foregroundStartElapsed]；
-     * - 1→0（最后一个 Activity stopped）一次性 [UsageLimitManager.addUsage] 整段时长。
+     * - 0→1（App 真正回到前台，第一个 Activity started）记下起点 [foregroundStartElapsed]，
+     *   并启动 15 分钟「今天已使用 X」提醒（[UsageReminder]）；
+     * - 1→0（最后一个 Activity stopped）一次性 [UsageLimitManager.addUsage] 整段时长，
+     *   随后停掉提醒。
      *
-     * 回调里**只做偏好读写**（SharedPreferencesUtil 是 apply 语义），不碰网络/IO/数据库。
+     * v5.2.0 起还负责两件事：
+     * 1. **页面停留**：每次 Activity resume/pause 交给 [TimeTracking]（页面名由
+     *    `BaseActivity.setPageName` 写入，这里只负责生命周期边沿）；
+     * 2. **暂停时长扣减**：倒计时页 / 配额拦截页在 `onResume` 里让 TimeTracking 暂停，
+     *   1→0 结算总时长时必须减去这段（需求明确要求等待时间不计入使用时长），
+     *    否则「看 5 秒倒计时」也会被当成用了 5 秒。
+     *
+     * 回调里**只做偏好读写与轻量调用**（SharedPreferencesUtil 是 apply 语义，
+     * 提醒的内部协程由 UsageReminder 自己持有），不碰网络/IO/数据库，也不自己回主线程
+     * （这些回调本来就在主线程）。
      */
     private class ForegroundUsageTracker : Application.ActivityLifecycleCallbacks {
         /** 处于 started 状态的 Activity 数量；只在 0/1 两个状态间判定边沿 */
@@ -103,6 +117,8 @@ class BiliTerminal : Application() {
             startedCount += 1
             if (startedCount == 1) {
                 foregroundStartElapsed = SystemClock.elapsedRealtime()
+                // 每满 interval 分钟弹一次「今天已使用 X」；内部自己持 Job、退后台由下面停掉
+                UsageReminder.startForegroundReminder()
             }
         }
 
@@ -114,15 +130,32 @@ class BiliTerminal : Application() {
             val start = foregroundStartElapsed
             foregroundStartElapsed = 0L
             if (start > 0L) {
-                UsageLimitManager.addUsage(SystemClock.elapsedRealtime() - start)
+                // 倒计时页 / 配额拦截页的 onResume 会让 TimeTracking 暂停，这段等待时间
+                // 不该算作「使用时长」：结算前扣掉累计暂停毫秒（consumePausedMs 取出即清零）。
+                val pausedMs = TimeTracking.consumePausedMs()
+                val delta = (SystemClock.elapsedRealtime() - start - pausedMs).coerceAtLeast(0L)
+                UsageLimitManager.addUsage(delta)
+                // 把「今天总共用了多久」写进 30 天历史（7 日柱状图与「近 30 天」卡片的唯一数据来源）。
+                // 必须在 addUsage 之后调用，否则写进去的是上一次的旧值；它会自动裁剪到最近 30 天。
+                UsageStatsManager.recordDayTotal(UsageLimitManager.todayUsedMs())
+                // 页面停留由 TimeTracking 自己差值结算，这里只在退后台时兜底刷一次（幂等）。
+                // 与上面两条是独立数据源，顺序不影响结果。
+                TimeTracking.flushCurrentPage()
             }
+            UsageReminder.stopForegroundReminder()
+        }
+
+        /** 页面名由 BaseActivity.setPageName 交给 TimeTracking，这里只喂生命周期边沿 */
+        override fun onActivityResumed(activity: Activity) {
+            TimeTracking.onPageResumed()
+        }
+
+        override fun onActivityPaused(activity: Activity) {
+            TimeTracking.onPagePaused()
         }
 
         // 其余回调与本功能无关，保持空实现（detekt 对 `= Unit` 不报 EmptyFunctionBlock）
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-        override fun onActivityResumed(activity: Activity) = Unit
-
-        override fun onActivityPaused(activity: Activity) = Unit
 
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 

@@ -4,9 +4,9 @@
   独立文件（不塞进 strings.xml）以便与前一轮改动解耦；Android 允许任意文件名的 values xml。
 -->
 <resources>
-    <!-- 实验室入口那一行的标题与说明（由 SettingLaboratoryActivity 引用） -->
-    <string name="setting_lab_usage_limit_name">每日使用时长限制</string>
-    <string name="setting_lab_usage_limit_desc">记录每天在本应用内的前台使用时长：达到 30 分钟后开屏延时 5 秒，达到 60 分钟后延时 10 秒。\n为避免误触，关闭这个开关需要原地等待 30 秒。</string>
+    <!-- v5.2.0：实验室里的两行文案（setting_lab_usage_limit_name / _desc）已随开关一起搬进
+         「设置 → 时间管理」，文案改由 values/strings_time_mgmt.xml 提供，故此处删除，
+         避免同一含义出现两套文案、以后改一处忘另一处。 -->
 
     <!-- 启动页：今日已使用时长（无论开关是否开启都会显示） -->
     <string name="usage_limit_today_used">今日已使用 %1$s</string>

@@ -28,6 +28,7 @@ import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
+import com.RobinNotBad.BiliClient.util.TimeTracking
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -99,6 +100,10 @@ open class BaseActivity : AppCompatActivity {
     open fun setPageName(name: String?) {
         val textView = findViewById<TextView>(R.id.pageName)
         if (textView != null) textView.text = name
+        // v5.2.0 使用时长统计：把「当前页面名」交给 TimeTracking 记录。
+        // 页面名只在这里写一次（全 App 49 处调用 setPageName 都会经过这里），
+        // 统计侧据此把前后台时长拆到具体页面，才能回答「今天哪个页面停留最久」。
+        TimeTracking.setCurrentPage(name)
     }
 
     open fun setTopbarExit() {

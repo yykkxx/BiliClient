@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v5.2.0 「时间管理」套件文案（Lead 独占文件，子代理不要改）。
+  子代理各自的文案放自己的文件：strings_time_stats.xml / strings_time_bank.xml /
+  strings_time_countdown.xml，避免与他人冲突（历史踩过 duplicates 导致 aapt2 报
+  "Found item String/... more than one time"）。
+-->
+<resources>
+    <!-- 设置主页卡片 -->
+    <string name="time_mgmt_title">时间管理</string>
+    <string name="time_mgmt_desc">使用时长统计、时间银行、定时提醒与倒计时页面</string>
+
+    <!-- 页面标题 -->
+    <string name="time_mgmt_page_name">时间管理</string>
+
+    <!-- 分组标题 -->
+    <string name="time_mgmt_group_stats">使用时长统计</string>
+    <string name="time_mgmt_group_bank">时间银行</string>
+    <string name="time_mgmt_group_reminder">提醒</string>
+    <string name="time_mgmt_group_countdown">倒计时页面</string>
+    <string name="time_mgmt_group_legacy">旧版限制</string>
+    <string name="time_mgmt_group_actions">数据操作</string>
+
+    <!-- 统计开关与说明 -->
+    <string name="time_mgmt_stats_switch">记录使用时长</string>
+    <string name="time_mgmt_stats_desc">统计每天的总时长、每个页面的停留时间与最近 7 天趋势。关闭后不再记录新的停留数据（已有数据仍保留）。</string>
+    <string name="time_mgmt_stats_view">查看使用时长统计</string>
+    <string name="time_mgmt_stats_view_desc">今日总时长、近 7 日柱状图、各页面停留排行</string>
+
+    <!-- 时间银行 -->
+    <string name="time_mgmt_bank_switch">启用时间银行</string>
+    <string name="time_mgmt_bank_desc">每天第一次打开应用询问「上学日 / 休息日」，按当天配额限制可用时长；配额用完会阻止进入主界面，可以在等待后关闭此功能一天，也可以从未来 7 天预支时间。</string>
+    <string name="time_mgmt_bank_open">打开时间银行</string>
+    <string name="time_mgmt_bank_open_desc">查看今日配额、未来 7 天可用时间并预支</string>
+    <string name="time_mgmt_bank_school">上学日每日配额（分钟）</string>
+    <string name="time_mgmt_bank_school_desc">判定为「上学日」时，当天最多可用的分钟数。默认 120 分钟。</string>
+    <string name="time_mgmt_bank_rest">休息日每日配额（分钟）</string>
+    <string name="time_mgmt_bank_rest_desc">判定为「休息日」时，当天最多可用的分钟数。默认 300 分钟。</string>
+    <string name="time_mgmt_bank_borrow">预支总量上限（分钟）</string>
+    <string name="time_mgmt_bank_borrow_desc">任意时间点内，从未来借来的时间总和不得超过这个值。默认 300 分钟（5 小时）。</string>
+    <string name="time_mgmt_bank_wait">超配额后的关闭等待（秒）</string>
+    <string name="time_mgmt_bank_wait_desc">配额用完后，点击按钮需要等待这么多秒才能关闭本功能一天。默认 120 秒。</string>
+    <string name="time_mgmt_bank_reset">重置时间银行</string>
+    <string name="time_mgmt_bank_reset_desc">清除全部预支记录与今日类型判定（不会清除使用时长统计）</string>
+
+    <!-- 定时提醒 -->
+    <string name="time_mgmt_reminder_switch">定时提醒已用时长</string>
+    <string name="time_mgmt_reminder_desc">在前台时每隔一段时间用 Toast 提示「今天已使用 X」。切到后台或停留在倒计时页面时不提示。</string>
+    <string name="time_mgmt_reminder_interval">提醒间隔（分钟）</string>
+    <string name="time_mgmt_reminder_interval_desc">每隔多少分钟提示一次，可填 1 ~ 120。默认 15 分钟。</string>
+
+    <!-- 倒计时页面 -->
+    <string name="time_mgmt_countdown_switch">倒计时用独立页面</string>
+    <string name="time_mgmt_countdown_desc">倒计时时打开独立的大数字页面：下方用绿 / 黄 / 红显示今天已使用时长，点击屏幕可在详情与数字之间切换。息屏或切到后台时暂停计时。</string>
+
+    <!-- 旧版限制（从实验室迁移过来的开关） -->
+    <string name="time_mgmt_legacy_switch">每日使用时长限制</string>
+    <string name="time_mgmt_legacy_desc">记录每天在本应用内的前台使用时长：达到 30 分钟后开屏延时 5 秒，达到 60 分钟后延时 10 秒。\n为避免误触，关闭这个开关需要原地等待 30 秒。</string>
+
+    <!-- 数据操作 -->
+    <string name="time_mgmt_clear_stats">清空使用时长统计</string>
+    <string name="time_mgmt_clear_stats_desc">清除全部页面的停留记录与多日历史（今日总时长不受影响，可在再点一次后确认）</string>
+
+    <!-- 二次确认与结果提示 -->
+    <string name="time_mgmt_confirm_clear">清空后不可恢复，再点一次确认</string>
+    <string name="time_mgmt_cleared">使用时长统计已清空</string>
+    <string name="time_mgmt_confirm_reset_bank">将清除全部预支记录，再点一次确认</string>
+    <string name="time_mgmt_bank_reset_done">时间银行已重置</string>
+
+    <!-- 提示 -->
+    <string name="time_mgmt_conflict_bank_limit">时间银行已开启：每日使用时长限制的延时处罚会被时间银行的硬配额取代，两者同时开启时以时间银行为准。</string>
+    <!-- 账号管理页：手机端口签名口径开关（P0-2，消除 -663） -->
+    <string name="account_phone_tv_sign_title">手机端口用同源签名（消除「鉴权失败」）</string>
+    <string name="account_phone_tv_sign_desc">手机端口的扫码与请求都使用同一套 TV 密钥签名。历史做法是「扫码用 TV 密钥、请求用手机密钥」，部分严格校验接口会因此返回 -663「鉴权失败，请联系账号管理员」。打开后两者同源可消除该错误；切换不会丢失已登录账号。</string>
+
+</resources>

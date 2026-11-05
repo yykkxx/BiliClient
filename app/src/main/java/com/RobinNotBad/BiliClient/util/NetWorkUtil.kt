@@ -531,6 +531,21 @@ object NetWorkUtil {
         webHeaders[1] = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
     }
 
+    /**
+     * web Cookie 请求头的值；**web 未登录（Cookie 为空）时返回 null**。
+     *
+     * 用途：媒体直链 / CDN 预加载 / 直播 WebSocket 这类请求里，Cookie 只有 web 登录后才有意义
+     * （直链本身自带 `deadline`/`upsig` 签名，鉴权不靠 Cookie）。历史代码一律塞
+     * `header("Cookie", "")`，等于给每个请求加一个**空 Cookie 头**——服务端侧无意义，
+     * 还容易误导成「这里必须 web 登录才能用」。改为「非空才加」，语义更准确。
+     *
+     * 调用方写法：`NetWorkUtil.cookieHeaderOrNull()?.let { builder.header("Cookie", it) }`
+     */
+    @JvmStatic
+    fun cookieHeaderOrNull(): String? {
+        return (SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: "").takeIf { it.isNotEmpty() }
+    }
+
     class FormData {
         private val data: MutableMap<String, String> = HashMap()
         private var isUrlParam = false

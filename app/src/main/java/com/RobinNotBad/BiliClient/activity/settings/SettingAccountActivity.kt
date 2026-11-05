@@ -16,12 +16,15 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.AppRcmdLoginActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
+import com.RobinNotBad.BiliClient.api.AppRcmdApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.api.migration.ApiRouter
 import com.RobinNotBad.BiliClient.util.AccountStore
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.tabs.TabLayout
 
 /**
@@ -40,6 +43,9 @@ class SettingAccountActivity : BaseActivity() {
 
     /** 当前页签：0 = 推荐页 API，1 = 其它页面 API */
     private var currentTab = TAB_RCMD
+
+    /** 程序性回填开关时挡住监听器，避免「读值」被当成「用户点击」立刻写回偏好 */
+    private var suppressPhoneTvChange = false
 
     /** 已经尝试过拉取昵称/头像的账号（避免每次刷新都重试；失败也不反复打网络） */
     private val profileRequests = HashSet<String>()
@@ -140,6 +146,36 @@ class SettingAccountActivity : BaseActivity() {
         findViewById<MaterialButton>(R.id.accountRcmdLoginNew)?.setOnClickListener { loginNewAccount(true) }
         findViewById<MaterialButton>(R.id.accountMainLoginNew)?.setOnClickListener { loginNewAccount(false) }
         findViewById<MaterialButton>(R.id.accountStatsClear)?.setOnClickListener { confirmClearStats() }
+        setupPhoneTvSignSwitch()
+    }
+
+    /**
+     * 手机端口签名口径开关（v5.2.0 P0-2）。
+     *
+     * 历史做法：手机端口扫码用 TV 密钥、请求用手机密钥 → token 与 appkey **跨源**，
+     * 严格校验的接口会回 -663「鉴权失败，请联系账号管理员」。打开这个开关后扫码与请求同源
+     * （都用 TV 那对密钥），可消除该错误。
+     *
+     * 为什么默认关闭：切换会改变请求风控画像，且旧行为对绝大多数接口是能用的（只有少数严格接口
+     * 受影响）。默认保持历史行为 = 升级零回归；遇到 -663 的用户可以自己打开验证。
+     * 切换不会丢已登录 token（身份 id 仍是 IDENTITY_PHONE，槽位键不变）。
+     */
+    private fun setupPhoneTvSignSwitch() {
+        val switch = findViewById<SwitchMaterial>(R.id.accountPhoneTvSign) ?: return
+        // 必须挡住监听器：setChecked 会同步回调，否则「读值回填」会被当成用户点击、立刻写回偏好
+        suppressPhoneTvChange = true
+        switch.isChecked = SharedPreferencesUtil.getBoolean(AppRcmdApi.PHONE_TV_APPKEY_KEY, false)
+        suppressPhoneTvChange = false
+        switch.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressPhoneTvChange) return@setOnCheckedChangeListener
+            SharedPreferencesUtil.putBoolean(AppRcmdApi.PHONE_TV_APPKEY_KEY, isChecked)
+            // 身份变了要清掉挂起的路由决策，让下一次请求立刻按新身份重新判定
+            ApiRouter.clearSuspensions()
+            MsgUtil.showMsg(
+                if (isChecked) "已切换为同源签名，重新进页面后生效"
+                else "已切回历史签名口径"
+            )
+        }
     }
 
     /** 登录新账号：web 端口走已有的 web 扫码页，APP 端口带 EXTRA_PORT 走移动端扫码页 */

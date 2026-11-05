@@ -521,6 +521,35 @@
             android:exported="false"
             android:label="图文收藏夹"
             android:screenOrientation="locked" />
+        <!-- v5.2.0 时间管理套件（设置 → 时间管理）：
+             SettingTimeActivity 是本套件的设置页；其余四个是统计页 / 时间银行图形页 /
+             配额用完拦截页 / 独立的倒计时页。全部 exported=false（只由本应用自己启动），
+             锁竖屏与其余页面一致。 -->
+        <activity
+            android:name=".activity.settings.SettingTimeActivity"
+            android:exported="false"
+            android:label="时间管理"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.time.UsageStatsActivity"
+            android:exported="false"
+            android:label="使用时长统计"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.time.TimeBankActivity"
+            android:exported="false"
+            android:label="时间银行"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.time.TimeBankBlockActivity"
+            android:exported="false"
+            android:label="配额已用完"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".activity.time.CountdownActivity"
+            android:exported="false"
+            android:label="倒计时"
+            android:screenOrientation="locked" />
         <meta-data
             android:name="com.xtc.unbind.clearUserData.white_list"
             android:value="true" />

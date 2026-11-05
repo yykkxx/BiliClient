@@ -111,13 +111,14 @@ object WifiPreloadManager {
                 if (!dir.exists()) dir.mkdirs()
                 val file = File(dir, "$key.part")
 
-                val request = okhttp3.Request.Builder()
+                val requestBuilder = okhttp3.Request.Builder()
                         .url(videoUrl)
                         .header("Range", "bytes=0-" + (PRELOAD_BYTES - 1))
                         .header("Referer", "https://www.bilibili.com/")
                         .header("User-Agent", NetWorkUtil.USER_AGENT_WEB)
-                        .header("Cookie", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: "")
-                        .build()
+                // web 未登录时不加 Cookie 头（P3-1）：预加载拉的是媒体 CDN 直链，直链自带签名
+                NetWorkUtil.cookieHeaderOrNull()?.let { requestBuilder.header("Cookie", it) }
+                val request = requestBuilder.build()
 
                 val response = NetWorkUtil.getOkHttpInstance().newCall(request).execute()
                 response.use { resp ->
@@ -310,13 +311,14 @@ object WifiPreloadManager {
     private fun relayFromRemote(entry: PreloadEntry, output: OutputStream, start: Long, endIncl: Long, localLen: Long) {
         val rb = StringBuilder("bytes=").append(start)
         if (endIncl >= 0) rb.append("-").append(endIncl)
-        val request = okhttp3.Request.Builder()
+        val requestBuilder = okhttp3.Request.Builder()
                 .url(entry.remoteUrl)
                 .header("Range", rb.toString())
                 .header("Referer", entry.referer)
                 .header("User-Agent", NetWorkUtil.USER_AGENT_WEB)
-                .header("Cookie", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: "")
-                .build()
+        // web 未登录时不加 Cookie 头（P3-1）：同预加载口径，直链自带签名
+        NetWorkUtil.cookieHeaderOrNull()?.let { requestBuilder.header("Cookie", it) }
+        val request = requestBuilder.build()
         try {
             val response = NetWorkUtil.getOkHttpInstance().newCall(request).execute()
             response.use { resp ->

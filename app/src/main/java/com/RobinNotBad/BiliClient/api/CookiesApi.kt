@@ -8,6 +8,7 @@ import android.view.WindowManager
 
 import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.util.Cookies
+import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
@@ -214,9 +215,18 @@ object CookiesApi {
         val ticketExpires = parseInt(cookies.get("bili_ticket_expires"))
         if (!cookies.containsKey("bili_ticket") || cookies.get("bili_ticket")!!.equals("null") || !cookies.containsKey("bili_ticket_expires") || ticketExpires == null || ticketExpires < System.currentTimeMillis() / 1000) {
             try {
-                val bili_ticket = genBiliTicket()
-                NetWorkUtil.putCookie("bili_ticket", bili_ticket.first!!)
-                NetWorkUtil.putCookie("bili_ticket_expires", (bili_ticket.second + (3 * 24 * 60 * 60)).toString())
+                val biliTicket = genBiliTicket()
+                val ticket = biliTicket.first
+                if (ticket.isNullOrEmpty()) {
+                    // web 未登录（无 csrf）时 GenWebTicket 会回 Pair(null, -1)。
+                    // 历史写法 ticket.first!! 在这里**必然抛 KotlinNPE**，而本函数由启动自检调用，
+                    // 结果就是「web 未登录的用户每次冷启动都弹一次错误提示」。
+                    // bili_ticket 只提升 web 通道的风控分，拿不到就跳过，不影响任何用户功能（P3-2）。
+                    Logu.w("cookies", "bili_ticket 获取失败，跳过（web 未登录时属预期）")
+                } else {
+                    NetWorkUtil.putCookie("bili_ticket", ticket)
+                    NetWorkUtil.putCookie("bili_ticket_expires", (biliTicket.second + (3 * 24 * 60 * 60)).toString())
+                }
             } catch (e: NoSuchAlgorithmException) {
                 throw RuntimeException(e)
             } catch (e: InvalidKeyException) {

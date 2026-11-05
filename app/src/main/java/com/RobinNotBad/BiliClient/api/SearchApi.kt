@@ -3,6 +3,7 @@ package com.RobinNotBad.BiliClient.api
 import com.RobinNotBad.BiliClient.model.ArticleCard
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.model.VideoCard
+import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 
@@ -223,23 +224,56 @@ object SearchApi {
             return suggestions
         }
 
-        val url = "https://s.search.bilibili.com/main/suggest?term=" + URLEncoder.encode(keyword, "UTF-8")
-
-        val response = NetWorkUtil.getJson(url)
-
-        if (response.getInt("code") == 0 && response.has("result")) {
-            val result = response.getJSONObject("result")
-            if (result.has("tag") && !result.isNull("tag")) {
-                val tagArray = result.getJSONArray("tag")
-                for (i in 0 until tagArray.length()) {
-                    val tagObj = tagArray.getJSONObject(i)
-                    val value = tagObj.getString("value")
-                    suggestions.add(value)
-                }
-            }
+        // v5.2.0（P2-3）：先试 WBI 签名的 `/x/web-interface/suggest`
+        // （PiliPlus lib/http/search.dart:23-44 实证：term/highlight/spmid/web_location + WBI，
+        // 读 data.result），结构不符/失败再退回历史 `s.search.bilibili.com/main/suggest`。
+        try {
+            readSuggestTags(NetWorkUtil.getJson(signedWebSuggestUrl(keyword)), suggestions)
+        } catch (e: Exception) {
+            // 网络/签名/结构异常都回退历史端点：联想是纯装饰功能，失败绝不能影响搜索输入
+            Logu.d("search", "联想 WBI 通道失败，回退 s.search：" + e.javaClass.simpleName)
         }
+        if (suggestions.isNotEmpty()) return suggestions
+
+        // 回退：历史端点（web 匿名也可用，故这条兜底在 S4 纯匿名下同样有效）
+        val url = "https://s.search.bilibili.com/main/suggest?term=" + URLEncoder.encode(keyword, "UTF-8")
+        val response = NetWorkUtil.getJson(url)
+        readSuggestTags(response, suggestions)
 
         return suggestions
+    }
+
+    /**
+     * 构造 WBI 签名的联想 URL。
+     *
+     * 参数照 PiliPlus（`term` / `highlight=0` / `spmid=333.1365` / `web_location=333.1365`）。
+     * `web_location` 属 `DROPPED_PARAMS`，但那是**路由层**的丢弃口径（APP 通道要剔 web 参数）；
+     * 这里走的是 web 端点，必须带上，否则与文档参数不一致。
+     */
+    private fun signedWebSuggestUrl(keyword: String): String {
+        val url = "https://api.bilibili.com/x/web-interface/suggest" +
+                "?term=" + URLEncoder.encode(keyword, "UTF-8") +
+                "&highlight=0&spmid=333.1365&web_location=333.1365"
+        return ConfInfoApi.signWBI(url)
+    }
+
+    /**
+     * 从回包取 `result.tag[].value` 追加到 [out]。
+     *
+     * 历史 `s.search` 与 `/x/web-interface/suggest` 的**键路径按调研报告推断一致**
+     * （`data.result.tag[]`；注意新端点的 result 在 `data` 下，历史端点 result 在顶层，
+     * 所以这里两个位置都找一遍，避免结构差异导致联想为空）。
+     */
+    private fun readSuggestTags(response: JSONObject, out: ArrayList<String>) {
+        if (response.optInt("code", -1) != 0) return
+        val result = response.optJSONObject("result")
+                ?: response.optJSONObject("data")?.optJSONObject("result")
+                ?: return
+        val tagArray = result.optJSONArray("tag") ?: return
+        for (i in 0 until tagArray.length()) {
+            val value = tagArray.optJSONObject(i)?.optString("value", "") ?: ""
+            if (value.isNotEmpty()) out.add(value)
+        }
     }
 
     @JvmStatic

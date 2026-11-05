@@ -7,13 +7,11 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
-import com.RobinNotBad.BiliClient.adapter.SwitchDisableGuard
 import com.RobinNotBad.BiliClient.model.SettingSection
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
-import com.RobinNotBad.BiliClient.util.UsageLimitManager
 import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 
 import java.util.ArrayList
@@ -62,10 +60,9 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 getString(R.string.desc_new_danmaku_api), "true"))
         sectionList.add(SettingSection("switch", "私信未读标记", SharedPreferencesUtil.PRIVATE_MSG_UNREAD_BADGE_ENABLE,
                 getString(R.string.desc_private_msg_unread_badge_enable), "false"))
-        // 每日使用时长限制：开启可直接开；**关闭需原地等 30 秒**（SwitchDisableGuard 拦截并倒计时）
-        sectionList.add(SettingSection("switch", getString(R.string.setting_lab_usage_limit_name),
-                UsageLimitManager.PREF_LAB_USAGE_LIMIT, getString(R.string.setting_lab_usage_limit_desc), "false",
-                SwitchDisableGuard(UsageLimitManager.DISABLE_GUARD_SECONDS)))
+        // v5.2.0：「每日使用时长限制」已搬到「设置 → 时间管理」（那里同时有统计 / 时间银行 /
+        // 提醒 / 倒计时页面）。偏好键仍是 lab_usage_limit，老用户开关状态原样生效，
+        // 这里不保留第二个入口，避免同一开关出现在两处、状态互相看起来「没生效」。
     }
 
     /** 下载：旧版下载器 + 两个保存路径 */

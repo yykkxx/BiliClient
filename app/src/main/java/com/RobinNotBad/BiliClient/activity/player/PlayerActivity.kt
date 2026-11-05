@@ -1141,7 +1141,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 val playUrl = WifiPreloadManager.proxyUrlFor(aid, cid, nowurl) ?: nowurl
                 val headers = HashMap<String, String>()
                 headers["Referer"] = "https://www.bilibili.com/"
-                headers["Cookie"] = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!
+                // web 未登录时不加 Cookie 头：播放地址是 CDN 直链（自带 deadline/upsig 签名），
+                // 空 Cookie 无意义，还会让人误以为必须 web 登录才能播（P3-1）
+                NetWorkUtil.cookieHeaderOrNull()?.let { headers["Cookie"] = it }
                 ijkPlayer!!.setDataSource(playUrl, headers)
             } else
                 ijkPlayer!!.setDataSource(nowurl)
@@ -2455,8 +2457,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             try {
                 var url = "https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo?type=0&id=" + aid
                 val mHeaders = ArrayList<String>()
-                mHeaders.add("Cookie")
-                mHeaders.add(SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!)
+                // web 未登录时不加 Cookie 头（P3-1）：直播弹幕鉴权在首帧 auth packet（uid/roomid/key），
+                // Cookie 通常非必需，空 Cookie 只会误导（参见调研报告 §3.1 A1 的待验证项）
+                NetWorkUtil.cookieHeaderOrNull()?.let {
+                    mHeaders.add("Cookie")
+                    mHeaders.add(it)
+                }
                 mHeaders.add("Referer")
                 mHeaders.add("https://live.bilibili.com/" + aid)
                 mHeaders.add("Origin")
@@ -2473,12 +2479,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 Logu.v("连接WebSocket", url)
 
                 okHttpClient = OkHttpClient()
-                val request = Request.Builder()
+                val requestBuilder = Request.Builder()
                         .url(url)
-                        .header("Cookie", SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "")!!)
                         .header("Origin", "https://live.bilibili.com")
                         .header("User-Agent", USER_AGENT_WEB)
-                        .build()
+                // web 未登录时不加 Cookie 头（P3-1），同上方 HTTP 请求口径
+                NetWorkUtil.cookieHeaderOrNull()?.let { requestBuilder.header("Cookie", it) }
+                val request = requestBuilder.build()
 
                 val listener = PlayerDanmuClientListener()
                 listener.mid = mid

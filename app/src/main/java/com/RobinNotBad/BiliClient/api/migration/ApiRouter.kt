@@ -347,6 +347,10 @@ object ApiRouter {
         val targetPath = target.second
 
         val params = parseFormBody(body)
+        // 与 GET 的 queryParams() 口径一致：web 专用参数（尤其 csrf）不应带给 APP 端点。
+        // 表单体里的 csrf 多为 web 登录的 bili_jct（web 未登录时是空串）；APP 通道用 access_key，
+        // 文档明确 csrf 只在 Cookie 方式下必要，带一个空 csrf 过去只会给服务端留「字段存在但为空」的口径。
+        params.keys.removeAll { DROPPED_PARAMS.contains(it.lowercase(Locale.ROOT)) }
         params.putAll(queryParams(httpUrl))
         applyParamRewrite(params, rule)
         addIdentityParams(params, accessToken, identity)

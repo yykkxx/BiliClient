@@ -187,35 +187,48 @@ class MySpaceActivity : InstanceActivity() {
     /**
      * 尝试联网补全账号资料（粉丝数/等级/硬币/签名）。
      *
-     * 失败是**预期内**的：web 未登录时这个接口本就没有数据。
-     * 因此这里静默降级——不弹错误弹窗、不打断用户，只是少几行数字。
+     * 失败是**预期内**的，这里静默降级——不弹错误弹窗、不打断用户，只是少几行数字。
+     *
+     * v5.2.0（P2-1）：不再要求「web 已登录」。历史上这里是
+     * `if (AccountStore.activeMid(PORT_WEB) <= 0L) { ... "详细数据需登录 Web" ... return }`，
+     * 于是「web 未登录 + APP 端口已登录」的用户永远停在占位文案上（调研报告 §3.3 的头号缺陷）。
+     * 现在只要**任意端口有账号**就请求：迁移层启用（其它页面 API 选非 Web 端口）时
+     * `/x/space/myinfo` 会走端口 token 的 APP 通道；未启用时仍按原 web 通道，
+     * 失败被下面同一个 catch 吃掉，行为与原「web 未登录」一致（只是不再提前写死文案）。
      */
     @SuppressLint("SetTextI18n")
     private fun loadRemoteProfile() {
-        if (AccountStore.activeMid(AccountStore.PORT_WEB) <= 0L) {
-            // web 未登录：没有可靠途径拿到粉丝/硬币/EXP（端口 token 只有 mid 和昵称）。
-            // 直接给一句诚实的说明，不要空着让人以为在加载。
-            if (AccountStore.hasAnyAccount()) {
-                val uid = AccountStore.primaryMid()
-                userFans?.text = "uid " + uid + "（端口账号，详细数据需登录 Web）"
-                userExp?.text = ""
-            }
-            return
-        }
+        if (!AccountStore.hasAnyAccount()) return
         CenterThreadPool.run(Runnable {
             try {
                 val userInfo = UserInfoApi.getCurrentUserInfo()
+                // getCurrentUserInfo() 拿不到数据时**不抛异常**，而是返回一个占位对象
+                // UserInfo(0, "加载失败", "", "", 0, 0, 0)。若原样往下走，页面会被覆盖成
+                // 「加载失败 / 0 粉丝」——比 renderLocalProfile() 铺好的本地占位更糟。
+                // 所以这里先校验：mid 为 0 视为没拿到，直接保持本地占位（静默降级）。
+                if (userInfo.mid <= 0L) {
+                    Log.w("MySpaceActivity", "账号资料为空（多为 web 未登录且迁移未启用），保持本地占位")
+                    return@Runnable
+                }
                 currentUserInfo = userInfo
-                // 缓存昵称/头像，供「web 未登录时也能显示」的场景复用
-                val webMid = AccountStore.activeMid(AccountStore.PORT_WEB)
-                AccountStore.updateProfile(AccountStore.PORT_WEB, webMid, userInfo.name, userInfo.avatar)
+                // 缓存昵称/头像，供「本地占位」复用。
+                // 必须写进**资料实际来源的那个端口**：P2-1 之后请求可能走 APP 通道
+                // （其它页面 API 选了非 Web 端口时 /x/space/myinfo 由端口 token 返回），
+                // 那是端口账号的资料，写进 web 槽位会把 web 账号的缓存名字/头像改错。
+                val sourcePort = if (AccountStore.mainIdentity() != null) AccountStore.mainPort() else AccountStore.PORT_WEB
+                val sourceMid = AccountStore.activeMid(sourcePort)
+                if (sourceMid > 0L) AccountStore.updateProfile(sourcePort, sourceMid, userInfo.name, userInfo.avatar)
                 val userCoin = UserInfoApi.getCurrentUserCoin()
                 if (isDestroyed) return@Runnable
                 CoroutineScopes.launchUi {
                     applyRemoteProfile(userInfo, userCoin)
                 }
             } catch (e: Exception) {
-                report(e)
+                // 静默降级：不弹错误弹窗（原注释就这么要求的）。
+                // 这里**不能用 report(e)** —— BaseActivity.report 的实现是 MsgUtil.err(弹窗)，
+                // 而 web 未登录 + 端口未启用迁移时请求失败是**预期内**的常态，
+                // 弹窗会把「少几行装饰性数字」变成每次进页面都报错。
+                Log.w("MySpaceActivity", "拉取账号资料失败，保持本地占位", e)
             }
         })
     }
