@@ -219,6 +219,7 @@
     <ID>ImplicitDefaultLocale:UpdateInfoActivity.kt$UpdateInfoActivity$String.format("是否为正式版: %s", if (isRelease == 1) "是" else "否")</ID>
     <ID>ImplicitDefaultLocale:UpdateInfoActivity.kt$UpdateInfoActivity$String.format("版本名: %s", versionName)</ID>
     <ID>ImplicitDefaultLocale:VideoInfoFragment.kt$VideoInfoFragment$String.format("合集 · %s", videoInfo.collection!!.title)</ID>
+    <ID>LargeClass:ApiCatalog.kt$ApiCatalog</ID>
     <ID>LargeClass:PlayerActivity.kt$PlayerActivity : ActivityOnPreparedListener</ID>
     <ID>LargeClass:StoryPlayerActivity.kt$StoryPlayerActivity : BaseActivity</ID>
     <ID>LongMethod:BangumiInfoFragment.kt$BangumiInfoFragment$@SuppressLint("SetTextI18n") private fun initView()</ID>

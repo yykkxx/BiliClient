@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.model
 
+import com.RobinNotBad.BiliClient.util.AccountManager
 import android.os.Parcel
 import android.os.Parcelable
 
@@ -104,7 +105,8 @@ class VideoInfo : Parcelable, Serializable { // 自定义类需要加这个才�
         val safeIndex = if (index in cidList.indices) index else 0
         data.cid = cidList.getOrElse(safeIndex) { 0L }
         data.title = if (nameList.size <= 1) title else nameList.getOrElse(safeIndex) { title }
-        data.mid = SharedPreferencesUtil.getLong("mid", 0)
+        // v5.2.1 主账号口径：mid 不再只读 web 槽位（web 退出后恒为 0，导致「任意端口全功能」断链）
+        data.mid = AccountManager.accountMid()
         data.qn = SharedPreferencesUtil.getInt("play_qn", 16)
         data.pagenames = pagenames
         data.cids = cids

@@ -154,7 +154,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/account_phone_tv_sign_title"
+                                android:text="@string/acct_mgr_phone_tv_sign_title"
                                 android:textSize="12sp" />
 
                             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -168,7 +168,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginHorizontal="2dp"
-                            android:text="@string/account_phone_tv_sign_desc"
+                            android:text="@string/acct_mgr_phone_tv_sign_desc"
                             android:textSize="11sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -341,6 +341,94 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
+
+            <!-- ==================== 底部公共：凭据总览（v5.2.1 四端统一） ====================
+                 为什么单独一张卡：用户要求「所有操作登录凭据的地方都放在那里
+                 （比如说导出登录凭据的时候，是四端同时导出）」。凭据的四件事
+                 （看状态 / 导出 / 导入 / 续期）集中在这一张卡上，而不是散进两个页签里 ——
+                 页签是「选端口」，凭据是「四端一起管」，两件事不该混在一起。
+                 导出/导入的实现在 AccountCredentials（四端同时，认新旧两种格式）。 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/list_margin_vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="登录凭据（四端统一）"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <!-- 四端登录状态：一行一端，文案由 refreshCredentialsCard() 生成 -->
+                    <TextView
+                        android:id="@+id/accountCredText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingExtra="2dp"
+                        android:text="web 未登录 · 手机 未登录 · HD 未登录 · TV 未登录"
+                        android:textAlignment="textStart"
+                        android:textSize="12sp"
+                        tools:ignore="RtlCompat" />
+
+                    <!-- 覆盖报告：当前端口能直接提供多少「需要登录的端点」。
+                         这是「任意端口全功能」的可查证据，不是口号（见 ApiCatalog.coverageSummary） -->
+                    <TextView
+                        android:id="@+id/accountCoverageText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:lineSpacingExtra="2dp"
+                        android:textSize="11sp"
+                        android:visibility="gone"
+                        tools:ignore="RtlCompat" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/accountExportCred"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="导出四端凭据"
+                        android:textSize="12sp" />
+
+                    <!-- 导入：AppCompatEditText 承载 JSON 文本。
+                         用户换机时的实际流程是「旧机导出 → 复制 → 新机粘贴」，
+                         所以这里必须是可粘贴的输入框，而不是"从文件选"（手表上没有文件选择器）。 -->
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/accountImportInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:hint="粘贴凭据 JSON 后点下面的导入"
+                        android:inputType="textMultiLine"
+                        android:maxLines="4"
+                        android:minLines="2"
+                        android:textSize="11sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/accountImportCred"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="导入四端凭据（合并，不覆盖现有账号）"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/accountRenewWeb"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="立即续期 Web 登录"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <!-- ==================== 底部公共：迁移统计 ==================== -->
             <com.google.android.material.card.MaterialCardView

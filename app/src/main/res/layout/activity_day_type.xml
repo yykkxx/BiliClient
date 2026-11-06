@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  日子询问页（打开应用先问「上学日 / 休息日」，不可取消）。
+
+  结构：一句问题 + 一句说明 + 两个大按钮 + 一行「每天只需选一次」的小字。
+
+  为什么用两个大按钮而不是 RadioButton + 确认：
+  这是一道**必须回答**的二选一，没有「其它」和「稍后再说」。两个大按钮各占半屏宽度，
+  手指在小屏上随便点哪个都能命中；RadioButton + 确认按钮会多一次点击，而且
+  圆屏上单选圈很小、要求更精确的瞄准（用户在这种「被拦在门外」的场景里最没耐心）。
+
+  为什么整页是 match_parent + 居中的 LinearLayout：
+  这一页没有顶栏/滚动内容（它是个模态问题），所以整页居中，上下留白随圆屏自动分配；
+  圆屏设备上 BaseActivity 会把 decorView 加边距，内容不会被切。
+
+  颜色：两个按钮用三档语义色的「绿（上学日，克制）」与「黄（休息日，放开）」——
+  与后面所有页面里「绿=正常 / 黄=注意」的语义保持一致，用户在别处看到的颜色含义在这里先建立。
+  不用红色：红在这套语义里专指「已经超标」，这里还没开始用。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingHorizontal="14dp"
+    tools:context=".time.activity.DayTypePromptActivity">
+
+    <!-- 问题主标题 -->
+    <TextView
+        android:id="@+id/tm2_day_type_question"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="2"
+        android:text="@string/tm2_day_type_question"
+        android:textSize="21sp"
+        android:textStyle="bold" />
+
+    <!-- 说明：把「选了会怎样」写清楚，用户才知道该点哪个 -->
+    <TextView
+        android:id="@+id/tm2_day_type_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:maxLines="3"
+        android:alpha="0.85"
+        android:textSize="13sp"
+        tools:text="选上学日就按每天 120 分钟限额；选休息日则不限时长。" />
+
+    <!-- 两个选项按钮。用「大按钮 + 两行说明」的形式：
+         按钮文字是「上学日 / 休息日」，下面各挂一行小字说明后果，
+         比在按钮里塞长文案更清楚（按钮里换行会显得很挤）。 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tm2_day_type_school"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:minHeight="52dp"
+        android:text="@string/tm2_day_type_school"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        app:cornerRadius="10dp" />
+
+    <TextView
+        android:id="@+id/tm2_day_type_school_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:gravity="center"
+        android:textColor="@color/tm2_level_green"
+        android:textSize="11sp"
+        tools:text="每天 120 分钟 · 超出后需要等待" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tm2_day_type_rest"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:minHeight="52dp"
+        android:text="@string/tm2_day_type_rest"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        app:cornerRadius="10dp" />
+
+    <TextView
+        android:id="@+id/tm2_day_type_rest_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:gravity="center"
+        android:textColor="@color/tm2_level_yellow"
+        android:textSize="11sp"
+        tools:text="不限时长 · 也不做倒计时等待" />
+
+    <!-- 不可取消的说明：让用户知道「点空白/按返回都逃不掉」，不会反复试探 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:gravity="center"
+        android:alpha="0.55"
+        android:maxLines="3"
+        android:text="@string/tm2_day_type_hint"
+        android:textSize="10sp" />
+
+</LinearLayout>

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「账号管理」页（v5.2.1 四端同级重构）专属字符串，统一 acct_mgr_ 前缀。
+
+  为什么单独一个文件：本轮规格书要求账管页的文案不要塞进 strings.xml（那个文件是
+  Lead 独占 + 全仓库共用，冲突面太大）；同时 strings_time_mgmt.xml 本轮会被时间管理
+  重写删除，而账管页原先引用的 account_phone_tv_sign_title/desc 就在里面，
+  所以那两条也一并搬到这里（改名为 acct_mgr_phone_tv_sign_*，引用同步改）。
+
+  文案口径（贯穿全页，改文案时请保持）：
+  - 「账号」与「请求走向」是两件事，四个端口完全同级，任何一端登录都应能跑全部功能；
+  - 不要出现「主端口 / 次端口 / 回退到 Web」这类暗示主次的说法。
+-->
+<resources>
+
+    <!-- ============ 顶部总览 ============ -->
+    <string name="acct_mgr_page_name">账号管理</string>
+    <string name="acct_mgr_section_accounts">账号（四端各自独立）</string>
+    <string name="acct_mgr_accounts_desc">四个端口各自一份账号池，互不影响。点任意一端查看该端的账号、切换或退出。</string>
+    <string name="acct_mgr_ports_desc">任意一端登录即可使用全部功能，不分主次。</string>
+
+    <!-- ============ 端口行 ============ -->
+    <string name="acct_mgr_port_count_none">未登录</string>
+    <string name="acct_mgr_port_count_fmt">%1$d 个账号</string>
+    <string name="acct_mgr_badge_logged_in">已登录</string>
+    <string name="acct_mgr_badge_logged_out">未登录</string>
+    <string name="acct_mgr_badge_expired">凭据已过期</string>
+    <string name="acct_mgr_badge_count_fmt">%1$d</string>
+
+    <!-- ============ 端口说明（点开某一端时显示在账号列表上方） ============ -->
+    <string name="acct_mgr_port_desc_web">Web：用本软件的网页扫码登录。与三个 APP 端口完全同级，也可以不登。</string>
+    <string name="acct_mgr_port_desc_android">Android手机：按官方手机客户端协议扫码登录，与 Web 互相独立。</string>
+    <string name="acct_mgr_port_desc_hd">HD：按 HD（android_hd）协议扫码登录，与 Web 互相独立。</string>
+    <string name="acct_mgr_port_desc_tv">TV：按云视听小电视（android_tv）协议扫码登录，与 Web 互相独立。</string>
+
+    <!-- ============ 账号行 ============ -->
+    <string name="acct_mgr_account_uid_fmt">uid %1$d</string>
+    <string name="acct_mgr_account_current">当前</string>
+    <string name="acct_mgr_btn_switch">切换</string>
+    <string name="acct_mgr_btn_logout">退出</string>
+    <string name="acct_mgr_btn_login_new">+ 登录新账号</string>
+    <string name="acct_mgr_empty_port">该端口还没有登录账号，点下方按钮登录。</string>
+
+    <!-- ============ 请求走向 ============ -->
+    <string name="acct_mgr_section_routing">请求走向（决定每个请求用哪一端的凭据）</string>
+    <string name="acct_mgr_routing_desc">两个作用域互相独立：推荐页是一个，其余所有页面是另一个。选定哪一端，请求就只走那一端，不会偷偷回退到 Web。</string>
+    <string name="acct_mgr_routing_rcmd_title">推荐页走哪一端</string>
+    <string name="acct_mgr_routing_main_title">其它页面走哪一端</string>
+    <string name="acct_mgr_routing_switch_ok_fmt">%1$s 已改为 %2$s 端</string>
+
+    <!-- ============ 一键修复 ============ -->
+    <string name="acct_mgr_fix_title">检测到请求走向不可用</string>
+    <string name="acct_mgr_fix_body_fmt">「%1$s」当前选的是 %2$s 端，但该端没有登录账号；同时 %3$s 端已登录。若不修，这部分请求会因缺少凭据失败。</string>
+    <string name="acct_mgr_fix_button_fmt">把「%1$s」改为 %2$s 端</string>
+    <string name="acct_mgr_fix_done_fmt">已把「%1$s」改为 %2$s 端</string>
+    <string name="acct_mgr_fix_all_title">建议一键修复</string>
+    <string name="acct_mgr_fix_all_body_fmt">检测到 %1$d 处请求走向指向了未登录的端口，而 %2$s 端已登录。点一下全部改过去。</string>
+    <string name="acct_mgr_fix_all_button_fmt">全部改为 %1$s 端</string>
+    <string name="acct_mgr_fix_all_done_fmt">已把 %1$d 处请求走向改为 %2$s 端</string>
+
+    <!-- ============ 高级 ============ -->
+    <string name="acct_mgr_section_advanced">高级</string>
+    <string name="acct_mgr_advanced_hint">下面的选项只影响请求的签名口径，不影响账号本身。遇到问题再动。</string>
+    <string name="acct_mgr_phone_tv_sign_title">手机端口用同源签名（消除「鉴权失败」）</string>
+    <string name="acct_mgr_phone_tv_sign_desc">手机端口的扫码与请求都使用同一套 TV 密钥签名。历史做法是「扫码用 TV 密钥、请求用手机密钥」，部分严格校验接口会因此返回 -663「鉴权失败，请联系账号管理员」。打开后两者同源可消除该错误；切换不会丢失已登录账号，重新进页面后生效。</string>
+    <string name="acct_mgr_phone_tv_sign_on">已切换为同源签名，重新进页面后生效</string>
+    <string name="acct_mgr_phone_tv_sign_off">已切回历史签名口径</string>
+
+    <!-- ============ 凭据统一操作 ============ -->
+    <string name="acct_mgr_section_credentials">登录凭据（四端统一）</string>
+    <string name="acct_mgr_credentials_desc">导出会把四个端口的全部账号凭据打包成一段文本，可用来迁移设备或备份；导入会按端口逐个写回。凭据等同于账号密码，请勿发给他人。</string>
+    <string name="acct_mgr_btn_export">导出全部四端凭据</string>
+    <string name="acct_mgr_btn_export_readable">导出可读摘要</string>
+    <string name="acct_mgr_btn_import">导入凭据</string>
+    <string name="acct_mgr_btn_renew">立即检查续期</string>
+    <string name="acct_mgr_btn_clear_all">清除全部凭据</string>
+    <string name="acct_mgr_btn_copy">复制</string>
+    <string name="acct_mgr_btn_close">收起</string>
+    <string name="acct_mgr_import_title">导入凭据</string>
+    <string name="acct_mgr_import_hint">把之前导出的凭据文本整段粘贴到这里</string>
+    <string name="acct_mgr_import_confirm">导入</string>
+    <string name="acct_mgr_import_empty">没有内容可导入</string>
+    <string name="acct_mgr_import_done">导入完成</string>
+    <string name="acct_mgr_import_failed">导入失败：%1$s</string>
+    <string name="acct_mgr_export_copied">已复制到剪贴板</string>
+    <string name="acct_mgr_export_empty">当前没有任何账号凭据可导出</string>
+    <string name="acct_mgr_renew_checking">正在检查续期…</string>
+    <string name="acct_mgr_renew_no_web">Web 端未登录，无需续期（其它端口的凭据不通过 Cookie 续期）</string>
+    <string name="acct_mgr_renew_ok">Web 凭据仍然有效，无需续期</string>
+    <string name="acct_mgr_renew_done">Web 凭据已续期成功</string>
+    <string name="acct_mgr_renew_failed">续期失败，可能需要重新登录 Web 端</string>
+    <string name="acct_mgr_clear_title">清除全部凭据</string>
+    <string name="acct_mgr_clear_message">将退出四个端口上的全部账号（共 %1$d 个），并清空本机保存的所有登录凭据。\n\n这不会删除收藏、历史、稍后再看等云端数据，但清空后需要重新登录才能使用需要账号的功能。此操作不可撤销。</string>
+    <string name="acct_mgr_clear_confirm">确认清除</string>
+    <string name="acct_mgr_clear_done">已清除全部登录凭据</string>
+    <string name="acct_mgr_clear_none">当前没有任何登录凭据</string>
+    <string name="acct_mgr_feature_pending">功能准备中，稍后的版本可用</string>
+    <string name="acct_mgr_cancel">取消</string>
+
+    <!-- ============ 覆盖报告 ============ -->
+    <string name="acct_mgr_section_coverage">功能覆盖检查</string>
+    <string name="acct_mgr_coverage_desc">「任意一端登录就能跑全部功能」的验收界面：列出所有仍需 Web 通道的端点，以及当前选择下的结论。</string>
+    <string name="acct_mgr_coverage_btn_expand">展开覆盖报告</string>
+    <string name="acct_mgr_coverage_btn_collapse">收起覆盖报告</string>
+    <string name="acct_mgr_coverage_conclusion_ok">当前选择下，四端请求都能由已登录的端口完成，没有功能依赖 Web 登录。</string>
+    <string name="acct_mgr_coverage_conclusion_web_needed_fmt">当前选择下，仍有 %1$d 个端点只能走 Web 通道；其中真正需要 Web 登录的不影响其它端口的功能。</string>
+    <string name="acct_mgr_coverage_conclusion_web_down_fmt">当前选择下，仍有 %1$d 个端点只能走 Web 通道。若 Web 未登录，这些功能不可用（其余功能不受影响）。</string>
+    <string name="acct_mgr_coverage_kept_total_fmt">仍需 Web 的端点：%1$d 个（%2$d 类）</string>
+    <string name="acct_mgr_coverage_migrated_fmt">已可走 APP 通道：%1$d 个端点</string>
+    <string name="acct_mgr_coverage_category_fmt" formatted="false">%1$s（%2$d）</string>
+    <string name="acct_mgr_coverage_placeholder_note">（覆盖报告由统一网关提供，当前显示的是旧规则表的保留清单，等网关落地后自动切换。）</string>
+
+    <!-- ============ 迁移统计（沿用原有卡片） ============ -->
+    <string name="acct_mgr_section_stats">通道命中统计</string>
+    <string name="acct_mgr_stats_hits_fmt">APP 通道命中：%1$d 次</string>
+    <string name="acct_mgr_stats_fallbacks_fmt">回退 web：%1$d 次（命中率 %2$d%%）</string>
+    <string name="acct_mgr_stats_noreplay_fmt">写操作不重放：%1$d 次</string>
+    <string name="acct_mgr_stats_clear">清空统计</string>
+    <string name="acct_mgr_stats_clear_title">清空通道统计</string>
+    <string name="acct_mgr_stats_clear_message">只清空命中/回退次数与最近失败记录，不影响端口选择、账号和统计之外的任何功能。</string>
+    <string name="acct_mgr_stats_cleared">已清空通道统计</string>
+
+    <!-- ============ 底部说明 ============ -->
+    <string name="acct_mgr_footer">四个端口完全同级：任意一端登录后都能完成全部功能，不需要先登 Web。\n「请求走向」只决定请求带哪一端的凭据，和账号是否登录是两件事。\n每个端口下可同时登录多个账号，切换只换「这一端当前用谁」。\n退出某个账号只清该账号凭据，不删收藏、历史、稍后再看等数据。</string>
+
+</resources>

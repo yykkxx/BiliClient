@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  收藏夹多选缓存（#7）的文案。
+  v5.2.1 起集中放在本文件（fav_batch_ 前缀），不再往 strings.xml 里塞，
+  避免与其它子代理的改动冲突。文案里的「已加载」二字是刻意保留的：
+  全选只作用于已加载到内存的那部分，必须让用户在按钮/提示里一眼看到范围。
+-->
+<resources>
+
+    <!-- ==================== 底栏三个选择动作（全选 / 反选 / 清空） ==================== -->
+    <string name="fav_batch_select_all">全选</string>
+    <string name="fav_batch_invert">反选</string>
+    <string name="fav_batch_clear">清空</string>
+    <string name="fav_batch_download">缓存所选</string>
+    <string name="fav_batch_download_count">缓存所选(%1$d)</string>
+
+    <!-- ==================== 顶栏已选数量 ==================== -->
+    <string name="fav_batch_selected_count">已选 %1$d · 已加载 %2$d</string>
+    <string name="fav_batch_selected_count_more">已选 %1$d · 已加载 %2$d（还有更多）</string>
+
+    <!-- ==================== 三个动作的反馈 ==================== -->
+    <string name="fav_batch_all_selected">已全选当前已加载的 %1$d 个视频</string>
+    <string name="fav_batch_all_selected_more">已全选当前已加载的 %1$d 个视频（收藏夹还有更多，继续下滑加载后可再全选一次）</string>
+    <string name="fav_batch_inverted">已反选，当前选中 %1$d 个</string>
+    <string name="fav_batch_cleared">已清空选择</string>
+    <string name="fav_batch_need_selection">还没有勾选任何视频</string>
+    <string name="fav_batch_canceling">正在取消…</string>
+    <string name="fav_batch_scan_partial">有 %1$d 个视频拿不到信息（已删/私密/网络异常），不会加入队列</string>
+
+    <!-- ==================== 下载过程中的进度与取消 ==================== -->
+    <string name="fav_batch_checking_quality">正在检查可用清晰度 %1$d/%2$d</string>
+    <string name="fav_batch_enqueueing">正在加入队列 %1$d/%2$d</string>
+    <string name="fav_batch_cancel">取消</string>
+    <string name="fav_batch_canceled_none">已取消，没有视频加入队列</string>
+    <string name="fav_batch_canceled_partial">已取消，本次已加入队列 %1$d 个</string>
+
+    <!-- ==================== 结果汇总 ==================== -->
+    <string name="fav_batch_result_queued">已加入队列 %1$d 个</string>
+    <string name="fav_batch_result_duplicate">，已在队列 %1$d 个</string>
+    <string name="fav_batch_result_failed">，失败 %1$d 个</string>
+    <string name="fav_batch_result_none">没有视频加入队列</string>
+
+    <!-- ==================== 清晰度选择 ==================== -->
+    <string name="fav_batch_quality_title">选择缓存清晰度</string>
+    <string name="fav_batch_quality_scope">以下档位为已选 %1$d 个视频全部可用的交集</string>
+    <string name="fav_batch_quality_empty">已选视频没有共同可用的清晰度，将按「跟随播放器设置（%1$s）」缓存</string>
+    <string name="fav_batch_follow_player">跟随播放器设置（当前 %1$s）</string>
+    <string name="fav_batch_dialog_cancel">取消</string>
+
+    <!-- ==================== 长按菜单（更多操作） ==================== -->
+    <string name="fav_batch_menu_detail">查看视频详情</string>
+    <string name="fav_batch_menu_only_this">仅选中此视频</string>
+    <string name="fav_batch_menu_copy_title">复制标题</string>
+    <string name="fav_batch_only_this_done">已仅选中此视频</string>
+    <string name="fav_batch_copied">已复制标题</string>
+
+    <!-- ==================== 收藏夹列表态 ==================== -->
+    <string name="fav_batch_folder_page">收藏夹多选缓存</string>
+    <string name="fav_batch_folder_empty">没有收藏夹</string>
+    <string name="fav_batch_video_empty">这个收藏夹是空的</string>
+    <string name="fav_batch_load_failed">加载失败，请重试</string>
+    <string name="fav_batch_busy_back">正在加入队列，已为你取消；请再按一次返回</string>
+
+</resources>

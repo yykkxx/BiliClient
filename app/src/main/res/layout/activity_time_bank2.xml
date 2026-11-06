@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  时间银行页（小栏 2）：总开关 / 未来 7 天柱子 / 借时间操作区 / 规则说明。
+
+  结构三段（自上而下）：
+  1. 顶部：总开关 + 状态说明（关闭有限制的理由写在这里，因为拒绝关闭时用户就是看这一行）；
+  2. 中部：今天已借总量环（BorrowRingView，自绘）+「已借 X / 上限 5 小时」文字；
+     再下面是未来 7 天柱状图（UsageBarChartView，可点选某一天）；
+  3. 底部：选中日期 + 预设快捷按钮（15 / 30 / 60）+ 加减微调 + 「借 N 分钟」按钮。
+
+  为什么借入操作用「预设 + 加减」而不是滑杆：
+  试过滑杆，但手表屏宽只有 3~4cm，滑杆的拇指命中区太小、且滑杆不显示精确值；
+  而这里的分钟数只有「15/30/60 这几个常用档 + 5 分钟微调」的需求，
+  按钮点一下就到位，比滑杆准得多也快得多（用户原话「怎么样能让用户用得最舒服」）。
+
+  为什么柱状图高度写死 190dp 而不是 wrap_content：
+  UsageBarChartView 的留白是按自身高度的比例算的，wrap_content 在圆屏上容易被压成很矮、
+  柱顶数字与轴标签互相重叠。固定高度能保证比例留白有意义。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".time.activity.TimeBankActivity">
+
+    <RelativeLayout
+        android:id="@+id/top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
+
+        <TextView
+            android:id="@+id/pageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginStart="8dp"
+            android:layout_toStartOf="@id/timeText"
+            android:lines="1"
+            android:text="@string/tm2_page_bank"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/arrow_back" />
+
+        <com.RobinNotBad.BiliClient.ui.widget.TextClock
+            android:id="@+id/timeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginEnd="8dp" />
+
+    </RelativeLayout>
+
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/activity_padding_horizontal"
+            android:paddingTop="2dp"
+            android:paddingBottom="16dp">
+
+            <!-- ==================== 总开关 ==================== -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tm2_bank_switch_title"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/tm2_bank_switch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tm2_bank_switch_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alpha="0.8"
+                android:textSize="11sp"
+                tools:text="已开启。当前已借 30 分钟，上限 300 分钟。" />
+
+            <!-- 拒绝关闭 / 未开启时的提示（平时 GONE） -->
+            <TextView
+                android:id="@+id/tm2_bank_close_tip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:background="@color/tm2_card_bg"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="6dp"
+                android:textColor="@color/tm2_level_yellow"
+                android:textSize="12sp"
+                android:visibility="gone"
+                tools:text="还有 30 分钟没消化完，消化完才能关闭时间银行" />
+
+            <!-- ==================== 今天已借总量环 ==================== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/tm2_bank_ring_title"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <!-- 环：自绘（BorrowRingView，**顶栏类定义在 TimeBankActivity.kt 同一个文件里**）。
+                 为什么环单独写一个 View 却与页面放同一文件：本代理写域只含 time/ui 的两个自绘 View，
+                 环的职责非常单一（画一个已借/上限的圆环 + 中间数字），放同一文件不必新增写域文件。
+                 用户需求「任意时刻内，总借的时长不超过 5 小时」—— 环 + 下面那行文字一起表达。 -->
+            <com.RobinNotBad.BiliClient.time.activity.BorrowRingView
+                android:id="@+id/tm2_bank_ring"
+                android:layout_width="150dp"
+                android:layout_height="150dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:id="@+id/tm2_bank_ring_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                tools:text="已借 30 / 300 分钟" />
+
+            <!-- 关键的一行：把「上限 5 小时」说出来。光有环看不出上限是多少（Lead 点名要求） -->
+            <TextView
+                android:id="@+id/tm2_bank_ring_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:alpha="0.75"
+                android:textSize="11sp"
+                tools:text="任意时刻总借入不超过 300 分钟（5 小时）。" />
+
+            <!-- ==================== 未来 7 天柱子 ==================== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/tm2_bank_future_title"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tm2_bank_future_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alpha="0.8"
+                android:textSize="11sp"
+                tools:text="点一根柱子选中那天，再决定借多少分钟给今天。" />
+
+            <com.RobinNotBad.BiliClient.time.ui.UsageBarChartView
+                android:id="@+id/tm2_bank_chart"
+                android:layout_width="match_parent"
+                android:layout_height="190dp"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:alpha="0.7"
+                android:text="@string/tm2_bank_future_hint"
+                android:textSize="10sp" />
+
+            <!-- ==================== 借入操作区 ==================== -->
+            <TextView
+                android:id="@+id/tm2_bank_selected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/tm2_bank_not_selected"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <!-- 预设快捷按钮：15 / 30 / 60 分钟，点一下就设成那个值（不用连点加号） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tm2_bank_preset_15"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="@string/tm2_bank_preset_15"
+                    android:textSize="11sp"
+                    app:cornerRadius="6dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tm2_bank_preset_30"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="@string/tm2_bank_preset_30"
+                    android:textSize="11sp"
+                    app:cornerRadius="6dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tm2_bank_preset_60"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tm2_bank_preset_60"
+                    android:textSize="11sp"
+                    app:cornerRadius="6dp" />
+
+            </LinearLayout>
+
+            <!-- 加减微调：每次 5 分钟。中间大字是「本次要借多少」 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tm2_bank_minus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tm2_bank_minus"
+                    android:textSize="13sp"
+                    app:cornerRadius="6dp" />
+
+                <TextView
+                    android:id="@+id/tm2_bank_amount"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.4"
+                    android:gravity="center"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    tools:text="30 分钟" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tm2_bank_plus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tm2_bank_plus"
+                    android:textSize="13sp"
+                    app:cornerRadius="6dp" />
+
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tm2_bank_borrow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/tm2_bank_borrow_action_empty"
+                android:textSize="13sp"
+                app:cornerRadius="6dp" />
+
+            <!-- 拒绝原因 / 借成功提示（复用同一块区域，平时 GONE） -->
+            <TextView
+                android:id="@+id/tm2_bank_action_tip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:visibility="gone"
+                tools:text="最多还能借 120 分钟（总上限 300 分钟）" />
+
+            <!-- ==================== 规则说明 ==================== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/tm2_bank_rule_title"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tm2_bank_rule_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alpha="0.7"
+                android:textSize="11sp"
+                tools:text="只能向未来 7 天借给今天；不能还、没有利息；借了哪天，那天的配额就相应减少。" />
+
+        </LinearLayout>
+    </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+
+</RelativeLayout>

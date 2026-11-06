@@ -212,7 +212,7 @@ class SettingsAdapter(
                 finishGuard(settingSection, guard)
                 return
             }
-            desc.setText(itemView.context.getString(R.string.usage_limit_guard_tip, guard.seconds, remaining))
+            desc.setText(itemView.context.getString(R.string.tm2_guard_tip, guard.seconds, remaining))
             desc.setVisibility(View.VISIBLE)
             val task = Runnable { tickGuard(settingSection, guard, remaining - 1) }
             guardTask = task

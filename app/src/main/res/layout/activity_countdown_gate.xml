@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  倒计时等待页：大号居中数字层 ⇄ 当天使用时间详情层，单击切换。
+
+  为什么用 FrameLayout 叠两层、靠 visibility 切换，而不是重建布局：
+  用户每点一下都要「瞬间」换画面，重建布局会有一次 measure/layout 的抖动，
+  而且切换时会把大数字的字号重新算一遍（字号是按位数自适应的）。
+  两层同时存在、只切 visibility，切换成本是一次赋值。
+
+  字号：大数字的 textSize 在 XML 里给一个兜底值 72sp，运行时由 Activity 按
+  「屏宽 / 位数」重算（见 CountdownGateActivity.applyDigitSize）——
+  四位数（600 秒级倒计时）在手表宽屏上 72sp 会超出，必须动态缩。
+  用 monospace 等宽字体：数字每跳一次宽度不变，居中数字不会左右抖。
+
+  为什么点整屏切换而不是加一个小按钮：
+  用户原话「单击可以浏览当天使用时间详情，再次单击可以切回去」——
+  整屏可点是最不容易点错的方式（手表屏上找小按钮很累）。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/tm2_countdown_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bgblack"
+    android:clickable="true"
+    android:focusable="true"
+    tools:context=".time.activity.CountdownGateActivity">
+
+    <!-- ==================== 层 1：大号倒计时数字（默认显示） ==================== -->
+    <LinearLayout
+        android:id="@+id/tm2_countdown_big"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="10dp">
+
+        <TextView
+            android:id="@+id/tm2_countdown_seconds"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/tm2_unknown"
+            android:textSize="72sp"
+            android:textStyle="bold"
+            tools:text="00:10" />
+
+        <TextView
+            android:id="@+id/tm2_countdown_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:maxLines="3"
+            android:alpha="0.85"
+            android:textSize="13sp"
+            tools:text="今天已经用了 40 分钟，黄色档需要等 5 秒" />
+
+        <!-- 暂停提示：切后台/息屏时显示，回前台隐藏。让用户明白「不是卡住了」 -->
+        <TextView
+            android:id="@+id/tm2_countdown_paused"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:alpha="0.7"
+            android:text="@string/tm2_countdown_paused"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:alpha="0.6"
+            android:text="@string/tm2_countdown_tap_hint"
+            android:textSize="10sp" />
+
+    </LinearLayout>
+
+    <!-- ==================== 层 2：当天使用时间详情（单击后显示） ==================== -->
+    <LinearLayout
+        android:id="@+id/tm2_countdown_detail"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="10dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/tm2_countdown_detail_title"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <!-- 今日已用（大字号 + 三档语义色） -->
+        <TextView
+            android:id="@+id/tm2_countdown_detail_used"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            tools:text="已用 40 分钟" />
+
+        <!-- 配额 -->
+        <TextView
+            android:id="@+id/tm2_countdown_detail_quota"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:alpha="0.85"
+            android:textSize="12sp"
+            tools:text="配额 120 分钟" />
+
+        <!-- 剩余（走 TimeFormat.remainingText：休息日/已用完/还剩三种口径） -->
+        <TextView
+            android:id="@+id/tm2_countdown_detail_remaining"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            tools:text="今日还剩 1 小时 20 分钟" />
+
+        <!-- 其中已借入（只在有借入时显示） -->
+        <TextView
+            android:id="@+id/tm2_countdown_detail_borrowed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:alpha="0.8"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="其中已借 30 分钟" />
+
+        <!-- 当前档位 -->
+        <TextView
+            android:id="@+id/tm2_countdown_detail_level"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:textSize="11sp"
+            tools:text="当前档位：绿色（30 分钟以内）" />
+
+        <!-- 提示：看详情时倒计时仍在走（用户原话要求），并说明再点切回 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:alpha="0.6"
+            android:maxLines="2"
+            android:text="@string/tm2_countdown_tap_back"
+            android:textSize="10sp" />
+
+    </LinearLayout>
+
+</FrameLayout>

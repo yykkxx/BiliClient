@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    启动页（LauncherActivity）专用字符串 —— v5.2.1 时间管理重写。
+
+    为什么单独一个文件：旧的 strings_usage_limit.xml / strings_time_mgmt.xml 已随旧时间管理
+    一起删除（用户要求「先删除之前所有代码」），而启动页还要显示「今日已用 X」，
+    所以这里只保留启动页真正用到的几条，避免与 time/ui 的 strings_time2.xml 产生耦合。
+-->
+<resources>
+    <!-- 今日已用：标题行 -->
+    <string name="launcher_usage_title">今日已用</string>
+
+    <!-- 今日已用：数值（%1$s 是「1小时23分钟」这种可读文本，由 DailyPlan 侧的格式化供给） -->
+    <string name="launcher_usage_value">%1$s</string>
+
+    <!-- 剩余配额（上学日限定）。%1$s 同样是人读文本 -->
+    <string name="launcher_remaining">今日还剩 %1$s</string>
+
+    <!-- 剩余配额为 0 或负数（今天被借走了太多）时的说法 -->
+    <string name="launcher_remaining_none">今日配额已用完</string>
+
+    <!-- 休息日：不显示剩余，只说明无限制 -->
+    <string name="launcher_rest_day">休息日 · 不限时长</string>
+
+    <!--
+        设置主页的时间管理入口卡片（activity_setting_main.xml:589/603 引用）。
+        这两条原来在 strings_time_mgmt.xml 里，那个文件随旧时间管理一起删除，
+        所以由本文件接管 —— 入口卡片的文案描述的是「这一栏目现在有什么」，
+        必须跟着 v5.2.1 的三个小栏一起更新，不能让用户看到 v5.2.0 的描述。
+    -->
+    <string name="time_mgmt_title">时间管理</string>
+    <string name="time_mgmt_desc">使用控制 · 时间银行 · 使用记录</string>
+</resources>

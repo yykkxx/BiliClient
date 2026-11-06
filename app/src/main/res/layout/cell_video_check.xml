@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  收藏夹多选缓存的一行（#7）。
+
+  v5.2.1 改动：
+  - 复选框不再 clickable=false —— 以前点击落在复选框上时它自己吞掉/或无响应，
+    与「有小方框就能点」的直觉相反；现在复选框本身也是有效的勾选开关，
+    同时给了 48dp 的最小触控区（手指点小方块比点整行长按更容易点空）。
+  - 整行保留卡片描边（勾选态由代码描主题色，见 VideoCheckAdapter），
+    所以这里 cardView 必须是 MaterialCardView 且带 id，供 adapter 改 strokeWidth。
+-->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/cardView"
@@ -10,24 +20,25 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="10dp"
-        android:paddingVertical="8dp"
-        android:gravity="center_vertical">
+        android:paddingVertical="8dp">
 
         <CheckBox
             android:id="@+id/check_box"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:clickable="false"
-            android:focusable="false" />
+            android:focusable="false"
+            android:minWidth="48dp"
+            android:minHeight="48dp" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:layout_marginStart="4dp">
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/text_title"

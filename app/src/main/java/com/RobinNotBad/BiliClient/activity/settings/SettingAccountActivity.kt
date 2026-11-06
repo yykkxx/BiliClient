@@ -1,6 +1,9 @@
 package com.RobinNotBad.BiliClient.activity.settings
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
@@ -19,7 +22,11 @@ import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.api.migration.ApiRouter
+import com.RobinNotBad.BiliClient.api.gateway.CredentialStore
+import com.RobinNotBad.BiliClient.util.AccountCredentials
+import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.AccountStore
+import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.MsgUtil
@@ -210,6 +217,7 @@ class SettingAccountActivity : BaseActivity() {
         refreshScope(true)
         refreshScope(false)
         refreshStats()
+        refreshCredentialsCard()
     }
 
     @SuppressLint("SetTextI18n")
@@ -404,6 +412,144 @@ class SettingAccountActivity : BaseActivity() {
         sb.append("\n回退 web：").append(fallbacks).append(" 次（命中率 ").append(rate).append("%）")
         sb.append("\n写操作不重放：").append(ApiRouter.noReplayCount()).append(" 次")
         stats.text = sb.toString()
+    }
+
+    // ==================== 凭据总览（v5.2.1 四端统一） ====================
+
+    /**
+     * 刷新「登录凭据（四端统一）」卡片：四端状态 + 覆盖报告 + 三个按钮。
+     *
+     * ## 为什么状态要四端一行读完
+     * 用户原话「所有操作登录凭据的地方都放在那里」。四个端口的登录态以前分散在两个页签
+     * （每页签一份）里，导致「web 退了但 HD 登着」这种关键状态**要翻两个页签才能拼出来**。
+     * 这里一行读完四个端口，用户一眼就知道自己有几个号活着。
+     *
+     * ## 为什么覆盖报告默认隐藏
+     * 它是给「排查/验收」用的（`ApiCatalog.coverageSummary` 的数字），普通用户看到
+     * 「144 个端点 / 已实测 38」只会困惑。所以放在一个 `visibility = gone` 的 TextView 里，
+     * 只有点了按钮才显示 —— 需要它的人自然会找到。
+     */
+    @SuppressLint("SetTextI18n")
+    private fun refreshCredentialsCard() {
+        val states = CredentialStore.loginStates()
+        val credText = findViewById<TextView>(R.id.accountCredText) ?: return
+        val sb = StringBuilder()
+        for ((port, loggedIn) in states) {
+            if (sb.isNotEmpty()) sb.append(" · ")
+            sb.append(AccountStore.portDisplayName(port))
+            sb.append(if (loggedIn) " 已登录" else " 未登录")
+        }
+        credText.text = sb.toString()
+
+        bindCredentialButtons()
+    }
+
+    /**
+     * 三个凭据按钮：导出 / 导入 / 立刻续期 Web。
+     *
+     * 为什么每次刷新都重绑监听：本页会 `refreshAll()` 多次，用 `setOnClickListener` 覆盖绑定
+     * 天然幂等（不会叠多层监听）；写成「首次绑定一次」反而要额外维护一个标志位。
+     */
+    private fun bindCredentialButtons() {
+        findViewById<com.google.android.material.button.MaterialButton>(R.id.accountExportCred)
+            ?.setOnClickListener { onExportCredentials() }
+        findViewById<com.google.android.material.button.MaterialButton>(R.id.accountImportCred)
+            ?.setOnClickListener { onImportCredentials() }
+        findViewById<com.google.android.material.button.MaterialButton>(R.id.accountRenewWeb)
+            ?.setOnClickListener { onRenewWeb() }
+    }
+
+    /**
+     * 导出四端全部凭据 → 复制到剪贴板。
+     *
+     * 为什么不写文件：手表上没有方便的文件选择器，而用户换机的真实路径是
+     * 「旧机导出 → 复制 → 发给自己 → 新机粘贴」。剪贴板是这个路径上最短的一环。
+     * ⚠️ 凭据含 SESSDATA/access_key，**只放剪贴板、绝不写日志、绝不弹出来显示**。
+     */
+    private fun onExportCredentials() {
+        val json = try {
+            AccountCredentials.exportAll()
+        } catch (e: Exception) {
+            MsgUtil.err("导出凭据失败", e)
+            return
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        if (clipboard == null) {
+            MsgUtil.showMsg("系统剪贴板不可用")
+            return
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("biliclient-credentials", json))
+        // 只提示条数，不打印内容（内容含完整凭据）
+        MsgUtil.showMsg("已复制四端凭据到剪贴板（" + json.length + " 字节）")
+    }
+
+    /**
+     * 从输入框导入凭据（**合并**语义，不覆盖现有账号）。
+     *
+     * 二次确认是必要的：导入会写信箱（账号池），误粘贴一段无关文本也会走解析失败路径，
+     * 但「粘贴了别人的凭据」是不可逆的账号污染，值得多一次点击。
+     */
+    private fun onImportCredentials() {
+        val input = findViewById<com.google.android.material.textfield.TextInputEditText>(
+            R.id.accountImportInput
+        )?.text?.toString()?.trim() ?: ""
+        if (input.isEmpty()) {
+            MsgUtil.showMsg("请先粘贴凭据 JSON")
+            return
+        }
+        CenterThreadPool.run(Runnable {
+            val result = try {
+                AccountCredentials.importAll(input)
+            } catch (e: Exception) {
+                MsgUtil.err("导入凭据失败", e)
+                return@Runnable
+            }
+            val total = result.values.sum()
+            CoroutineScopes.launchUi {
+                if (total <= 0) {
+                    MsgUtil.showMsg("没有导入任何账号（格式不对或凭据为空）")
+                } else {
+                    MsgUtil.showMsg("已导入 " + total + " 个账号（" + result.size + " 个端口）")
+                    findViewById<com.google.android.material.textfield.TextInputEditText>(
+                        R.id.accountImportInput
+                    )?.setText("")
+                    refreshAll()
+                }
+            }
+        })
+    }
+
+    /**
+     * 立刻续期 Web 登录（忽略 30 分钟节流）。
+     *
+     * 用户的真实场景：某次写操作报「登录过期」，他不想重扫二维码，希望有个按钮能先试试
+     * 主动续期（`refresh_token` 还有效时能救回来）。所以这里 `force = true`。
+     * 结果分三种如实说：续期成功 / 不需要续（Cookie 还有效）/ 续不了（需要重新扫码）。
+     */
+    private fun onRenewWeb() {
+        if (AccountStore.mainPort() == AccountStore.PORT_WEB && !AccountManager.isWebLoggedIn()) {
+            MsgUtil.showMsg("Web 端当前没有登录，无需续期")
+            return
+        }
+        MsgUtil.showMsg("正在检查 Web 登录状态…")
+        CenterThreadPool.run(Runnable {
+            val renewed = try {
+                CredentialStore.renewWeb(true)
+            } catch (e: Exception) {
+                MsgUtil.err("续期失败", e)
+                return@Runnable
+            }
+            CoroutineScopes.launchUi {
+                if (renewed) {
+                    MsgUtil.showMsg("Web 登录已续期")
+                    refreshAll()
+                } else {
+                    // false 的含义见 CookieRefreshApi.checkAndRefresh 的注释：
+                    // 「不需要续」与「续失败」都会返回 false，所以文案要覆盖两种可能
+                    MsgUtil.showMsg("未能续期：可能 Cookie 仍有效，或 refresh_token 已失效（需重新登录）")
+                }
+            }
+        })
     }
 
     companion object {

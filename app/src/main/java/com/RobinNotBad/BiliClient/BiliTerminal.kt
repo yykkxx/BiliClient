@@ -7,10 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.SystemClock
 import androidx.multidex.MultiDex
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
+import com.RobinNotBad.BiliClient.api.CookieRefreshApi
 import com.RobinNotBad.BiliClient.api.DynamicApi
 import com.RobinNotBad.BiliClient.api.MessageApi
 import com.RobinNotBad.BiliClient.util.AccountManager
@@ -19,10 +19,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
-import com.RobinNotBad.BiliClient.util.TimeTracking
-import com.RobinNotBad.BiliClient.util.UsageLimitManager
-import com.RobinNotBad.BiliClient.util.UsageReminder
-import com.RobinNotBad.BiliClient.util.UsageStatsManager
+import com.RobinNotBad.BiliClient.time.UsageTracker
 import java.lang.ref.WeakReference
 
 class BiliTerminal : Application() {
@@ -77,85 +74,75 @@ class BiliTerminal : Application() {
                 })
             }
 
-            // v5.1.6 实验室「每日使用时长限制」的前台时长统计。
+            // 时间管理（v5.2.1）的前台时长统计挂载点。
             // 只在本 App 自己的 Activity 上触发（registerActivityLifecycleCallbacks 天然如此），
             // 用 0→1 / 1→0 的边沿判定合并 Activity 频繁切换（推荐↔详情↔播放）时的一段前台时间。
+            // 必须在 onCreate 里注册（而不是更晚）：要覆盖整个进程生命周期的第一个 Activity。
             registerActivityLifecycleCallbacks(ForegroundUsageTracker())
+
+            // Web 主动续期（v5.2.1，用户需求「Web 增加主动续期」）。
+            // 旧实现只在 RecommendActivity 里被动跑一次：用户长时间不进推荐页时 Cookie 到期
+            // 无人续期，等到某次写操作失败才暴露。这里在进程启动后主动兜一次，
+            // 内部按 30 分钟节流（见 CookieRefreshApi.renewIfNeededOnForeground 的注释），
+            // 所以「频繁冷启动」也不会把网络请求放大成抖动源。
+            // 必须放后台线程（会发网络请求），且抛异常一律吞掉：续期失败不该影响启动。
+            CenterThreadPool.run(Runnable {
+                try {
+                    CookieRefreshApi.renewIfNeededOnForeground(false)
+                } catch (ignored: Exception) {
+                    // 续期是「锦上添花」：网络/结构异常都不该让 App 启动失败
+                }
+            })
         }
     }
 
     /**
-     * 前台时长与页面停留统计（v5.1.6 起，v5.2.0 扩为时间管理套件的挂载点）。
+     * 前台时长与页面停留统计的**生命周期桥**（v5.2.1 重写为 time/UsageTracker 的挂载点）。
      *
-     * 只统计本 App 自己的 Activity（`registerActivityLifecycleCallbacks` 天然如此），
-     * 用 [startedCount] 的 0→1 / 1→0 **边沿判定**把「推荐↔详情↔播放」这种频繁切换
-     * 合并成一段连续前台时间，不会重复累加，也不会在 Activity 之间跳转时丢掉时长：
-     * - 0→1（App 真正回到前台，第一个 Activity started）记下起点 [foregroundStartElapsed]，
-     *   并启动 15 分钟「今天已使用 X」提醒（[UsageReminder]）；
-     * - 1→0（最后一个 Activity stopped）一次性 [UsageLimitManager.addUsage] 整段时长，
-     *   随后停掉提醒。
+     * 这一层只做一件事：把 `ActivityLifecycleCallbacks` 的多 Activity 事件折叠成
+     * 「App 整体进入前台 / 退到后台」两个边沿，交给 [UsageTracker]。
      *
-     * v5.2.0 起还负责两件事：
-     * 1. **页面停留**：每次 Activity resume/pause 交给 [TimeTracking]（页面名由
-     *    `BaseActivity.setPageName` 写入，这里只负责生命周期边沿）；
-     * 2. **暂停时长扣减**：倒计时页 / 配额拦截页在 `onResume` 里让 TimeTracking 暂停，
-     *   1→0 结算总时长时必须减去这段（需求明确要求等待时间不计入使用时长），
-     *    否则「看 5 秒倒计时」也会被当成用了 5 秒。
+     * - **0→1**（第一个 Activity started）：[UsageTracker.onForeground] 记下起点；
+     * - **1→0**（最后一个 Activity stopped）：[UsageTracker.onBackground] 一次性结算整段。
      *
-     * 回调里**只做偏好读写与轻量调用**（SharedPreferencesUtil 是 apply 语义，
-     * 提醒的内部协程由 UsageReminder 自己持有），不碰网络/IO/数据库，也不自己回主线程
+     * 为什么用 startedCount 边沿而不是「每个 Activity 的 onResume/onPause 各记一次」：
+     * 「推荐↔详情↔播放」来回切时后者会切成很多段，且段与段之间的空档（Activity 交接）
+     * 要么漏记要么重复记；边沿判定只有真正离开 App 才结算，中间怎么跳都不影响总量。
+     *
+     * 这一层**不再做**的事（都搬进 [UsageTracker] 内部了，调用方不需要记得扣减）：
+     * - 暂停时长扣减（倒计时页/拦截页/询问页不该算使用时长）：改由页面对
+     *   [UsageTracker.pause] / [UsageTracker.resume] 成对调用，计数器在 tracker 内部结算；
+     * - 日总量归档、跨午夜切分、页面停留结算，全部在 tracker 里。
+     *
+     * 回调里只做轻量调用（都是内存运算 + 偏好 apply 语义），不碰网络/IO，也不自己回主线程
      * （这些回调本来就在主线程）。
      */
     private class ForegroundUsageTracker : Application.ActivityLifecycleCallbacks {
         /** 处于 started 状态的 Activity 数量；只在 0/1 两个状态间判定边沿 */
         private var startedCount = 0
 
-        /** 本轮前台的起点（SystemClock.elapsedRealtime，不受系统改时间影响）；0 = 未开始 */
-        private var foregroundStartElapsed = 0L
-
         override fun onActivityStarted(activity: Activity) {
             startedCount += 1
-            if (startedCount == 1) {
-                foregroundStartElapsed = SystemClock.elapsedRealtime()
-                // 每满 interval 分钟弹一次「今天已使用 X」；内部自己持 Job、退后台由下面停掉
-                UsageReminder.startForegroundReminder()
-            }
+            if (startedCount == 1) UsageTracker.onForeground()
         }
 
         override fun onActivityStopped(activity: Activity) {
             if (startedCount <= 0) return
             startedCount -= 1
-            // 还有别的 Activity 处于 started，说明只是页面切换，继续沿用同一个起点
+            // 还有别的 Activity 处于 started，说明只是页面切换，继续沿用同一个前台会话
             if (startedCount > 0) return
-            val start = foregroundStartElapsed
-            foregroundStartElapsed = 0L
-            if (start > 0L) {
-                // 倒计时页 / 配额拦截页的 onResume 会让 TimeTracking 暂停，这段等待时间
-                // 不该算作「使用时长」：结算前扣掉累计暂停毫秒（consumePausedMs 取出即清零）。
-                val pausedMs = TimeTracking.consumePausedMs()
-                val delta = (SystemClock.elapsedRealtime() - start - pausedMs).coerceAtLeast(0L)
-                UsageLimitManager.addUsage(delta)
-                // 把「今天总共用了多久」写进 30 天历史（7 日柱状图与「近 30 天」卡片的唯一数据来源）。
-                // 必须在 addUsage 之后调用，否则写进去的是上一次的旧值；它会自动裁剪到最近 30 天。
-                UsageStatsManager.recordDayTotal(UsageLimitManager.todayUsedMs())
-                // 页面停留由 TimeTracking 自己差值结算，这里只在退后台时兜底刷一次（幂等）。
-                // 与上面两条是独立数据源，顺序不影响结果。
-                TimeTracking.flushCurrentPage()
-            }
-            UsageReminder.stopForegroundReminder()
+            UsageTracker.onBackground()
         }
 
-        /** 页面名由 BaseActivity.setPageName 交给 TimeTracking，这里只喂生命周期边沿 */
-        override fun onActivityResumed(activity: Activity) {
-            TimeTracking.onPageResumed()
-        }
-
-        override fun onActivityPaused(activity: Activity) {
-            TimeTracking.onPagePaused()
-        }
+        // 页面名由 BaseActivity.setPageName 直接交给 UsageTracker，这里不需要 resume/pause 配对：
+        // setCurrentPage 本身就会结算上一页并给新页起表（只接一处，顺序稳定）。
 
         // 其余回调与本功能无关，保持空实现（detekt 对 `= Unit` 不报 EmptyFunctionBlock）
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+
+        override fun onActivityResumed(activity: Activity) = Unit
+
+        override fun onActivityPaused(activity: Activity) = Unit
 
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 

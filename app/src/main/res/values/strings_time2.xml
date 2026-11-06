@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    时间管理 2（v5.2.1 重写）的全部界面文案，键前缀 tm2_。
+
+    为什么所有页面文案集中在一个文件：
+    这套功能有 7 个页面，文案高度重复（「今天已用」「配额」「借时间」反复出现）。
+    分散到每页一个 strings 文件，必然出现「使用控制页叫『总量』、记录页叫『时长』」的口径分裂。
+    集中之后，同一个概念只有一个键，改文案时也只改一处。
+
+    与 strings_time_launcher.xml 的分工：
+    启动页（LauncherActivity）那 5 条 launcher_* 由 Lead 自己维护，**不在这里重复**，
+    否则同名概念会有两份文案、改一处忘一处。
+
+    占位符约定：%1$d = 整数，%1$s = 文本，%1$s 等顺序写好后**不要调整**（编译期会校验 arity）。
+-->
+<resources>
+
+    <!-- ======================================================================================
+         通用 / 页面标题
+         ====================================================================================== -->
+
+    <string name="tm2_page_main">时间管理</string>
+    <string name="tm2_page_control">使用控制</string>
+    <string name="tm2_page_bank">时间银行</string>
+    <string name="tm2_page_record">使用记录</string>
+    <string name="tm2_page_day_type">今天是上学日吗</string>
+    <string name="tm2_page_countdown">稍等一下</string>
+    <string name="tm2_page_block">配额已用完</string>
+
+    <!-- 关闭开关时的原地等待倒计时（使用控制总开关 / 时间银行总开关共用）。
+         %1$d = 总秒数，%2$d = 剩余秒数。
+         这条被 adapter/SettingsAdapter.kt 引用，键名与占位符顺序不能改。 -->
+    <string name="tm2_guard_tip">需等待 %1$d 秒才能关闭（剩余 %2$d 秒）</string>
+
+    <!-- 单位与通用短语 -->
+    <string name="tm2_unit_minute">%1$d 分钟</string>
+    <string name="tm2_unit_hour">%1$d 小时</string>
+    <string name="tm2_unknown">—</string>
+    <string name="tm2_off">已关闭</string>
+    <string name="tm2_on">已开启</string>
+
+    <!-- ======================================================================================
+         ① 入口页（三个小栏）
+         ====================================================================================== -->
+
+    <string name="tm2_main_summary_on">使用控制已开启，今日已用 %1$s</string>
+    <string name="tm2_main_summary_off">使用控制未开启，点击下方「使用控制」开始</string>
+
+    <string name="tm2_main_control_title">使用控制</string>
+    <string name="tm2_main_control_desc">上学日每天限额、休息日不限；接近限额时先等几秒再进入</string>
+
+    <string name="tm2_main_bank_title">时间银行</string>
+    <string name="tm2_main_bank_desc">把未来几天的时间借给今天用；不能还、没有利息</string>
+
+    <string name="tm2_main_record_title">使用记录</string>
+    <string name="tm2_main_record_desc">最近 7 天用了多久、时间都花在哪些页面</string>
+
+    <!-- 入口页每个小栏右侧的状态小字（当前值，让用户不用点进去就知道设置状态） -->
+    <string name="tm2_main_control_state_on">上学日 %1$d 分钟</string>
+    <string name="tm2_main_control_state_off">未开启</string>
+    <string name="tm2_main_bank_state_on">已借 %1$d / %2$d 分钟</string>
+    <string name="tm2_main_bank_state_off">未开启</string>
+    <!-- 使用记录卡的状态小字：只讲「今天用了多久」，不要复用使用控制那句
+         （那句写着「使用控制已开启」，挂到记录卡上会让人以为记录功能有自己的开关） -->
+    <string name="tm2_main_record_state">今日已用 %1$s</string>
+
+    <!-- ======================================================================================
+         ② 使用控制页
+         ====================================================================================== -->
+
+    <!-- 总开关 -->
+    <string name="tm2_control_switch_title">使用控制</string>
+    <string name="tm2_control_switch_desc_on">已开启。关闭需要等待 %1$d 秒；打开会立即生效。</string>
+    <string name="tm2_control_switch_desc_off">未开启。打开会立即生效，之后每天会先问上学日还是休息日。</string>
+
+    <!-- 上学日配额 -->
+    <string name="tm2_control_quota_title">上学日每天配额</string>
+    <string name="tm2_control_quota_desc">当前 %1$d 分钟。调大需要等待 %2$d 秒，调小立即生效。</string>
+    <string name="tm2_control_quota_value">%1$s</string>
+    <string name="tm2_control_quota_minus">−10 分钟</string>
+    <string name="tm2_control_quota_plus">+10 分钟</string>
+    <string name="tm2_control_quota_increase_hint">调大到 %1$d 分钟需等待 %2$d 秒…（剩余 %3$d 秒，点此取消）</string>
+    <string name="tm2_control_quota_increase_done">配额已调整为 %1$d 分钟</string>
+    <string name="tm2_control_quota_increase_cancelled">已取消，配额保持 %1$d 分钟</string>
+    <string name="tm2_control_quota_decreased">配额已调整为 %1$d 分钟（调小立即生效）</string>
+    <string name="tm2_control_quota_min_reached">已经是最小 %1$d 分钟</string>
+    <string name="tm2_control_quota_max_reached">已经是最大 %1$d 分钟</string>
+
+    <!-- 休息日 -->
+    <string name="tm2_control_rest_title">休息日</string>
+    <string name="tm2_control_rest_desc">休息日不限时长，也不做倒计时等待；配额设置对它无效。</string>
+
+    <!-- 颜色分档说明 -->
+    <string name="tm2_control_level_title">颜色说明</string>
+    <string name="tm2_control_level_desc">按今天已用时长分三档，边界值算进下一档（正好 30 分钟即黄色）。</string>
+    <string name="tm2_control_level_green">0~30 分钟：绿色，不等待</string>
+    <string name="tm2_control_level_yellow">30~60 分钟：黄色，等待 %1$d 秒</string>
+    <string name="tm2_control_level_red">60 分钟以上：红色，等待 %1$d 秒</string>
+    <string name="tm2_control_level_now">当前档位：%1$s</string>
+
+    <!-- 等待秒数（只读展示：这些是判定常量，改了会让「颜色与等待」脱钩） -->
+    <string name="tm2_control_wait_title">各项等待时间</string>
+    <string name="tm2_control_wait_desc">关闭开关、调大配额要等很久；进入应用时的等待按用量分档。这些是固定值，只做说明。</string>
+    <string name="tm2_control_wait_toggle_off">关闭「使用控制」总开关：等待 %1$d 秒</string>
+    <string name="tm2_control_wait_quota_up">调大上学日配额：等待 %1$d 秒</string>
+    <string name="tm2_control_wait_mid">30~60 分钟时进入应用：等待 %1$d 秒</string>
+    <string name="tm2_control_wait_high">60 分钟以上进入应用：等待 %1$d 秒</string>
+    <string name="tm2_control_wait_after">每晚 %1$s 之后不再倒计时等待（配额用完照样拦）</string>
+
+    <!-- 长按解除 -->
+    <string name="tm2_control_release_title">长按解除</string>
+    <string name="tm2_control_release_desc">配额耗尽时，在拦截页长按按钮 %1$d 秒可解除当天限制。次日自动恢复。</string>
+
+    <!-- ======================================================================================
+         ③ 时间银行页
+         ====================================================================================== -->
+
+    <string name="tm2_bank_switch_title">时间银行</string>
+    <string name="tm2_bank_switch_desc_on">已开启。当前已借 %1$d 分钟，上限 %2$d 分钟。</string>
+    <string name="tm2_bank_switch_desc_off">未开启。打开后才能向未来几天借时间。</string>
+    <string name="tm2_bank_close_blocked">%1$s</string>
+
+    <!-- 今天已借总量环 -->
+    <string name="tm2_bank_ring_title">今天已借</string>
+    <string name="tm2_bank_ring_value">%1$d / %2$d 分钟</string>
+    <string name="tm2_bank_ring_hint">任意时刻总借入不超过 %1$d 分钟（%2$d 小时）。</string>
+
+    <!-- 未来 7 天柱子 -->
+    <string name="tm2_bank_future_title">未来可借</string>
+    <string name="tm2_bank_future_desc">点一根柱子选中那天，再决定借多少分钟给今天。今天一共多了 %1$d 分钟额度。</string>
+    <string name="tm2_bank_future_hint">每根柱子上方是可从那一天借走的分钟数</string>
+
+    <!-- 借入操作 -->
+    <string name="tm2_bank_selected">已选 %1$s，那天还剩 %2$d 分钟</string>
+    <string name="tm2_bank_not_selected">先点上面的一根柱子，选择从哪天借</string>
+    <string name="tm2_bank_preset_15">15 分钟</string>
+    <string name="tm2_bank_preset_30">30 分钟</string>
+    <string name="tm2_bank_preset_60">60 分钟</string>
+    <string name="tm2_bank_minus">−5</string>
+    <string name="tm2_bank_plus">+5</string>
+    <string name="tm2_bank_borrow_amount">%1$d 分钟</string>
+    <string name="tm2_bank_borrow_action">借 %1$d 分钟给今天</string>
+    <string name="tm2_bank_borrow_action_empty">选择要借的分钟数</string>
+    <string name="tm2_bank_borrow_done">已从 %1$s 借入 %2$d 分钟，今天的额度已增加</string>
+    <string name="tm2_bank_borrow_failed">%1$s</string>
+    <string name="tm2_bank_limit_full">借入额度已用满（上限 %1$d 分钟，已借 %2$d 分钟），不能再借</string>
+    <string name="tm2_bank_rule_title">规则</string>
+    <string name="tm2_bank_rule_desc">只能向未来 %1$d 天借给今天；不能还、没有利息；借了哪天，哪天的配额就相应减少（可能变成 0 甚至负数，那天会被直接拦）。</string>
+    <string name="tm2_bank_no_future">未来没有可借的日期（可借天数设置为 0）</string>
+    <string name="tm2_bank_disabled_hint">时间银行未开启：先打开上面的开关才能借时间</string>
+
+    <!-- ======================================================================================
+         ④ 使用记录页
+         ====================================================================================== -->
+
+    <string name="tm2_record_range_7">最近 7 天</string>
+    <string name="tm2_record_range_all">全部</string>
+
+    <string name="tm2_record_chart_title">每日使用时长</string>
+    <string name="tm2_record_chart_desc">柱高按最高那天归一化，数字是当天总时长。</string>
+    <string name="tm2_record_chart_none">还没有任何使用记录</string>
+
+    <string name="tm2_record_rank_title">今天的页面停留</string>
+    <string name="tm2_record_rank_desc">页面停留记录只保留当天，所以这里永远是今天的数据。</string>
+    <string name="tm2_record_rank_none">今天还没有页面停留记录</string>
+    <string name="tm2_record_rank_row">%1$s</string>
+
+    <string name="tm2_record_summary_today">今日已用</string>
+    <string name="tm2_record_summary_range">区间合计</string>
+    <string name="tm2_record_summary_max">单日最高</string>
+    <string name="tm2_record_note">倒计时等待页与配额拦截页的停留不计入使用时长；清空记录不影响今日已用（避免绕过配额）。</string>
+    <string name="tm2_record_clear">清空使用记录</string>
+    <string name="tm2_record_clear_confirm">再点一次清空（历史图表会被清掉，今日已用不受影响）</string>
+    <string name="tm2_record_cleared">使用记录已清空</string>
+
+    <!-- 空数据/异常兜底 -->
+    <string name="tm2_record_empty_hint">—</string>
+
+    <!-- ======================================================================================
+         ⑤ 日子询问页（不可取消）
+         ====================================================================================== -->
+
+    <string name="tm2_day_type_question">今天是什么日子？</string>
+    <string name="tm2_day_type_desc">选上去学日就按每天 %1$d 分钟限额；选休息日则不限时长。</string>
+    <string name="tm2_day_type_school">上学日</string>
+    <string name="tm2_day_type_school_desc">每天 %1$d 分钟 · 超出后需要等待</string>
+    <string name="tm2_day_type_rest">休息日</string>
+    <string name="tm2_day_type_rest_desc">不限时长 · 也不做倒计时等待</string>
+    <string name="tm2_day_type_hint">每天只需要选一次；这一页不能取消，因为配额要看它才能算。</string>
+
+    <!-- ======================================================================================
+         ⑥ 倒计时等待页
+         ====================================================================================== -->
+
+    <string name="tm2_countdown_title">稍等一下再进去</string>
+    <string name="tm2_countdown_title_mid">今天已经用了 %1$s，黄色档需要等 %2$d 秒</string>
+    <string name="tm2_countdown_title_high">今天已经用了 %1$s，红色档需要等 %2$d 秒</string>
+    <string name="tm2_countdown_tap_hint">单击屏幕可查看今天的使用详情</string>
+    <string name="tm2_countdown_tap_back">再点一下切回倒计时</string>
+    <string name="tm2_countdown_detail_title">今天的使用详情</string>
+    <string name="tm2_countdown_detail_used">已用 %1$s</string>
+    <string name="tm2_countdown_detail_quota">配额 %1$d 分钟</string>
+    <string name="tm2_countdown_detail_quota_rest">配额：休息日不限时长</string>
+    <string name="tm2_countdown_detail_remaining">%1$s</string>
+    <string name="tm2_countdown_detail_borrowed">其中已借 %1$d 分钟</string>
+    <string name="tm2_countdown_detail_level">当前档位：%1$s</string>
+    <string name="tm2_countdown_paused">已暂停（切到后台或息屏时不继续倒计时）</string>
+    <string name="tm2_countdown_done">时间到了，正在进入…</string>
+
+    <!-- ======================================================================================
+         ⑦ 配额耗尽拦截页
+         ====================================================================================== -->
+
+    <string name="tm2_block_headline">今天的额度已用完</string>
+    <string name="tm2_block_detail">已用 %1$s / 配额 %2$d 分钟</string>
+    <string name="tm2_block_detail_rest">已用 %1$s / 休息日不限时长</string>
+    <string name="tm2_block_hint">三条出路：等到明天、向未来借时间、退出。不想等也可以长按下面的按钮解除今天限制。</string>
+    <string name="tm2_block_wait">等到明天（今天不再进入应用）</string>
+    <string name="tm2_block_borrow">去借时间</string>
+    <string name="tm2_block_exit">退出</string>
+    <string name="tm2_block_wait_done">已设置：今天不再进入应用</string>
+
+    <!-- 长按 45 秒解除 -->
+    <string name="tm2_block_release_title">长按 %1$d 秒解除今天限制</string>
+    <string name="tm2_block_release_holding">继续按着…剩余 %1$d 秒</string>
+    <string name="tm2_block_release_done">今天限制已解除</string>
+    <string name="tm2_block_release_hint">按住不放，抬手即取消。解除只对今天生效，明天照旧。</string>
+    <string name="tm2_block_release_press">解除今天限制（长按 %1$d 秒）</string>
+    <string name="tm2_block_release_cancel">已取消解除（抬手了）</string>
+    <string name="tm2_block_bypassed">今天已被解除限制，直接进入</string>
+    <string name="tm2_block_borrowed_enough">额度已够用了，直接进入</string>
+
+    <!-- 配色/无障碍说明 -->
+    <string name="tm2_block_week_hint">想提前准备的话：向未来几天借时间后，那几天的配额会相应变少。</string>
+
+</resources>

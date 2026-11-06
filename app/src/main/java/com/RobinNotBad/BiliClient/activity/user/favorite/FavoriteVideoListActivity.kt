@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.activity.user.favorite
 
+import com.RobinNotBad.BiliClient.util.AccountManager
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.View
@@ -43,7 +44,8 @@ class FavoriteVideoListActivity : RefreshListActivity() {
         mediaId = intent.getLongExtra("media_id", 0)
         val name = intent.getStringExtra("name")
 
-        if (mid <= 0) mid = SharedPreferencesUtil.getLong("mid", 0)
+        // v5.2.1 主账号口径：mid 不再只读 web 槽位（web 退出后恒为 0，导致「任意端口全功能」断链）
+        if (mid <= 0) mid = AccountManager.accountMid()
 
         setPageName(name)
 

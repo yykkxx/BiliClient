@@ -151,28 +151,46 @@ object NetWorkUtil {
     @JvmStatic
     @Throws(IOException::class)
     fun get(url: String?, headers: ArrayList<String>?, redirectHandler: RedirectHandler?): Response {
-        // 全 API 迁移（实验）：开关关闭时 planGet 直接返回 null，这里保持原行为不变。
-        // 命中 APP 通道后若响应不可用（-101/-352/非 JSON/HTTP 错误等），回退 web 原请求一次。
+        // ============================================================================
+        // v5.2.1：**去掉「回退 web」**（用户明确要求「四端分开，去掉回退Web的功能」）
+        //
+        // ## 旧行为（v5.2.0 及更早）
+        // 端点命中 APP 通道 → 发 APP 请求 → 如果响应「不可用」（-101/非 JSON/HTTP 错误…）
+        // → **再用 web 头重发同一条请求**。问题有三层：
+        // 1. **半残的直接来源**：web 没登录时，回退带的是空 Cookie，必然再失败一次，
+        //    用户看到的就是「明明端口登录着，功能却报 -101」。白等一个 RTT 还误导排查。
+        // 2. **掩盖真实故障**：APP 通道真的有问题时，回退会让它「看起来能用」，
+        //    故障被 web 的成功响应盖住，永远没人修。
+        // 3. **语义混乱**：用户选的是「所有接口走这个端口」，代码却偷偷换了通道。
+        //
+        // ## 新行为
+        // 命中 APP 通道后，**该通道就是唯一通道**：
+        // - 响应可用 → 直接返回（与旧行为一致）；
+        // - 响应不可用（业务码/结构/风控壳）→ **原样返回这个响应**，
+        //   由上层各 Api 按 code 提示用户。不再重发、不再换通道。
+        // - 网络异常 → **原样抛出** IOException，由上层按网络错误提示。
+        //
+        // 为什么「原样返回坏响应」比「抛异常」好：上层几十处调用都是
+        // `val result = JSONObject(NetWorkUtil.get(url).body!!.string())` 然后看 `code`，
+        // 返回真响应能让它们照常显示「-101 账号未登录」这类业务提示；
+        // 若抛异常，这些调用点会落到 catch-all 里显示「网络异常」，反而更难懂。
+        //
+        // ## 什么时候仍然走 web
+        // 只有 `planGet` 返回 null 时 —— 也就是**端点不在 APP 通道目录里**（KEEP_WEB：
+        // passport 登录协议、grpc-web、非 B 站域名、静态文件等）或用户选的端口本来就是 web。
+        // 这不是「回退」，是「这条端点本来就只有 web 实现」。
+        // ============================================================================
         val plan = ApiRouter.planGet(url)
         if (plan != null) {
-            val appResponse = try {
-                executeGet(plan.appUrl, plan.headers, redirectHandler)
-            } catch (e: IOException) {
-                ApiRouter.recordFallback(plan, "网络异常：" + e.javaClass.simpleName)
-                null
-            } catch (e: RuntimeException) {
-                ApiRouter.recordFallback(plan, "请求异常：" + e.javaClass.simpleName)
-                null
+            val appResponse = executeGet(plan.appUrl, plan.headers, redirectHandler)
+            val verdict = judge(plan, appResponse)
+            if (verdict.isOk) {
+                ApiRouter.recordHit(plan)
+                return appResponse
             }
-            if (appResponse != null) {
-                val verdict = judge(plan, appResponse)
-                if (verdict.isOk) {
-                    ApiRouter.recordHit(plan)
-                    return appResponse
-                }
-                ApiRouter.recordFallback(plan, verdict.reason)
-                appResponse.close()
-            }
+            // 不再回退：把这个坏响应交给调用方，让业务码自己说话
+            ApiRouter.recordNoFallback(plan, verdict.reason)
+            return appResponse
         }
         return executeGet(url, headers, redirectHandler)
     }
@@ -224,67 +242,44 @@ object NetWorkUtil {
     }
 
     /**
-     * POST 请求。迁移层对写操作分两类处理（**安全设计的核心**）：
+     * POST 请求（v5.2.1：**同样去掉回退 web**）。
      *
-     * - [com.RobinNotBad.BiliClient.api.migration.ApiRouter.Plan.replayable] = true
-     *   （幂等写操作，如点赞/收藏/关注/稍后再看）：APP 通道失败可以安全回退 web 重发一次。
-     * - replayable = false（非幂等写操作，如投币/发评论/发动态/发弹幕/发私信）：
-     *   **绝不重放**。只有「连接根本没建立」这种铁定没发出去的异常
-     *   （ConnectException / UnknownHostException / NoRouteToHostException）才回退 web；
-     *   一旦请求可能已经发出（读超时、连接被重置、HTTP 非 2xx、非 JSON、业务错误码），
-     *   就直接把 APP 通道的响应/异常交给上层报错，宁可失败也不制造重复副作用。
+     * ## 与 GET 的差异：这里还多一层「不许制造重复副作用」
+     * GET 天然幂等，旧行为只是「多发一次请求」。POST 是写操作，重放可能造成
+     * **真实副作用重复**（投两个币、发两条一样的评论）。所以旧代码对 POST 的分类
+     * （replayable / 非 replayable + 「铁定没发出去」判断）本身是对的，保留其**安全思想**，
+     * 但把「回退 web」这一环彻底删掉：
+     *
+     * - 命中 APP 通道后，该通道就是唯一通道；
+     * - 响应不可用（业务码/结构/风控壳）→ 原样返回给上层按 code 提示；
+     * - 网络异常 → 原样抛出（`IOException`），由上层提示网络错误；
+     * - **任何情况下都不再换用 web 重发**。
+     *
+     * 为什么这样更安全（而不是更不安全）：
+     * 旧逻辑里「回退 web」对非幂等写操作本来就**几乎不可用**（可能已发送就不敢重放），
+     * 而对幂等写操作（点赞/收藏/关注）它会让「APP 通道坏了」永远不被发现。
+     * 删掉回退之后，「失败原因」第一次变得诚实：出问题就是出问题，不会假装成功。
+     *
+     * ## 「铁定没发出去」那套判断去哪了
+     * 删了。它存在的唯一目的是「判断能不能安全重放」，而不回退之后就不存在要不要重放的决策。
+     * 留着它只会变成一段永远 return false 的死代码，误导后来的人以为还有重放路径。
      */
     @JvmStatic
     @Throws(IOException::class)
     fun post(url: String?, data: String?, headers: List<String>?, contentType: String?): Response {
         val plan = ApiRouter.planPost(url, data, contentType)
         if (plan != null) {
-            val appResponse = try {
-                executePost(plan.appUrl, plan.body, plan.headers, plan.contentType)
-            } catch (e: IOException) {
-                if (!plan.replayable && !isDefinitelyNotSent(e)) {
-                    // 可能已发送：不重放，异常原样抛给上层
-                    ApiRouter.recordNoReplay(plan, "网络异常(不重放)：" + e.javaClass.simpleName)
-                    throw e
-                }
-                ApiRouter.recordFallback(plan, "网络异常：" + e.javaClass.simpleName)
-                null
-            } catch (e: RuntimeException) {
-                if (!plan.replayable) {
-                    ApiRouter.recordNoReplay(plan, "请求异常(不重放)：" + e.javaClass.simpleName)
-                    throw e
-                }
-                ApiRouter.recordFallback(plan, "请求异常：" + e.javaClass.simpleName)
-                null
+            val appResponse = executePost(plan.appUrl, plan.body, plan.headers, plan.contentType)
+            val verdict = judge(plan, appResponse)
+            if (verdict.isOk) {
+                ApiRouter.recordHit(plan)
+                return appResponse
             }
-            if (appResponse != null) {
-                val verdict = judge(plan, appResponse)
-                if (verdict.isOk) {
-                    ApiRouter.recordHit(plan)
-                    return appResponse
-                }
-                if (!plan.replayable) {
-                    // 已发出且响应不可用：不重放，把响应交给上层按 code 报错
-                    ApiRouter.recordNoReplay(plan, "响应不可用(不重放)：" + verdict.reason)
-                    return appResponse
-                }
-                ApiRouter.recordFallback(plan, verdict.reason)
-                appResponse.close()
-            }
+            // 不回退：坏响应交给上层按业务码报错
+            ApiRouter.recordNoFallback(plan, verdict.reason)
+            return appResponse
         }
         return executePost(url, data, headers, contentType)
-    }
-
-    /**
-     * 判断 IOException 是否「铁定没发出去」——只有这几类才允许对非幂等写操作回退重试：
-     * 连接都没建立起来，服务端不可能已经处理过这个请求。
-     * 其余（读超时 SocketTimeoutException、连接重置、SSL 失败等）都按「可能已发送」处理。
-     */
-    private fun isDefinitelyNotSent(e: IOException): Boolean {
-        return e is java.net.ConnectException ||
-                e is java.net.UnknownHostException ||
-                e is java.net.NoRouteToHostException ||
-                e is javax.net.ssl.SSLHandshakeException
     }
 
     /** 真正发起 POST 的原始实现（迁移层只在外面包一层，行为保持与历史版本一致） */

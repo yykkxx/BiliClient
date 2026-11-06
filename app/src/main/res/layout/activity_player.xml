@@ -665,17 +665,31 @@
                 android:text="调节进度"
                 android:textSize="14sp" />
 
+            <!--
+                v5.2.1：进度小窗里的输入框改成**只读显示行**，点击才弹屏幕内数字键盘
+                （TimeKeypadDialog）。为什么不再让用户直接在这里打字：
+                1. 这里一获得焦点系统键盘就弹，会把整张卡片顶出圆屏可见区；
+                2. 系统数字键盘没有冒号，`1:30` 这种格式打不出来；
+                3. 手表上小输入框的触控区远小于 48dp，点都点不准。
+                `focusable=false` + `clickable=true` 是关键：既能被点，又**永不触发输入法**。
+            -->
             <EditText
                 android:id="@+id/time_jump_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="4dp"
-                android:hint="秒数或 时间 90 / 1:30 / 01:02:03"
-                android:inputType="text"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:hint="点击用数字键盘输入（90 / 1:30 / 01:02:03）"
+                android:inputType="none"
                 android:maxLines="1"
                 android:singleLine="true"
                 android:textColor="@color/textwhite"
-                android:textColorHint="#88ffffff" />
+                android:textColorHint="#88ffffff"
+                android:textSize="13sp"
+                tools:ignore="TextViewEdits" />
 
             <TextView
                 android:id="@+id/time_jump_rotary_hint"

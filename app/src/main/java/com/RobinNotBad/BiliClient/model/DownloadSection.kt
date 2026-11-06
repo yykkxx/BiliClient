@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.model
 
+import com.RobinNotBad.BiliClient.util.AccountManager
 import android.database.Cursor
 
 import com.RobinNotBad.BiliClient.util.FileUtil
@@ -93,7 +94,8 @@ class DownloadSection {
         data.cid = cid
         data.title = title
         data.qn = qn
-        data.mid = SharedPreferencesUtil.getLong("mid", 0L)
+        // v5.2.1 主账号口径：mid 不再只读 web 槽位（web 退出后恒为 0，导致「任意端口全功能」断链）
+        data.mid = AccountManager.accountMid()
         return data
     }
 }

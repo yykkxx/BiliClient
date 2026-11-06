@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.activity.live
 
+import com.RobinNotBad.BiliClient.util.AccountManager
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -159,7 +160,8 @@ class LiveInfoActivity : BaseActivity() {
                             playerData.videoUrl = play_url
                             playerData.title = "直播·" + room.title
                             playerData.aid = room_id
-                            playerData.mid = SharedPreferencesUtil.getLong("mid", 0L)
+                            // v5.2.1 主账号口径：mid 不再只读 web 槽位（web 退出后恒为 0，导致「任意端口全功能」断链）
+                            playerData.mid = AccountManager.accountMid()
 
                             runOnUiThread(Runnable {
                                 try {

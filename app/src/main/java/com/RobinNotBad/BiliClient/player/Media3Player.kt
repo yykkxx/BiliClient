@@ -28,6 +28,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
@@ -85,6 +86,22 @@ class Media3Player(context: Context) : IMediaPlayer {
 
     @Volatile
     private var dataSourceHeaders: Map<String, String>? = null
+
+    /**
+     * B 站 DASH 的**音频轨**独立地址（v5.2.1 新增，修「有画面没声音 / 有声音没画面」）。
+     *
+     * 为什么需要单独一个字段：B 站的 DASH 把音频和视频放在**两个不同的 URL** 上
+     * （`dash.audio[].baseUrl` / `dash.video[].baseUrl`），而 `PlayerData` 一直有两个字段
+     * （`videoUrl` / `audioUrl`），但旧代码**只把 videoUrl 传进播放器**（`buildPlayerIntent`
+     * 里没有 audioUrl），于是 media3 拿到的单条流只有视频轨 —— 表现为"能播但没声音"，
+     * 或者某些分片结构下直接起不来。ijk（ffmpeg）对单轨流的容忍度更高，所以旧版用 ijk 时
+     * 这个问题没被发现。
+     *
+     * 现在用 `MergingMediaSource(video, audio)` 合并成一条完整媒体源。
+     * 为 null 时不合并（纯视频/本地文件/直播，行为与改动前一致）。
+     */
+    @Volatile
+    private var dataSourceAudioUrl: String? = null
 
     /** ijk option 存表（name → 字符串值）；关键项在 prepareAsync 时映射进 media3 配置 */
     private val options = HashMap<String, String>()
@@ -230,6 +247,36 @@ class Media3Player(context: Context) : IMediaPlayer {
         dataSourceHeaders = headers
     }
 
+    /**
+     * 该地址是否**极可能**是 FLV（v5.2.1，配合 PlayerActivity 的「开局就换内核」判断）。
+     *
+     * ## 为什么需要这个判断（先纠正一个流传下来的误解）
+     * 本仓库此前的笔记（HANDOFF §3.4）曾说「media3 1.4.1 没有 FLV 提取器」，**这个说法是错的**。
+     * 本轮实测：解包
+     * `media3-extractor-1.4.1.aar` → `classes.jar` 里**存在**
+     * `androidx/media3/extractor/flv/FlvExtractor.class`，
+     * 且 `DefaultExtractorsFactory.addExtractorsForFileType` 的 `tableswitch` 分支
+     * (case 5) 会 `new FlvExtractor()` 并加进列表，`DEFAULT_EXTRACTOR_ORDER` 数组里
+     * 也含它（`Java.long` 核对过 21 项初始化的前 12 项）。
+     * **所以「media3 完全不能播 FLV」不成立**，FLV 不是主因。
+     *
+     * ## 那为什么还要这个判断
+     * 因为 **B 站的 `durl` 链路给的不是干净的 FLV**：它是「FLV 容器 + 分片 durl 多段」
+     * 或干脆是 `.flv?` 带一堆 query 的 CDN 直链。`ProgressiveMediaSource` 要求**单条可 seek
+     * 的完整流**，遇到分片 FLV 会起不来（或起播后立刻 EOF）—— 这才是 ijk 能播、media3 不行的
+     * 真实差异（ijk 的 ffmpeg demuxer 容忍分片与残缺）。
+     *
+     * 所以本函数的目的**不是"因为没提取器所以换内核"，而是"这条流结构不适合 Progressive 模式，
+     * 提前换内核，别让用户对着黑屏等 8 秒"**。判断很保守（只看后缀），宁可漏判也不误判：
+     * 漏判由 [PlayerActivity.tryFallbackToIjk] 的 onPlayerError 兜底，误判会让本来能播的视频
+     * 白换一次内核（用户会看到画质/行为变化）。
+     */
+    fun isLikelyFlv(): Boolean {
+        val url = dataSourceUrl ?: return false
+        val path = Uri.parse(url).path?.lowercase(Locale.ROOT) ?: return false
+        return path.endsWith(".flv")
+    }
+
     override fun setDataSource(fd: FileDescriptor) {
         // app 全部调用点都是 String/(String,headers)，没有 fd/IMediaDataSource 入口
         throw IOException("Media3Player 不支持 setDataSource(FileDescriptor)")
@@ -237,6 +284,21 @@ class Media3Player(context: Context) : IMediaPlayer {
 
     override fun setDataSource(mediaDataSource: IMediaDataSource) {
         throw IOException("Media3Player 不支持 setDataSource(IMediaDataSource)")
+    }
+
+    /**
+     * 设置 DASH 音频轨地址（v5.2.1，**新增 API，不改变任何已有签名**）。
+     *
+     * 由 `PlayerActivity.MPPrepare` 在 `isOnlineVideo && dash 音视频分离` 时调用；
+     * 其它情况（本地文件、直播、单流）不调，行为与改动前完全一致。
+     *
+     * 必须在 [prepareAsync] 之前调用（它只是存字段，prepare 时才参与媒体源构建）。
+     */
+    fun setAudioDataSource(audioUrl: String?, headers: Map<String, String>?) {
+        dataSourceAudioUrl = audioUrl
+        // 音频轨与视频轨同源（同一个 CDN、同样的 Referer/UA），所以 headers 共用；
+        // 但若调用方显式给了音频 headers 而没给主 headers，这里不覆盖主 headers（防串）
+        if (headers != null && dataSourceHeaders == null) dataSourceHeaders = headers
     }
 
     override fun getDataSource(): String? = dataSourceUrl
@@ -491,7 +553,7 @@ class Media3Player(context: Context) : IMediaPlayer {
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, disableVideo)
             .build()
 
-        p.setMediaSource(buildMediaSource(url))
+        p.setMediaSource(buildMediaSource(url, dataSourceAudioUrl))
         p.prepare()
     }
 
@@ -552,7 +614,15 @@ class Media3Player(context: Context) : IMediaPlayer {
             .build()
     }
 
-    private fun buildMediaSource(url: String): MediaSource {
+    /**
+     * 构建媒体源。
+     *
+     * @param url 视频（或单流）地址
+     * @param audioUrl DASH 音频轨地址；非空时用 [MergingMediaSource] 与视频合并成一条完整媒体源
+     *   （**这是修「有画面没声音」的关键**：B 站 DASH 的音视频是两条独立 URL，
+     *   只给 video 一条，media3 就没有音轨可渲染）。null / 空串时行为与改动前一致。
+     */
+    private fun buildMediaSource(url: String, audioUrl: String?): MediaSource {
         val uri = Uri.parse(url)
         val isHttp = url.startsWith("http://") || url.startsWith("https://")
         // 本地缓存文件走 FileDataSource（file:// 与纯路径都支持）；127.0.0.1 预加载代理是 http
@@ -566,7 +636,7 @@ class Media3Player(context: Context) : IMediaPlayer {
                 NoRetryLoadErrorHandlingPolicy()
             }
         val path = (uri.path ?: url).lowercase(Locale.ROOT)
-        return if (path.endsWith(".m3u8")) {
+        val videoSource = if (path.endsWith(".m3u8")) {
             HlsMediaSource.Factory(dataSourceFactory)
                 .setLoadErrorHandlingPolicy(policy)
                 .createMediaSource(MediaItem.fromUri(uri))
@@ -575,6 +645,15 @@ class Media3Player(context: Context) : IMediaPlayer {
                 .setLoadErrorHandlingPolicy(policy)
                 .createMediaSource(MediaItem.fromUri(uri))
         }
+        if (audioUrl.isNullOrEmpty() || audioUrl == url) return videoSource
+        // DASH 音视频分离：音频轨同样是 fMP4 分片，走 ProgressiveMediaSource 即可
+        val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory, DefaultExtractorsFactory())
+            .setLoadErrorHandlingPolicy(policy)
+            .createMediaSource(MediaItem.fromUri(Uri.parse(audioUrl)))
+        // MergingMediaSource 要求两条源时长一致（B 站同一次 playurl 返回的必然一致）；
+        // 万一不一致，media3 会在 prepare 阶段报错，被 [onPlayerError] 接住并由
+        // PlayerActivity 的「切 ijk」兜底，不会静默。
+        return MergingMediaSource(videoSource, audioSource)
     }
 
     private fun applyScreenOn() {

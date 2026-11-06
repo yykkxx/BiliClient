@@ -20,6 +20,30 @@ import tv.danmaku.ijk.media.player.IjkMediaPlayer
  */
 object PlayerFactory {
 
+    /**
+     * 用户是否**选择**了 Media3 内核（不做任何运行期判断，纯读偏好）。
+     *
+     * 存在的意义：`PlayerActivity` 需要知道「当前是不是 media3」来决定要不要启用
+     * 「失败自动切 ijk」的兜底 —— 而它不能自己读偏好（那会让「内核判断」散成两处）。
+     */
+    @JvmStatic
+    fun isMedia3Selected(): Boolean =
+        SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PLAYER_MEDIA3, false)
+
+    /**
+     * 强制创建一个 ijk 播放器（**忽略偏好**）。
+     *
+     * 用途只有一个：Media3 起播失败时**兜底重试**。
+     * 为什么必须绕过偏好：此时用户的偏好仍然是「用 Media3」，但我们已知这台设备/
+     * 这个视频用 Media3 播不了 —— 偏好是"意向"，能不能播是"事实"，事实优先。
+     * 用户下次正常打开别的视频仍按偏好走 Media3，不会被这一次兜底永久改变。
+     */
+    @JvmStatic
+    fun createIjkFallback(): IMediaPlayer {
+        IjkMediaPlayer.loadLibrariesOnce(null)
+        return IjkMediaPlayer()
+    }
+
     @JvmStatic
     fun create(context: Context): IMediaPlayer {
         return if (SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.PLAYER_MEDIA3, false)) {

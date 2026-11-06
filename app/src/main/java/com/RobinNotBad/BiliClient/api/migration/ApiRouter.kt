@@ -47,6 +47,16 @@ object ApiRouter {
     private const val KEY_FALLBACKS = "api_migration_stat_fallbacks"
     private const val KEY_SKIPS = "api_migration_stat_skips"
     private const val KEY_NO_REPLAY = "api_migration_stat_no_replay"
+
+    /**
+     * v5.2.1「APP 通道响应不可用但未回退 web」的计数键。
+     *
+     * 为什么新开一个键而不是继续用 [KEY_FALLBACKS]：那个键的语义是「回退发生了」，
+     * 而 v5.2.1 之后**回退这条路已经不存在**。把新语义塞进旧键会让历史统计与现在
+     * 混在一起没法读（用户会看到「回退 30 次」但实际一次都没回退过）。
+     * 旧键保留只增不清，是为了不破坏已有数据。
+     */
+    private const val KEY_NO_FALLBACK = "api_migration_stat_no_fallback"
     private const val KEY_FAILURES = "api_migration_recent_failures"
 
     /** 最近失败端点最多保留条数（设置页展示用） */
@@ -708,6 +718,41 @@ object ApiRouter {
     /** 非幂等写操作「不重放」次数（设置页展示） */
     @JvmStatic
     fun noReplayCount(): Long = SharedPreferencesUtil.getLong(KEY_NO_REPLAY, 0L)
+
+    /**
+     * 记录一次「APP 通道响应不可用，但**不回退 web**」（v5.2.1 新增，替代 GET/POST 的回退）。
+     *
+     * ## 为什么需要它而不是复用 [recordNoReplay]
+     * `recordNoReplay` 的语义是「**非幂等写操作**已在途、不敢重放」，它不带「端点被暂停」逻辑，
+     * 因为写操作退回 web 反而更糟。而 GET（含幂等读）失败时，旧行为是回退 + 累计失败 +
+     * 连续 2 次就暂停该端点 10 分钟。
+     * v5.2.1 删掉回退后，**仍然需要「暂停」这个止损机制**吗？——需要，但语义变了：
+     * 现在不再有「回退到 web」这条路，暂停只会让端点**完全不可用**，那反而更糟
+     * （用户会看到功能直接消失）。所以本函数**只统计、不暂停**：
+     * 失败次数与最近失败原因仍要能看见（排查必需），但绝不主动关掉任何端点。
+     *
+     * ## 统计口径
+     * - `KEY_FALLBACKS` 继续计「回退次数」，但 v5.2.1 起它**只会由旧版本残留增长**；
+     * - 本函数累加 `KEY_NO_FALLBACK`（新键），设置页/诊断页展示「APP 通道失败（无回退）次数」。
+     * 保留旧键是为了不破坏历史统计的连续性（用户已有数据不该凭空清零）。
+     */
+    @JvmStatic
+    fun recordNoFallback(plan: Plan, reason: String) {
+        bumpLong(KEY_NO_FALLBACK)
+        Logu.d(TAG, "不回退 " + plan.endpoint + "：" + reason)
+        synchronized(STAT_LOCK) {
+            attemptedEndpoints.add(plan.endpoint)
+            val now = System.currentTimeMillis()
+            val recent = loadRecentFailures().toMutableList()
+            recent.add(0, formatFailure(plan.endpoint, reason, now))
+            while (recent.size > MAX_FAILURES) recent.removeAt(recent.size - 1)
+            SharedPreferencesUtil.putString(KEY_FAILURES, recent.joinToString("\n"))
+        }
+    }
+
+    /** APP 通道响应不可用但**未回退**的次数（v5.2.1 起的主要失败计数） */
+    @JvmStatic
+    fun noFallbackCount(): Long = SharedPreferencesUtil.getLong(KEY_NO_FALLBACK, 0L)
 
     private fun formatFailure(endpoint: String, reason: String, time: Long): String {
         val timeText = synchronized(TIME_FORMAT) { TIME_FORMAT.format(Date(time)) }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动页（#9）：空 Activity，仅展示应用名 + 今日已用时长 + 超时倒计时后跳转 -->
+<!-- 启动页（#9）：空 Activity，仅展示应用名 + 今日已用时长，随后按 time/Gate 的门禁结论跳转 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -24,32 +24,53 @@
         android:textColor="@color/textwhite"
         android:textSize="16sp" />
 
-    <!-- 今日已使用时长：无论实验室开关是否开启都显示（用户要求每次打开都能看到） -->
+    <!-- 今日已使用时长的标题行（「今日已用」），数值在下面一行 -->
     <TextView
-        android:id="@+id/launcher_usage"
+        android:id="@+id/launcher_usage_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@+id/launcher_hint"
         android:layout_centerHorizontal="true"
         android:layout_marginHorizontal="12dp"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:gravity="center"
-        android:maxLines="2"
+        android:maxLines="1"
         android:textColor="@color/textwhite"
-        android:textSize="13sp" />
+        android:textSize="12sp" />
 
-    <!-- 超过建议时长时的进入倒计时（无延时则隐藏） -->
+    <!--
+        今日已用时长数值：颜色由 time/DailyPlan.levelOf 决定（绿 / 黄 / 红），
+        在 LauncherActivity 里用 setTextColor 上色 —— 色值不跟随主题（用户要求三档颜色语义固定）。
+        放在标题下方单独一行是为了让数字足够大，一眼能读到「今天还剩多少」的紧迫感。
+    -->
     <TextView
-        android:id="@+id/launcher_countdown"
+        android:id="@+id/launcher_usage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/launcher_usage_title"
+        android:layout_centerHorizontal="true"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="2dp"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <!--
+        剩余配额的一行小字（上学日才有意义；休息日/未开启时隐藏）。
+        它解决的是用户最常问的一句话：「我今天还能用多久」。
+    -->
+    <TextView
+        android:id="@+id/launcher_remaining"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@+id/launcher_usage"
         android:layout_centerHorizontal="true"
         android:layout_marginHorizontal="12dp"
-        android:layout_marginTop="3dp"
+        android:layout_marginTop="4dp"
         android:gravity="center"
-        android:maxLines="2"
-        android:textColor="@color/pink"
+        android:maxLines="1"
+        android:textColor="@color/text_transparent"
         android:textSize="12sp"
         android:visibility="gone" />
 

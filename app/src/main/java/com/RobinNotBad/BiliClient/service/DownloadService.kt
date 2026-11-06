@@ -799,6 +799,79 @@ class DownloadService : Service() {
             })
         }
 
+        /**
+         * 该视频是否已经在下载队列表里（#7 收藏夹多选缓存用）。
+         *
+         * 只读查询、同步返回，**只查不改**：批量缓存要在汇总里区分「已在队列」与
+         * 「写库失败」，靠这个先判一次重，再决定要不要真的入队。
+         * 与 [startDownload] 内部的 aid+cid 查重口径保持一致。
+         */
+        @JvmStatic
+        fun isQueued(aid: Long, cid: Long): Boolean {
+            var cursor: Cursor? = null
+            var database: SQLiteDatabase? = null
+            return try {
+                val helper = DownloadSqlHelper(BiliTerminal.context)
+                database = helper.readableDatabase
+                cursor = database.rawQuery("select count(*) from download where aid=? and cid=?",
+                        arrayOf(aid.toString(), cid.toString()))
+                if (cursor != null && cursor.moveToFirst()) cursor.getInt(0) > 0 else false
+            } catch (ignored: Exception) {
+                false
+            } finally {
+                cursor?.close()
+                database?.close()
+            }
+        }
+
+        /**
+         * **同步**入队并返回是否成功（#7 收藏夹多选缓存用）。
+         *
+         * 为什么非加不可：[startDownload] 是在 `CenterThreadPool` 里异步插库、返回 Unit，
+         * 调用方无法知道有没有真的进表 —— 于是老代码用 `Thread.sleep(50)` 轮询 `queueCount()`
+         * 补偿这个竞态（既被质量门禁点名，本身也可能误判）。本函数把「查重 + 插库 + 起服务」
+         * 全在当前线程同步做完，返回值即事实，调用方直接计数即可，不需要任何等待。
+         *
+         * 有意**不**复用 [startDownload]（它不许改签名，也不该被异步语义绑住）；
+         * 本函数只新增，不动任何已有函数。UI 提示由调用方统一汇总（批量场景逐条弹
+         * 「已添加下载」会瞬间刷屏），所以这里不弹 MsgUtil。
+         *
+         * @return true=已在队列表中；false=已存在 / 写库失败（调用方可再调用 [isQueued] 区分）
+         */
+        @JvmStatic
+        fun enqueueDownload(title: String, aid: Long, cid: Long, cover: String?, qn: Int,
+                            downloadType: String, audioUrl: String?): Boolean {
+            var database: SQLiteDatabase? = null
+            var cursor: Cursor? = null
+            return try {
+                val helper = DownloadSqlHelper(BiliTerminal.context)
+                database = helper.writableDatabase
+                cursor = database.rawQuery("select * from download where aid=? and cid=?",
+                        arrayOf(aid.toString(), cid.toString()))
+                if (cursor != null && cursor.count > 0) return false
+                cursor?.close()
+                cursor = null
+
+                database.execSQL(
+                        "insert into download(type,state,aid,cid,qn,title,child,cover,download_type,audio_url) values(?,?,?,?,?,?,?,?,?,?)",
+                        arrayOf("video_single", "none", aid, cid, qn, title, "", GlideUtil.url(cover ?: ""),
+                                downloadType, audioUrl))
+
+                val pathSingle = FileUtil.getVideoDownloadPath(title, null)
+                pathSingle.mkdirs()
+                val fileSign = File(pathSingle, ".DOWNLOADING")
+                if (!fileSign.exists()) fileSign.createNewFile()
+
+                start(-1)
+                true
+            } catch (ignored: Exception) {
+                false
+            } finally {
+                cursor?.close()
+                database?.close()
+            }
+        }
+
         @JvmStatic
         fun start(first: Long) {
             if (started) return

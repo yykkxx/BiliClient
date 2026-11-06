@@ -28,7 +28,7 @@ import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
-import com.RobinNotBad.BiliClient.util.TimeTracking
+import com.RobinNotBad.BiliClient.time.UsageTracker
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -100,10 +100,12 @@ open class BaseActivity : AppCompatActivity {
     open fun setPageName(name: String?) {
         val textView = findViewById<TextView>(R.id.pageName)
         if (textView != null) textView.text = name
-        // v5.2.0 使用时长统计：把「当前页面名」交给 TimeTracking 记录。
+        // v5.2.1 使用时长统计：把「当前页面名」交给 UsageTracker 记录。
         // 页面名只在这里写一次（全 App 49 处调用 setPageName 都会经过这里），
         // 统计侧据此把前后台时长拆到具体页面，才能回答「今天哪个页面停留最久」。
-        TimeTracking.setCurrentPage(name)
+        // 换到 time/UsageTracker 的原因：v5.2.0 的 TimeTracking 已随旧时间管理一起删除，
+        // 新实现的暂停闸门用「计数器」而不是布尔（拦截页叠加倒计时页时布尔会提前解除暂停）。
+        UsageTracker.setCurrentPage(name)
     }
 
     open fun setTopbarExit() {

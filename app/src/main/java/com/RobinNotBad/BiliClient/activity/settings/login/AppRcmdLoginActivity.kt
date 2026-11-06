@@ -225,9 +225,25 @@ class AppRcmdLoginActivity : BaseActivity() {
         AccountStore.loginApp(
             loginPort, mid, accessToken, refreshToken, cookiesTextOf(data), null, null
         )
-        val switched = loginPort != AccountStore.PORT_WEB &&
-                AccountStore.mainPort() == AccountStore.PORT_WEB
-        if (switched) AccountStore.setMainPort(loginPort)
+        // v5.2.1（审计 P1-6）：自动切换要覆盖**两个**端口作用域，原来只切 mainPort。
+        //
+        // 漏切 rcmdPort 的后果：用户只扫了 HD 码 → mainPort 切到 HD（其它页面 API 走 HD 了），
+        // 但推荐页仍走 web → web 未登录时推荐页是**匿名流**（WBI + 空 Cookie）。
+        // 用户体感就是「我明明登录了，推荐页还是那些老东西，一点个性化都没有」。
+        //
+        // 口径不变：**只在该作用域原本是 Web 时才切**。用户手动选过端口说明那是他的明确选择。
+        var switched = false
+        if (loginPort != AccountStore.PORT_WEB) {
+            if (AccountStore.mainPort() == AccountStore.PORT_WEB) {
+                AccountStore.setMainPort(loginPort)
+                switched = true
+            }
+            if (AccountStore.rcmdPort() == AccountStore.PORT_WEB) {
+                AccountStore.setRcmdPort(loginPort)
+                // 推荐页也切了，同样要告诉用户「已切换」，否则他只看到推荐页变了却不知道为什么
+                switched = true
+            }
+        }
         return LoginOutcome(mid, switched)
     }
 

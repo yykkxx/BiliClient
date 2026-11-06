@@ -40,6 +40,16 @@
         <item name="android:windowSwipeToDismiss" tools:ignore="NewApi">false</item>
     </style>
 
+    <!-- v5.2.1 图片查看页专用：继承 app 主题（保留按钮/文字等控件样式），
+         只关掉「侧滑退出」。
+         为什么需要它：ImageViewerActivity.onCreate 里显式 setTheme 会覆盖 Manifest 上的主题，
+         而 Theme.BiliClient 的 windowSwipeToDismiss=true 会把手势判给「下滑退出」，
+         与 PhotoView 的双指缩放/拖动冲突。父主题必须是 Theme.BiliClient（不能用 Theme.NoSwipe，
+         那个父类是 android:Theme.Black，会丢掉全部 app 控件样式）。 -->
+    <style name="Theme.BiliClient.NoSwipe" parent="Theme.BiliClient">
+        <item name="android:windowSwipeToDismiss" tools:ignore="NewApi">false</item>
+    </style>
+
 <!-- 主题色调覆盖层（#8）：按选择的主题色重定义激活态控件色，
      让开关/复选/单选/按钮/输入框光标/进度条等全部跟随主题色调 -->
 <style name="ThemeOverlay.Accent.Default" parent="Theme.BiliClient" />

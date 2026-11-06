@@ -1,6 +1,7 @@
 package com.RobinNotBad.BiliClient.api
 
 import android.content.Context
+import android.media.MediaCodecList
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
@@ -16,6 +17,7 @@ import com.RobinNotBad.BiliClient.model.DashData
 import com.RobinNotBad.BiliClient.model.DashVideoStream
 import com.RobinNotBad.BiliClient.model.HighEnergyData
 import com.RobinNotBad.BiliClient.model.PlayerData
+import com.RobinNotBad.BiliClient.player.PlayerFactory
 import com.RobinNotBad.BiliClient.model.Subtitle
 import com.RobinNotBad.BiliClient.model.SubtitleLink
 import com.RobinNotBad.BiliClient.model.VideoInfo
@@ -174,13 +176,29 @@ object PlayerApi {
             playerData.dashData = DashData.fromJson(dashJson)
 
             // 设置视频URL（选择指定清晰度的视频流）
-            val videoStream = playerData.dashData!!.getVideoStream(playerData.qn)
+            //
+            // v5.2.1：**Media3 内核下**改用「设备可解优先」的选流重载。
+            //
+            // 为什么只对 Media3 生效（用户明确要的"不要回归"）：
+            // ijk 带 ffmpeg **软解**，能播 AV1/HEVC，旧选流（只按 qn 取第一条）
+            // 对它是可用的、甚至是更优的（更高码率）。而 media3 本项目没集成 FFmpeg 扩展，
+            // 只有硬解，选中设备不支持的编码 → 黑屏有声音/完全不出画面，
+            // 正是「正常加载、有网速、有弹幕就是不能播」的症状。
+            // 所以这里按内核分叉，ijk 的路径**逐字节不变**。
+            val dash = playerData.dashData
+            val videoStream = if (dash == null) {
+                null
+            } else if (PlayerFactory.isMedia3Selected()) {
+                dash.getVideoStream(playerData.qn, ::isCodecSupportedByDevice)
+            } else {
+                dash.getVideoStream(playerData.qn)
+            }
             if (videoStream != null) {
                 playerData.videoUrl = videoStream.baseUrl
             }
 
             // 设置音频URL（选择最高质量的音频流）
-            val audioStream = playerData.dashData!!.getBestAudioStream()
+            val audioStream = dash?.getBestAudioStream()
             if (audioStream != null) {
                 playerData.audioUrl = audioStream.baseUrl
             }
@@ -238,6 +256,34 @@ object PlayerApi {
      * @param playerData 传入aid、cid、qn等必要数据，可以使用VideoInfo.toPlayerData
      * @param download   是否下载
      */
+    /**
+     * 设备是否支持某个 DASH `codecid`（供 [DashData.getVideoStream] 的选流回调使用）。
+     *
+     * 实现用 `MediaCodecList` 的**解码器**清单，按 MIME 匹配；不支持或不认识的编码返回 false。
+     *
+     * ## 为什么用 `MediaCodecList(REGULAR_CODECS)` 而不是 `MediaCodec.createDecoderByType`
+     * 后者要**实例化**一个解码器对象才能确认是否支持 —— 在选流阶段（还没开始播放）实例化
+     * 解码器既慢（部分机型几十毫秒）又可能因资源竞争失败。查清单是纯读操作，快且无副作用。
+     * 注意必须过滤 `isEncoder`（编码器不能用来解码），并做 MIME 大小写无关比较。
+     *
+     * ## 为什么不缓存结果
+     * 选流发生在「打开视频/切清晰度」，频率是用户操作级（每分钟几次），
+     * 而 `MediaCodecList` 本身在 framework 里有缓存 —— 自己再缓存反而多一份失效风险。
+     */
+    @JvmStatic
+    fun isCodecSupportedByDevice(codecid: Int): Boolean {
+        val mime = DashData.mimeOf(codecid) ?: return false
+        return try {
+            val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            codecList.codecInfos.any { info ->
+                !info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
+            }
+        } catch (ignored: Exception) {
+            // 查不到就当不支持：宁可降级到更兼容的编码，也不要选一个播不出来的
+            false
+        }
+    }
+
     @Throws(JSONException::class, IOException::class)
     @JvmStatic
     fun getVideo(playerData: PlayerData, download: Boolean) {
@@ -350,6 +396,13 @@ object PlayerApi {
         val intent = Intent()
         intent.setClass(context, PlayerActivity::class.java)
         intent.putExtra("url", playerData.videoUrl)
+        // v5.2.1：DASH 音视频分离时把音频轨也传进去（旧版本只传 videoUrl，
+        // `audioUrl` 从不进 Intent、PlayerActivity 也从不读它 —— 这就是
+        // 「正常加载、有弹幕、有网速，但没声音 / 播不出来」的一条直接原因）。
+        // 为空时不放这个 extra：PlayerActivity 拿到 null 就按单流处理，行为与旧版一致。
+        playerData.audioUrl?.takeIf { it.isNotEmpty() }?.let {
+            intent.putExtra("audio_url", it)
+        }
         intent.putExtra("danmaku", playerData.danmakuUrl)
         intent.putExtra("title", playerData.title)
         intent.putExtra("aid", playerData.aid)

@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  时间管理入口页（设置 → 时间管理）：三个小栏（使用控制 / 时间银行 / 使用记录）。
+
+  为什么不直接复用 RefreshListActivity + SettingsAdapter：
+  - 那套是「一行行设置项」的行式布局，而这一页是**三个入口卡片**（点进去是独立页面），
+    用 click 行会做成一行文字，圆屏/小屏上很难点中、也看不出层级；
+  - 卡片式与设置主页现有的「播放器设置 / 界面设置」卡片保持同一种视觉语言。
+
+  为什么用 LinearLayout 而不是 ConstraintLayout：
+  历史上的 lintVitalRelease 曾被 ConstraintLayout 的 NotSibling 挂过（见 activity_usage_stats.xml 注释），
+  而这里每张卡片都是「标题 + 描述 + 状态 + 箭头」的固定四行结构，线性布局足够，不必冒险。
+
+  圆屏：使用 RotaryScrollView（本仓库既有的圆屏/表冠兼容滚动容器）+ 主题里的
+  paddingHorizontal 定量，卡片自带左右边距，圆屏边缘不会被切掉。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".time.activity.TimeMainActivity">
+
+    <!-- 顶栏：与 activity_base.xml 完全一致的结构。
+         注意 id 必须是 pageName / timeText —— BaseActivity.setPageName 与 setRound 按 id 找控件，
+         换 id 就会导致标题不显示、圆屏适配静默失效。 -->
+    <RelativeLayout
+        android:id="@+id/top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
+
+        <TextView
+            android:id="@+id/pageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginStart="8dp"
+            android:layout_toStartOf="@id/timeText"
+            android:lines="1"
+            android:text="@string/tm2_page_main"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/arrow_back" />
+
+        <com.RobinNotBad.BiliClient.ui.widget.TextClock
+            android:id="@+id/timeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginEnd="8dp" />
+
+    </RelativeLayout>
+
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/activity_padding_horizontal"
+            android:paddingTop="4dp"
+            android:paddingBottom="16dp">
+
+            <!-- 顶部摘要：一眼看到「开关开没开 + 今天用了多久」。
+                 用户原话是「在进入应用的时候，显示当前已用时间」，设置页里再来一次同样的信息
+                 成本极低，但很能说明「这个功能在不在工作」。 -->
+            <TextView
+                android:id="@+id/tm2_main_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="2dp"
+                android:paddingHorizontal="4dp"
+                android:paddingVertical="4dp"
+                android:text="@string/tm2_main_summary_off"
+                android:textSize="12sp" />
+
+            <!-- ==================== 小栏 1：使用控制 ==================== -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/tm2_card_control"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:lines="1"
+                            android:text="@string/tm2_main_control_title"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:src="@drawable/arrow_forward" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:alpha="0.85"
+                        android:maxLines="2"
+                        android:text="@string/tm2_main_control_desc"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tm2_control_state"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1"
+                        android:text="@string/tm2_main_control_state_off"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ==================== 小栏 2：时间银行 ==================== -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/tm2_card_bank"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:lines="1"
+                            android:text="@string/tm2_main_bank_title"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:src="@drawable/arrow_forward" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:alpha="0.85"
+                        android:maxLines="2"
+                        android:text="@string/tm2_main_bank_desc"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tm2_bank_state"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1"
+                        android:text="@string/tm2_main_bank_state_off"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ==================== 小栏 3：使用记录 ==================== -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/tm2_card_record"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:lines="1"
+                            android:text="@string/tm2_main_record_title"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:src="@drawable/arrow_forward" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:alpha="0.85"
+                        android:maxLines="2"
+                        android:text="@string/tm2_main_record_desc"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tm2_record_state"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1"
+                        android:text="@string/tm2_unknown"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+
+</RelativeLayout>

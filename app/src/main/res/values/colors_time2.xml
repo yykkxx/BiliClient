@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    时间管理（v5.2.1）语义色。
+    这三档颜色**不跟随主题**：绿=安心、黄=注意、红=该停了，是语义而不是装饰。
+    （主题色有 7 套，如果绿/黄/红也跟着变，"粉色警告"就完全失去警示意义。）
+    取值参考 Material 的语义色，但在纯黑背景（bgblack）上都验证过对比度。
+-->
+<resources>
+    <!-- 0~30 分钟：绿 -->
+    <color name="tm2_level_green">#4CD9A0</color>
+    <!-- 30~60 分钟：黄 -->
+    <color name="tm2_level_yellow">#FFC24B</color>
+    <!-- 60 分钟以上：红 -->
+    <color name="tm2_level_red">#FF6B6B</color>
+
+    <!-- 图表与柱子：中性灰，避免与三档语义色混淆 -->
+    <color name="tm2_chart_bar">#8A8A8A</color>
+    <color name="tm2_chart_bar_empty">#33FFFFFF</color>
+    <color name="tm2_chart_axis">#66FFFFFF</color>
+
+    <!-- 卡片/行的背景（比纯黑亮一档，圆屏边缘也能看出边界） -->
+    <color name="tm2_card_bg">#14FFFFFF</color>
+    <color name="tm2_text_secondary">#99FFFFFF</color>
+</resources>

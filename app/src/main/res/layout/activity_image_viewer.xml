@@ -4,14 +4,18 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:theme="@style/Theme.BiliClient"
+    android:theme="@style/Theme.BiliClient.NoSwipe"
     tools:context=".activity.ImageViewerActivity">
 
     <RelativeLayout
         android:id="@+id/top"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentTop="true">
+        android:layout_alignParentTop="true"
+        android:background="#33000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingBottom="4dp">
 
         <TextView
             android:id="@+id/pageName"
@@ -65,7 +69,7 @@
         android:id="@+id/text_page"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="第0/0张"
+        android:text=""
         android:alpha="0.8"
         android:background="@drawable/background_grey_cardview"
         android:paddingVertical="4dp"

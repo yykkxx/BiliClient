@@ -1,5 +1,6 @@
 package com.RobinNotBad.BiliClient.activity.user.favorite
 
+import com.RobinNotBad.BiliClient.util.AccountManager
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
@@ -33,7 +34,8 @@ class FavoriteFolderListActivity : RefreshListActivity() {
         super.onCreate(savedInstanceState)
         setPageName("收藏")
 
-        mid = SharedPreferencesUtil.getLong("mid", 0)
+        // v5.2.1 主账号口径：mid 不再只读 web 槽位（web 退出后恒为 0，导致「任意端口全功能」断链）
+        mid = AccountManager.accountMid()
         folderList = ArrayList()
 
         //接口偶发失败时可以直接下拉重试，不用退出重进

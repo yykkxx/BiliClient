@@ -1,6 +1,8 @@
 package com.RobinNotBad.BiliClient.util
 
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
+import com.RobinNotBad.BiliClient.util.Logu
+import com.RobinNotBad.BiliClient.util.NetWorkUtil
 
 /**
  * 账号存储（v5.1.5「账号管理」唯一事实来源）。
@@ -292,6 +294,72 @@ object AccountStore {
         if (mid <= 0L) return ""
         return SharedPreferencesUtil.getString(accountKey(portValue, mid, SUFFIX_ACCESS_TOKEN), "") ?: ""
     }
+
+    // ==========================================================================================
+    // 给「四端统一导出/导入」（util/AccountCredentials.kt）的**最小公开读取面**
+    // ==========================================================================================
+    //
+    // 为什么需要它：导出需要「每端每个号的原始凭据字段」，而这些字段的键名（accountKey +
+    // SUFFIX_*）是本类的**内部实现细节**。让导出代码直接拼键名，等于把「键结构」这个词
+    // 复制到第二个文件里 —— 以后改键名要改两处，必然漏。
+    // 所以这里只暴露两个语义化方法，键名始终只在本类里出现。
+
+    /**
+     * 某端口下所有账号的 mid（按账号池原顺序）。
+     *
+     * 与公开的 [accounts] 的区别：那个返回带昵称/头像的展示对象（有排序与激活标记），
+     * 导出只需要 mid 顺序（顺序 = 用户当时的账号顺序，导入时第一条会被设为激活）。
+     */
+    @JvmStatic
+    @JvmSuppressWildcards
+    fun midList(port: String): List<Long> {
+        ensureMigrated()
+        return midsOf(normalizePort(port))
+    }
+
+    /**
+     * 某个账号的原始凭据字段（**只返回有值的**，键名固定为下面四个）。
+     *
+     * 返回值里的键：`cookies` / `csrf` / `access_token` / `refresh_token`。
+     * 这四个键名是本类与 `AccountCredentials` 之间的**导出格式契约**，
+     * 也是导出 JSON 里每条的字段名 —— 改它等于改对外格式（需要同步 EXPORT_VERSION）。
+     *
+     * 注意：返回值含完整凭据，调用方**绝不打印**。
+     */
+    @JvmStatic
+    @JvmSuppressWildcards
+    fun credentialFields(port: String, mid: Long): Map<String, String> {
+        ensureMigrated()
+        val portValue = normalizePort(port)
+        if (mid <= 0L) return emptyMap()
+        val result = LinkedHashMap<String, String>()
+        for ((field, suffix) in CREDENTIAL_EXPORT_FIELDS) {
+            val value = SharedPreferencesUtil.getString(accountKey(portValue, mid, suffix), "") ?: ""
+            if (value.isNotEmpty()) result[field] = value
+        }
+        return result
+    }
+
+    /**
+     * 某端口某账号的昵称 / 头像（账号管理页与导出都用）。
+     *
+     * 这两个值本来就是「展示缓存」而不是凭据，所以公开出去没有安全负担；
+     * 单独立两个方法而不是把 [accountName]/[accountFace] 改成 public，
+     * 是为了让「凭据读取面」和「展示读取面」在代码里一眼可分。
+     */
+    @JvmStatic
+    fun nameOf(port: String, mid: Long): String = accountName(normalizePort(port), mid)
+
+    @JvmStatic
+    fun faceOf(port: String, mid: Long): String = accountFace(normalizePort(port), mid)
+
+    /** 导出字段名 ↔ 内部槽位后缀的唯一映射（改导出格式时只改这里 + AccountCredentials 的版本号） */
+    private val CREDENTIAL_EXPORT_FIELDS = listOf(
+        "cookies" to SUFFIX_COOKIES,
+        "csrf" to SUFFIX_CSRF,
+        "access_token" to SUFFIX_ACCESS_TOKEN,
+        "refresh_token" to SUFFIX_REFRESH_TOKEN
+    )
 
     // ==================== 登录 / 退出 ====================
 

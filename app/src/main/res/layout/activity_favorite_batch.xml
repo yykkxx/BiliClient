@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  收藏夹多选缓存（#7）页面布局 —— v5.2.1 重做交互后的结构。
+
+  为什么拆成「选择条 + 底栏」两块：
+  - 页内有两个态（收藏夹列表 / 视频列表），只有视频列表态才需要选择条与底栏，
+    所以两者各自独立可隐藏（folder 态直接 GONE）；
+  - 已选数量放在**列表上方的选择条**里：滚动时顶栏会跟着走，选择条不会，
+    用户滑到第 60 行也能立刻看到「已选几个」，这也是「顶栏显示已选数量」的落点；
+  - 全选 / 反选 / 清空 三个动作**各占一个按钮**（v5.2.0 是一个按钮在「全选/全不选」之间来回切，
+    用户根本没法只做「反选」），放在选择条右侧，手指不用来回跑；
+  - 底栏只留「缓存所选」+ 进度/取消：入队是长任务，进度必须和触发它的按钮在同一块区域。
+-->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -35,12 +47,64 @@
             android:layout_alignParentEnd="true" />
     </RelativeLayout>
 
+    <!-- 选择条：已选数量 + 全选/反选/清空（只有视频列表态可见） -->
+    <LinearLayout
+        android:id="@+id/selection_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/top"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/selected_count"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/fav_batch_selected_count"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_select_all"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingHorizontal="8dp"
+            android:text="@string/fav_batch_select_all"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_invert"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingHorizontal="8dp"
+            android:text="@string/fav_batch_invert"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_clear"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingHorizontal="8dp"
+            android:text="@string/fav_batch_clear"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@+id/bottom_bar"
-        android:layout_below="@id/top">
+        android:layout_below="@id/selection_bar">
 
         <com.RobinNotBad.BiliClient.ui.widget.RotaryRecyclerView
             android:id="@+id/recyclerView"
@@ -48,35 +112,51 @@
             android:layout_height="match_parent" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+    <!-- 底栏：进度行（默认隐藏）+ 缓存按钮 -->
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingHorizontal="6dp"
         android:paddingVertical="4dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_select_all"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/progress_row"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
-            android:padding="6dp"
-            android:text="全选"
-            android:textSize="12sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/progress_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_cancel_enqueue"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:paddingHorizontal="8dp"
+                android:text="@string/fav_batch_cancel"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_download"
             style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:minWidth="0dp"
             android:padding="6dp"
-            android:text="缓存所选(0)"
+            android:text="@string/fav_batch_download"
             android:textSize="12sp" />
     </LinearLayout>
 

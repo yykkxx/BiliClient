@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  配额耗尽拦截页：三大出路（等到明天 / 去借时间 / 退出）+ 长按解除今天限制。
+
+  长按按钮为什么放在最后、还用「进度环 + 剩余秒数」：
+  这是用户自己要的「长按 45 秒解除今天限制」，是个**惩罚性**操作。
+  放在最下面、并且要求看着进度环等 45 秒，能让「顺手点一下」的人放弃；
+  但它仍然是可达的 —— 真需要的用户（比如今天特殊情况）按得住。
+  进度环用自绘（LongPressRingView 定义在 QuotaBlockActivity.kt 里，与页面同文件），
+  没有第三方依赖，且环的进度直接反映「还剩几秒」。
+
+  为什么三条出路用按钮而不是卡片/链接：
+  拦截页是全屏阻塞页，用户唯一想做的事就是「出去」。三个等宽等高的大按钮是
+  最容易命中的形态；「退出」放在最后并降调（普通样式），避免误点。
+
+  整页可滚动（RotaryScrollView）：小屏/圆屏上内容（标题+详情+提示+3 按钮+长按区）
+  加起来可能超过一屏，不能滚就会把长按区挤到屏幕外 —— 那样用户永远解除不了。
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".time.activity.QuotaBlockActivity">
+
+    <RelativeLayout
+        android:id="@+id/top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
+
+        <TextView
+            android:id="@+id/pageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_marginVertical="3dp"
+            android:layout_marginStart="8dp"
+            android:lines="1"
+            android:text="@string/tm2_page_block"
+            android:textStyle="bold" />
+
+    </RelativeLayout>
+
+    <com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/activity_padding_horizontal"
+            android:paddingTop="6dp"
+            android:paddingBottom="18dp">
+
+            <!-- 标题：这一页的情绪基调要明确（红色 + 「已用完」），用户一眼知道被拦了 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:maxLines="2"
+                android:text="@string/tm2_block_headline"
+                android:textColor="@color/tm2_level_red"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <!-- 详情：已用 / 配额。走 TimeFormat，休息日与上学日两种口径自动分开 -->
+            <TextView
+                android:id="@+id/tm2_block_detail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:maxLines="2"
+                android:textSize="14sp"
+                tools:text="已用 2 小时 5 分钟 / 配额 120 分钟" />
+
+            <!-- 说明：把三条出路提前讲清楚（不让用户自己猜）+ 点出长按的存在 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@color/tm2_card_bg"
+                android:alpha="0.9"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="8dp"
+                android:text="@string/tm2_block_hint"
+                android:textSize="11sp" />
+
+            <!-- ==================== 出路 1：等到明天 ==================== -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tm2_block_wait"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:minHeight="48dp"
+                android:text="@string/tm2_block_wait"
+                android:textSize="13sp"
+                app:cornerRadius="8dp" />
+
+            <!-- ==================== 出路 2：去借时间 ==================== -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tm2_block_borrow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="48dp"
+                android:text="@string/tm2_block_borrow"
+                android:textSize="13sp"
+                app:cornerRadius="8dp" />
+
+            <!-- ==================== 出路 3：退出 ==================== -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tm2_block_exit"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/tm2_block_exit"
+                android:textSize="12sp" />
+
+            <!-- ==================== 长按 45 秒解除 ==================== -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="10dp"
+                android:background="@color/tm2_chart_axis" />
+
+            <TextView
+                android:id="@+id/tm2_block_release_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                tools:text="长按 45 秒解除今天限制" />
+
+            <!-- 长按按钮：进度环在它左边，两者一起构成长按区（点哪都算）。
+                 环与按钮放在同一行，抬手时环立刻归零（见 Activity 的 scheduleTick / cancelHold）。 -->
+            <LinearLayout
+                android:id="@+id/tm2_block_release_area"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.RobinNotBad.BiliClient.time.activity.LongPressRingView
+                    android:id="@+id/tm2_block_release_ring"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tm2_block_release"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:minHeight="44dp"
+                    android:textSize="12sp"
+                    app:cornerRadius="8dp"
+                    tools:text="解除今天限制（长按 45 秒）" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tm2_block_release_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:alpha="0.6"
+                android:text="@string/tm2_block_release_hint"
+                android:textSize="10sp" />
+
+        </LinearLayout>
+    </com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView>
+
+</RelativeLayout>

@@ -4,9 +4,6 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.widget.TextView
@@ -16,15 +13,15 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.CatchActivity
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.setup.SetupUIActivity
-import com.RobinNotBad.BiliClient.activity.time.CountdownActivity
-import com.RobinNotBad.BiliClient.activity.time.TimeBankBlockActivity
-import com.RobinNotBad.BiliClient.activity.time.TimeBankDayTypePrompt
+import com.RobinNotBad.BiliClient.time.DailyPlan
+import com.RobinNotBad.BiliClient.time.Gate
+import com.RobinNotBad.BiliClient.time.TimeFormat
+import com.RobinNotBad.BiliClient.time.activity.CountdownGateActivity
+import com.RobinNotBad.BiliClient.time.activity.DayTypePromptActivity
+import com.RobinNotBad.BiliClient.time.activity.QuotaBlockActivity
 import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.CrashStore
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
-import com.RobinNotBad.BiliClient.util.TimeBankManager
-import com.RobinNotBad.BiliClient.util.TimeMgmtPrefs
-import com.RobinNotBad.BiliClient.util.UsageLimitManager
 
 /**
  * 启动页（#9）。
@@ -34,73 +31,63 @@ import com.RobinNotBad.BiliClient.util.UsageLimitManager
  * 桌面上显示的应用名与这里保持一致。
  *
  * 逻辑尽量薄：未完成初次设置 → 设置页；其余情况（**无论有没有账号**）→ 推荐页。
- *
  * v5.1.4 账号解耦起，这里不再把用户扔进登录页：B 站匿名本身就能看推荐/搜索/视频，
  * 「点进 APP 就提示登录」是用户抱怨的核心之一；需要登录的操作由各页面自己轻提示。
- * 账号态只用 [AccountManager.isLoggedIn]（web 与三端任一登录都算），不再直接读 web 的 mid 键。
  *
- * v5.1.6 实验室「每日使用时长限制」：开屏动画期间就显示「今日已使用 X」，
- * 且开关打开时超时（≥30 分钟延时 5 秒 / ≥60 分钟延时 10 秒）会在本页倒计时并推迟进入主界面。
- * 已用时长**无论开关是否开启都会显示**（用户要求「每次打开应用都显示已使用时长」），
- * 开关只决定要不要处罚延时。
+ * # v5.2.1 时间管理重写后的门禁流程（这是本页唯一的复杂逻辑）
  *
- * v5.2.0 时间管理套件：本页在显示今日用量之后、进入主界面之前，按**优先级**串了四件事
- * （顺序即下面的 1~4，顺序本身是设计判断，不是随手排的）：
- * 1. 今日用量（上面那条，永远显示）；
- * 2. 时间银行「今天是上学日还是休息日」的每日首次询问 —— 必须排在配额判定**之前**，
- *    否则用户选了「休息日」却已经按上学日配额被拦下，判定就白问了；也因此放在**启动页**问，
- *    而不是进推荐页之后问（配额用完根本进不去主界面，问在推荐页等于永远不做判定）；
- * 3. 配额拦截：时间银行开启且今天配额已用完 → 只进 [TimeBankBlockActivity]，不再往下走；
- * 4. 延时处罚：时间银行开时旧版「30 分钟延时 5 秒 / 60 分钟延时 10 秒」被硬配额取代；
- *    未开时才按旧逻辑延时，且开启了 `countdown_page_enable` 时改用独立的
- *    [CountdownActivity]（页内小字倒计时同时**不再启动**，避免两个倒计时同时跑）。
+ * 一进来先显示「今天已用多少」，然后**只问 [Gate] 一个对象**该怎么办（顺序全在 Gate 里，
+ * 本页不重复判断，避免「两个地方各判一次」这种历史上吃过亏的写法）：
+ *
+ * | Gate 结论 | 本页动作 |
+ * | --- | --- |
+ * | `PASS` | 直接 [route] 进主界面 |
+ * | `ASK_DAY_TYPE` | 拉起 [DayTypePromptActivity]（不可取消），回来后**重新问一次 Gate** |
+ * | `WAIT` | 拉起 [CountdownGateActivity]（大号倒计时），回来后**本次会话不再等第二次** |
+ * | `BLOCK` | 拉起 [QuotaBlockActivity]（含长按 45 秒解除），回来后**重新问一次 Gate** |
+ *
+ * ## 为什么回来后要「重新问 Gate」而不是用子页面返回的结果
+ * 三个门禁页都会**改写偏好**（选日子类型 / 长按解除 / 借到时间），而 Gate 是
+ * 「每次现算、无状态」的（见 Gate 的类注释）。所以**重问一次**天然就是最新结论，
+ * 不需要页面之间约定 resultCode 契约 —— 少一套契约就少一处会写错的地方。
+ * 用户借到时间后配额变大，回到这里重问 → Gate 返回 PASS → 直接放行，
+ * 这正是用户期待的「借完就能用」。
+ *
+ * ## 为什么 WAIT 之后不再重问（唯一的例外）
+ * 倒计时等完之后，「今日已用」**没有变**（等待时间不计入使用时长），
+ * 重问 Gate 必然又返回 WAIT → 无限循环。而用户的需求是「每次打开应用等一次」，
+ * 不是「等完再等一次」。所以用 [waitedThisSession] 记住「本次会话已经付过等待」，
+ * 等完直接往下走。
+ *
+ * ## 为什么 ASK/BLOCK 要防止死循环
+ * 子页面可能因为用户按返回而直接 finish（BLOCK 页允许返回退出 App），
+ * 也可能因为状态没变而回到同样的结论。用 [gateGuardDepth] 计数：
+ * 最多连续拉起 4 次门禁页，超过就打日志放行 —— **宁可少拦一次，也不能让用户永远进不去**。
+ * （这条是 v5.2.0 的血泪教训：当时「页面被系统回收后重建」就会卡在启动页。）
  */
 class LauncherActivity : BaseActivity() {
 
-    private val countdownHandler = Handler(Looper.getMainLooper())
+    /** 是否已经在本次会话里等过倒计时（等过就不再等第二次，理由见类注释） */
+    private var waitedThisSession = false
 
-    /** 倒计时心跳任务；onDestroy 时移除，防止页面已销毁还在改 UI */
-    private var countdownTask: Runnable? = null
+    /** 本次会话已经连续拉起过几次门禁页（防死循环） */
+    private var gateGuardDepth = 0
 
-    /** 跳转任务；onDestroy 时连同 logo 上的排队任务一起移除 */
-    private var routeTask: Runnable? = null
-
-    /** 时间银行每日询问的兜底探针任务；onDestroy 时移除 */
-    private var dayTypeProbeTask: Runnable? = null
-
-    /** 「对话已关闭、等一小会再继续」的延迟任务；onDestroy 时移除 */
-    private var focusResumeTask: Runnable? = null
-
-    private var logoView: View? = null
-    private var countdownView: TextView? = null
-
-    private var remainingSeconds = 0
-
-    /** 是否正在等用户回答「上学日 / 休息日」（等的时候本页不许跳转） */
-    private var awaitingDayType = false
-
-    /** 询问发起时刻（elapsedRealtime）：用来区分「对话没弹出时的首次焦点」与「对话关闭后的焦点回归」 */
-    private var dayTypeAskedElapsed = 0L
-
-    /** 后续流程只跑一次：询问回调 / 焦点回归 / 兜底探针 / 延时跳转都可能把它触发多遍 */
+    /** 后续流程只跑一次：多个回调路径都可能把它触发多遍 */
     private var routed = false
 
-    /** 优先级链（配额拦截 / 延时处罚）是否已经决定过：决定完再被兜底路径调用就忽略 */
-    private var decided = false
-
     /**
-     * 独立倒计时页的结果回调。
+     * 门禁页的结果回调。
      *
-     * [CountdownActivity] 归零后 setResult(RESULT_OK) 并 finish（默认 finish_on_end=true），
-     * 这里收到 OK 继续 [route]。**非 OK 也要放行**：用户中途按返回 / 页面被系统回收都属于
-     * 「主动放弃剩下的等待」，此时如果还压着不跳转，启动页会一直挂着（比少罚几秒严重得多）。
+     * 不读 resultCode：三个页面都会改写偏好，"重问 Gate" 本身就拿到了最新结论。
+     * 这也顺带解决了「用户按返回直接退出子页面」——回来照样重问，不会卡住。
      */
-    private val countdownPageLauncher =
+    private val gateLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode != RESULT_OK) {
-                Log.i(TAG, "countdown page skipped by user, route anyway")
+                Log.i(TAG, "gate page returned without OK, re-checking gate anyway")
             }
-            route()
+            proceedAfterGate()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,8 +97,6 @@ class LauncherActivity : BaseActivity() {
 
         val hint = findViewById<TextView>(R.id.launcher_hint)
         val logo = findViewById<View>(R.id.launcher_logo)
-        logoView = logo
-        countdownView = findViewById<TextView>(R.id.launcher_countdown)
         startFadeIn(logo, hint)
 
         // 补展示上次崩溃：ErrorCatch 会在 startActivity(CatchActivity) 之后立刻 killProcess，
@@ -119,149 +104,78 @@ class LauncherActivity : BaseActivity() {
         // 用户随手截图就能把完整堆栈反馈出来。（展示过就标记，不会每次都弹）
         showLastCrashIfAny()
 
-        // 今日已用时长：开屏动画期间就显示（与开关是否开启无关）
-        showTodayUsage(UsageLimitManager.todayUsedMs())
+        // 今日已用：无论功能是否开启都显示（用户要求「进入应用的时候显示当前已用时间」）
+        showTodayUsage()
 
-        // 被系统回收后重建：这一条链已经走过一遍（可能正有一个倒计时页的结果在途，
-        // ActivityResultRegistry 会补交付）。不再重复询问 / 再开一个倒计时页，
-        // 只留一个兜底跳转，保证「结果永远不来」时也不会卡死在启动页。
+        // 被系统回收后重建：门禁链已经走过一遍（可能正有一个门禁页在途，ActivityResultRegistry
+        // 会补交付）。不再重新判定，只留一个兜底跳转，保证「结果永远不来」时也不会卡死。
         if (savedInstanceState != null) {
-            decided = true
             scheduleRoute(RECREATE_FALLBACK_MS)
             return
         }
 
-        // 从这里开始按优先级往下走（见类注释 2~4）
-        askDayTypeThenRoute()
+        proceedAfterGate()
     }
 
-    // ---------------------------------------------------------------- 优先级链
+    // ---------------------------------------------------------------- 门禁链
 
     /**
-     * 第 2 步：时间银行每日首次询问。
+     * 问一次 [Gate]，按结论拉起对应页面或直接进主界面。
      *
-     * 只在「时间银行开着」且「今天还没判定」且「今天还没被关闭」时问；其余情况直接进下一步。
-     * 询问是模态对话，用户答完由 `onDone` 回调继续；万一对话被取消（或压根没弹出来），
-     * 靠 [onWindowFocusChanged] 与 [scheduleDayTypeProbe] 两条兜底继续，绝不把用户卡在启动页。
+     * 幂等：已 [routed] 就直接返回（多路回调重复调用不会重复跳转）。
      */
-    private fun askDayTypeThenRoute() {
-        val bankEnabled = SharedPreferencesUtil.getBoolean(TimeMgmtPrefs.BANK_ENABLE, false)
-        if (bankEnabled && !TimeBankManager.hasDayTypeToday() && !TimeBankManager.isDisabledToday()) {
-            awaitingDayType = true
-            dayTypeAskedElapsed = SystemClock.elapsedRealtime()
-            TimeBankDayTypePrompt.maybePrompt(this, Runnable { afterDayType() })
-            scheduleDayTypeProbe()
-            return
-        }
-        afterDayType()
-    }
+    private fun proceedAfterGate() {
+        if (routed || isDestroyed || isFinishing) return
 
-    /**
-     * 兜底探针（只兜「对话没弹出来」这一种）：对话是抢焦点的模态窗口，
-     * 它显示时本页 [hasWindowFocus] 为 false —— 那就什么都不做，等用户的回调或焦点回归。
-     * 反过来如果 700ms 后本页仍持有窗口焦点，说明对话根本没弹（例如时间银行对话内部
-     * 判定不需要弹），直接继续往下走。
-     */
-    private fun scheduleDayTypeProbe() {
-        // maybePrompt 在「判定为不需要弹窗」时可能同步回调 onDone（流程已经往前走），
-        // 那就不要再挂兜底探针了。
-        if (decided || routed) return
-        val logo = logoView ?: return
-        val task = Runnable {
-            dayTypeProbeTask = null
-            if (!awaitingDayType || routed) return@Runnable
-            if (hasWindowFocus()) afterDayType()
-        }
-        dayTypeProbeTask = task
-        logo.postDelayed(task, DAY_TYPE_PROBE_MS)
-    }
-
-    /**
-     * 对话关闭后本页会重新拿到窗口焦点：[awaitingDayType] 期间拿回焦点说明询问已经结束
-     * （用户答完走 onDone，或者取消 → 不回调 onDone）。后者必须在这里兜住，否则页面会一直停在启动页。
-     *
-     * [DAY_TYPE_FOCUS_GRACE_MS] 用来排除「对话还没显示时本页的首次焦点」：
-     * 首次焦点紧跟在 [askDayTypeThenRoute] 之后，间隔只有几十毫秒；用户关闭对话远慢于此。
-     */
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus || !awaitingDayType || routed) return
-        if (SystemClock.elapsedRealtime() - dayTypeAskedElapsed < DAY_TYPE_FOCUS_GRACE_MS) return
-        // 不立刻继续：对话关闭的瞬间，本页拿回焦点可能**早于** onDone 写入今日类型，
-        // 此时立刻判配额会拿旧的（未判定 → 按上学日）配额去算，用户明明选了休息日却被按
-        // 上学日拦下。延迟一小段让 onDone 先跑；onDone 先到就把这个任务取消，不会重复执行。
-        val logo = logoView ?: run {
-            afterDayType()
-            return
-        }
-        val task = Runnable { afterDayType() }
-        focusResumeTask = task
-        logo.postDelayed(task, FOCUS_RESUME_DELAY_MS)
-    }
-
-    /**
-     * 第 3、4 步：配额拦截 → 延时处罚（独立倒计时页 / 旧版页内倒计时）→ 进主界面。
-     *
-     * 幂等：本函数可能被询问回调、焦点回归、兜底探针、倒计时结果多路调用，只允许真正生效一次。
-     */
-    private fun afterDayType() {
-        if (routed || decided) return
-        decided = true
-        awaitingDayType = false
-        cancelDayTypeProbe()
-        cancelFocusResume()
-
-        val bankEnabled = SharedPreferencesUtil.getBoolean(TimeMgmtPrefs.BANK_ENABLE, false)
-        // 3a. 配额已用完：只进拦截页，且拦截页会自己 startActivity 到推荐页，
-        //     所以这里 startActivity + finish 就够，不再往下走（也不做旧版延时）。
-        if (bankEnabled && !TimeBankManager.isDisabledToday() && TimeBankManager.isExhaustedToday()) {
-            routed = true
-            startActivity(Intent(this, TimeBankBlockActivity::class.java))
-            finish()
-            return
-        }
-
-        val delaySeconds = legacyDelaySeconds(bankEnabled)
-        if (delaySeconds > 0 && isCountdownPageEnabled()) {
-            startCountdownPage(delaySeconds)
-            return
-        }
-        // 3c. 旧行为：页内小字倒计时 + 延时跳转（独立页路径下这里不会启动倒计时）
-        startCountdown(delaySeconds)
-        scheduleRoute(ROUTE_BASE_DELAY_MS + delaySeconds.toLong() * COUNTDOWN_TICK_MS)
-    }
-
-    /**
-     * 旧版延时秒数：时间银行开时由硬配额取代（返回 0，即不再处罚延时），
-     * 未开时才按「≥30 分钟 → 5 秒 / ≥60 分钟 → 10 秒」算。
-     */
-    private fun legacyDelaySeconds(bankEnabled: Boolean): Int {
-        if (bankEnabled || !UsageLimitManager.isEnabled()) return 0
-        return UsageLimitManager.delaySecondsForUsed(UsageLimitManager.todayUsedMs())
-    }
-
-    private fun isCountdownPageEnabled(): Boolean =
-        SharedPreferencesUtil.getBoolean(TimeMgmtPrefs.COUNTDOWN_PAGE, true)
-
-    /** 独立倒计时页：结果回来（RESULT_OK）才 [route]；失败则退化为旧版页内倒计时，不留白屏 */
-    private fun startCountdownPage(delaySeconds: Int) {
-        val intent = Intent(this, CountdownActivity::class.java)
-        intent.putExtra(CountdownActivity.EXTRA_SECONDS, delaySeconds)
-        // 只要「归零后回调结果」；finish_on_end 保持默认 true —— CountdownActivity 的实现是
-        // 「先 setResult(RESULT_OK)，再按 finish_on_end 决定 finish」，若把 finish 关掉，
-        // 结果要等页面被关掉才交付，启动页就会一直挂着等。所以这里**不写** EXTRA_FINISH_ON_END。
-        intent.putExtra(CountdownActivity.EXTRA_RESULT_ON_END, true)
-        try {
-            countdownPageLauncher.launch(intent)
+        val decision = try {
+            Gate.decide()
         } catch (e: Exception) {
-            // 例如页面未注册 / 系统限制后台启动 Activity：退化为旧版页内倒计时，用户照常能进主界面
-            Log.w(TAG, "start countdown page failed, fallback to inline countdown", e)
-            startCountdown(delaySeconds)
-            scheduleRoute(ROUTE_BASE_DELAY_MS + delaySeconds.toLong() * COUNTDOWN_TICK_MS)
+            // 门禁本身出异常时**必须放行**：这是「少拦一次」与「用户完全进不去」之间的取舍，
+            // 后者严重得多（历史上出现过偏好损坏导致永远进不去）。
+            Log.w(TAG, "gate decide failed, pass through", e)
+            Gate.Decision.PASS
+        }
+        Log.i(TAG, "gate decision=$decision, usedMs=${Gate.usedMsToday()}, waited=$waitedThisSession")
+
+        when (decision) {
+            Gate.Decision.PASS -> route()
+
+            Gate.Decision.WAIT -> {
+                // 本次会话已经等过 → 不再等第二次（否则等完重问又 WAIT，无限循环）
+                if (waitedThisSession || Gate.waitSeconds() <= 0) {
+                    route()
+                    return
+                }
+                waitedThisSession = true
+                launchGatePage(CountdownGateActivity::class.java)
+            }
+
+            Gate.Decision.ASK_DAY_TYPE -> launchGatePage(DayTypePromptActivity::class.java)
+
+            Gate.Decision.BLOCK -> launchGatePage(QuotaBlockActivity::class.java)
         }
     }
 
-    /** 轻微的浮现动画，避免“卡了一下什么都没有”的观感 */
+    /**
+     * 拉起一个门禁页；连续拉起次数超上限就放弃拦截直接放行（防死循环，理由见类注释）。
+     */
+    private fun launchGatePage(target: Class<*>) {
+        gateGuardDepth += 1
+        if (gateGuardDepth > MAX_GATE_HOPS) {
+            Log.w(TAG, "gate hops exceeded $MAX_GATE_HOPS, pass through to avoid trap")
+            route()
+            return
+        }
+        try {
+            gateLauncher.launch(Intent(this, target))
+        } catch (e: Exception) {
+            // 例如页面未注册 / 系统限制后台启动 Activity：放行比卡在启动页好得多
+            Log.w(TAG, "launch gate page ${target.simpleName} failed, pass through", e)
+            route()
+        }
+    }
+
+    /** 轻微的浮现动画，避免"卡了一下什么都没有"的观感 */
     private fun startFadeIn(logo: View, hint: TextView) {
         logo.alpha = 0f
         hint.alpha = 0f
@@ -272,37 +186,38 @@ class LauncherActivity : BaseActivity() {
         animator.start()
     }
 
-    /** 显示「今日已使用 X」；用量为 0 也照常显示（用户要求每次打开都能看到） */
-    private fun showTodayUsage(usedMs: Long) {
+    /**
+     * 显示「今日已用 X」+ 三档颜色 + 剩余配额。
+     *
+     * 颜色由 [DailyPlan.levelOf] 决定（绿 <30min / 黄 30~60min / 红 ≥60min），
+     * 色值取 [TimeFormat.levelColor]，**不跟随主题**（三档是语义色，跟随主题就失去警示意义）。
+     *
+     * 剩余配额只在功能开启且今天是上学日时才有意义：休息日配额是
+     * `Int.MAX_VALUE`，直接算剩余会得到一个天文数字，所以先判断
+     * `quotaMinutesToday() == QUOTA_UNLIMITED`（这个坑 v5.2.0 踩过）。
+     */
+    private fun showTodayUsage() {
+        val usedMs = Gate.usedMsToday()
+        val level = DailyPlan.levelOf(usedMs)
+
+        val titleView = findViewById<TextView>(R.id.launcher_usage_title)
+        titleView.text = getString(R.string.launcher_usage_title)
+
         val usageView = findViewById<TextView>(R.id.launcher_usage)
-        usageView.text = getString(R.string.usage_limit_today_used, UsageLimitManager.formatUsed(usedMs))
-    }
+        usageView.text = TimeFormat.duration(usedMs)
+        usageView.setTextColor(TimeFormat.levelColor(this, level))
 
-    /** 开屏倒计时：与跳转同一个 260ms 起点，每秒 tick 一次，从 delaySeconds 递减到 0 */
-    private fun startCountdown(delaySeconds: Int) {
-        if (delaySeconds <= 0) return
-        remainingSeconds = delaySeconds
-        postCountdownTick(ROUTE_BASE_DELAY_MS)
-    }
-
-    private fun postCountdownTick(delayMs: Long) {
-        val task = Runnable { onCountdownTick() }
-        countdownTask = task
-        countdownHandler.postDelayed(task, delayMs)
-    }
-
-    private fun onCountdownTick() {
-        if (isDestroyed || isFinishing) return
-        val view = countdownView ?: return
-        if (remainingSeconds <= 0) {
-            view.visibility = View.GONE
-            countdownTask = null
+        val remainingView = findViewById<TextView>(R.id.launcher_remaining)
+        // 功能没开就完全不显示剩余（否则会显示一个「不限时长」，让没开功能的用户莫名其妙）
+        if (!DailyPlan.isEnabled() || !DailyPlan.hasDayTypeToday()) {
+            remainingView.visibility = View.GONE
             return
         }
-        view.visibility = View.VISIBLE
-        view.text = getString(R.string.usage_limit_countdown, remainingSeconds)
-        remainingSeconds -= 1
-        postCountdownTick(COUNTDOWN_TICK_MS)
+        remainingView.visibility = View.VISIBLE
+        remainingView.text = TimeFormat.remainingText(
+            DailyPlan.quotaMinutesToday(),
+            DailyPlan.remainingMsToday()
+        )
     }
 
     private fun showLastCrashIfAny() {
@@ -316,15 +231,13 @@ class LauncherActivity : BaseActivity() {
         }
     }
 
-    /** 用 postDelayed 保证动画至少可见一帧，再按延时秒数推迟 [route] */
+    /** 用 postDelayed 保证动画至少可见一帧，再 [route] */
     private fun scheduleRoute(delayMs: Long) {
-        val logo = logoView ?: run {
+        val logo = findViewById<View>(R.id.launcher_logo) ?: run {
             route()
             return
         }
-        val task = Runnable { route() }
-        routeTask = task
-        logo.postDelayed(task, delayMs)
+        logo.postDelayed({ route() }, delayMs)
     }
 
     private fun route() {
@@ -341,37 +254,20 @@ class LauncherActivity : BaseActivity() {
 
         // 账号态**不再决定能不能进主界面**：B 站匿名本身就能看推荐/搜索/视频，
         // 「点进 APP 就提示登录」是用户抱怨的核心之一；需要登录的操作由各页面自己轻提示。
-        // 首次使用引导登录已经放在上面的 setup=false 分支里（设置页 → 介绍页 → 登录页，
-        // 登录页还有「但是我拒绝」可直接跳过），跟这里的账号态无关。
         // 账号态只记一行日志，方便排查「明明登录了却没显示」这类问题。
-        Log.i(TAG, "route: isLoggedIn=" + AccountManager.isLoggedIn()
-                + ", source=" + AccountManager.accountSource() + "，进入推荐页")
+        Log.i(
+            TAG,
+            "route: isLoggedIn=" + AccountManager.isLoggedIn()
+                    + ", source=" + AccountManager.accountSource() + "，进入推荐页"
+        )
         startActivity(Intent(this, RecommendActivity::class.java))
         finish()
     }
 
-    private fun cancelDayTypeProbe() {
-        dayTypeProbeTask?.let { task -> logoView?.removeCallbacks(task) }
-        dayTypeProbeTask = null
-    }
-
-    private fun cancelFocusResume() {
-        focusResumeTask?.let { task -> logoView?.removeCallbacks(task) }
-        focusResumeTask = null
-    }
-
     override fun onDestroy() {
-        // 清理挂着的倒计时 / 跳转 / 兜底任务：页面销毁后不再回调整 UI，也不长期持有 Activity。
-        // 用户中途按返回退出时走的就是这条路径（不拦截返回，只保证不崩）。
-        countdownTask?.let { countdownHandler.removeCallbacks(it) }
-        countdownTask = null
-        routeTask?.let { task -> logoView?.removeCallbacks(task) }
-        routeTask = null
-        cancelDayTypeProbe()
-        cancelFocusResume()
-        awaitingDayType = false
-        countdownView = null
-        logoView = null
+        findViewById<View>(R.id.launcher_logo)?.let { logo ->
+            logo.removeCallbacks(null)
+        }
         super.onDestroy()
     }
 
@@ -382,22 +278,15 @@ class LauncherActivity : BaseActivity() {
         /** 开屏动画时长（毫秒） */
         const val FADE_DURATION_MS = 220L
 
-        /** 跳转前的最小展示时长（毫秒）：保证动画至少可见一帧 */
-        const val ROUTE_BASE_DELAY_MS = 260L
-
-        /** 倒计时心跳间隔（毫秒）：1 秒 */
-        const val COUNTDOWN_TICK_MS = 1000L
-
-        /** 每日询问的兜底探针延迟（毫秒）：对话抢焦点是立刻生效的，700ms 足够区分「没弹出」 */
-        const val DAY_TYPE_PROBE_MS = 700L
-
-        /** 焦点宽限（毫秒）：小于它说明是「对话还没显示时的首次焦点」，不是对话关闭 */
-        const val DAY_TYPE_FOCUS_GRACE_MS = 400L
-
-        /** 进程被回收后重建时的兜底跳转延迟（毫秒）：等不到在途的倒计时结果就不再等 */
+        /** 进程被回收后重建时的兜底跳转延迟（毫秒）：等不到在途的门禁结果就不再等 */
         const val RECREATE_FALLBACK_MS = 3000L
 
-        /** 对话关闭后继续流程的延迟（毫秒）：让 onDone 先把今日类型写完，再判配额 */
-        const val FOCUS_RESUME_DELAY_MS = 200L
+        /**
+         * 连续拉起门禁页的次数上限。
+         *
+         * 正常流程最多 2 次（问日子 → 等/拦），留到 4 是给「拦截页 → 借时间 → 重问」
+         * 这类正当的二次往返留余量。超过就放行：**宁可少拦一次，也不能让用户永远进不去**。
+         */
+        const val MAX_GATE_HOPS = 4
     }
 }

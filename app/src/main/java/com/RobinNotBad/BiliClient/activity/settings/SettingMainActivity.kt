@@ -10,9 +10,11 @@ import android.view.View
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity
+import com.RobinNotBad.BiliClient.time.activity.TimeMainActivity
 import com.RobinNotBad.BiliClient.api.AppInfoApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.util.AccountManager
+import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -103,13 +105,15 @@ class SettingMainActivity : InstanceActivity() {
                 startActivity(intent)
             }
 
-            //时间管理（v5.2.0）：使用时长统计 / 时间银行 / 定时提醒 / 倒计时独立页面
-            //这四组功能的开关与配置项全部收敛在独立子页里（用户要求「都在设置-时间管理里面」），
-            //主页只留一个入口卡片，避免把设置主页撑长。
+            //时间管理（v5.2.1 重写）：入口页 [TimeMainActivity]，下分三个小栏
+            //（使用控制 / 时间银行 / 使用记录）。用户要求「在设置下面新增一个时间管理的栏目，
+            //这个栏目再分成多个小栏」，所以主页只留一个入口卡片，具体分栏在下一层。
+            //注意这里不再直连任何具体功能页：入口的职责是「让用户看到三个小栏」，
+            //直接把用户丢进某一个分栏会让他找不到另外两个。
             val timeManager = findViewById<MaterialCardView>(R.id.timeManager)
             timeManager.setOnClickListener { view ->
                 val intent = Intent()
-                intent.setClass(this, SettingTimeActivity::class.java)
+                intent.setClass(this, TimeMainActivity::class.java)
                 startActivity(intent)
             }
 
@@ -182,11 +186,17 @@ class SettingMainActivity : InstanceActivity() {
                 } else MsgUtil.showMsg("再点一次清除")
             }
 
-            //清空登录数据（cookie / mid / csrf / refresh_token 等）
+            //清空登录数据（v5.2.1：四端统一清空）
+            //
+            // 【为什么要改】审计报告 P1-8：旧实现只判 web 的两个键（`mid` + `cookies`），
+            // 于是「web 已退出、HD 端口还登录着」时用户点这一项会看到「当前没有登录数据」——
+            // 明明还有个号登着，却清不掉也看不见。这正是「半残」在设置页的体现。
+            // 现在：判定用 `AccountManager.isLoggedIn()`（任一端口有账号即算），
+            // 清空用 `AccountStore.logoutAll()`（四端账号池 + 激活槽位一起清），
+            // 清完后 web 的 Cookie 头也要立刻刷新（否则内存里还留着旧 Cookie 继续发请求）。
             val clearLogin = findViewById<MaterialCardView>(R.id.clear_login)
             clearLogin.setOnClickListener { view ->
-                if (SharedPreferencesUtil.getLong(SharedPreferencesUtil.mid, 0L) == 0L &&
-                    SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "").orEmpty().isEmpty()) {
+                if (!AccountManager.isLoggedIn()) {
                     MsgUtil.showMsg("当前没有登录数据")
                 } else if (clearLoginClick++ > 0) {
                     clearLoginClick = 0
@@ -194,16 +204,13 @@ class SettingMainActivity : InstanceActivity() {
                         try {
                             UserInfoApi.exitLogin()
                         } catch (e: Exception) {
-                            e.printStackTrace()
+                            // 退出登录接口失败不影响本地清理：本地清干净才是用户要的结果
+                            Log.w("setting", "exitLogin failed: " + e.javaClass.simpleName)
                         }
                     })
-                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookies)
-                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.mid)
-                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.csrf)
-                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.refresh_token)
-                    SharedPreferencesUtil.removeValue(SharedPreferencesUtil.cookie_refresh)
-                    MsgUtil.showMsg("登录数据已清空")
-                } else MsgUtil.showMsg("清空后需要重新登录，再点一次确认")
+                    AccountStore.logoutAll()
+                    MsgUtil.showMsg("四端登录数据已清空")
+                } else MsgUtil.showMsg("清空后需要重新登录（四端一起清），再点一次确认")
             }
 
             val test = findViewById<MaterialCardView>(R.id.test)    //用于测试

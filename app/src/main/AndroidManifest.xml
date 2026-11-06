@@ -375,12 +375,17 @@
             android:exported="false"
             android:label="用户信息"
             android:screenOrientation="locked" />
+        <!-- v5.2.1 图片预览：主题必须是 Theme.BiliClient.NoSwipe（父 Theme.BiliClient）。
+             原来的 Theme.NoSwipe 父类是 android:Theme.Black，会丢掉全部 app 控件样式
+             （按钮/文字会变丑）；而 Theme.BiliClient 本身 windowSwipeToDismiss=true，
+             侧滑退出会吃掉双指缩放手势。NoSwipe 变体只关掉这一项、其余照旧。
+             注意 ImageViewerActivity.onCreate 里还会 setTheme 一次，两者要一致（同一主题）。 -->
         <activity
             android:name=".activity.ImageViewerActivity"
             android:exported="true"
             android:label="图片查看"
             android:screenOrientation="locked"
-            android:theme="@style/Theme.NoSwipe" />
+            android:theme="@style/Theme.BiliClient.NoSwipe" />
         <activity
             android:name=".activity.DialogActivity"
             android:exported="false"
@@ -521,34 +526,50 @@
             android:exported="false"
             android:label="图文收藏夹"
             android:screenOrientation="locked" />
-        <!-- v5.2.0 时间管理套件（设置 → 时间管理）：
-             SettingTimeActivity 是本套件的设置页；其余四个是统计页 / 时间银行图形页 /
-             配额用完拦截页 / 独立的倒计时页。全部 exported=false（只由本应用自己启动），
-             锁竖屏与其余页面一致。 -->
+        <!-- v5.2.1 时间管理重写（设置 → 时间管理，三个小栏）。
+             旧的 v5.2.0 五个页面已全部删除（用户要求「先删除之前所有代码」），
+             新页面统一在 com.RobinNotBad.BiliClient.time.activity 下，键名前缀 tm2_。
+             全部 exported=false（只由本应用自己启动）。
+             锁竖屏与其余页面一致。
+             注意：DayTypePromptActivity / CountdownGateActivity / QuotaBlockActivity
+             由启动页拉起，不加 singleTop —— 每次进前台都要重新判定配额，复用实例会拿到旧结论。 -->
         <activity
-            android:name=".activity.settings.SettingTimeActivity"
+            android:name=".time.activity.TimeMainActivity"
             android:exported="false"
             android:label="时间管理"
             android:screenOrientation="locked" />
         <activity
-            android:name=".activity.time.UsageStatsActivity"
+            android:name=".time.activity.UsageControlActivity"
             android:exported="false"
-            android:label="使用时长统计"
+            android:label="使用控制"
             android:screenOrientation="locked" />
         <activity
-            android:name=".activity.time.TimeBankActivity"
+            android:name=".time.activity.TimeBankActivity"
             android:exported="false"
             android:label="时间银行"
             android:screenOrientation="locked" />
         <activity
-            android:name=".activity.time.TimeBankBlockActivity"
+            android:name=".time.activity.UsageRecordActivity"
             android:exported="false"
-            android:label="配额已用完"
+            android:label="使用记录"
             android:screenOrientation="locked" />
+        <!-- 日子询问：模态观感（半透明、无标题），但仍锁竖屏；
+             不可取消由代码拦截（返回键 + setFinishOnTouchOutside(false)）保证。 -->
         <activity
-            android:name=".activity.time.CountdownActivity"
+            android:name=".time.activity.DayTypePromptActivity"
+            android:exported="false"
+            android:label="今天是上学日吗"
+            android:screenOrientation="locked"
+            android:theme="@style/Theme.BiliClient.NoSwipe" />
+        <activity
+            android:name=".time.activity.CountdownGateActivity"
             android:exported="false"
             android:label="倒计时"
+            android:screenOrientation="locked" />
+        <activity
+            android:name=".time.activity.QuotaBlockActivity"
+            android:exported="false"
+            android:label="配额已用完"
             android:screenOrientation="locked" />
         <meta-data
             android:name="com.xtc.unbind.clearUserData.white_list"

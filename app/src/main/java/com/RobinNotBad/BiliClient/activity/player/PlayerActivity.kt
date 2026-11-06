@@ -82,6 +82,7 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil.USER_AGENT_WEB
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
 import com.RobinNotBad.BiliClient.util.StringUtil
+import com.RobinNotBad.BiliClient.ui.widget.TimeKeypadDialog
 import com.RobinNotBad.BiliClient.util.TimeInputParser
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.RobinNotBad.BiliClient.util.WifiPreloadManager
@@ -117,6 +118,17 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     // 5.1.2 双引擎：类型放宽为 IMediaPlayer，实例由 PlayerFactory 按偏好创建
     // （IjkMediaPlayer / Media3Player 二选一；setOption/setSpeed 已上提为接口 default 方法）
     private var ijkPlayer: IMediaPlayer? = null
+
+    /**
+     * 是否已经尝试过「Media3 失败 → 切 ijk」的兜底。
+     *
+     * 每个页面生命周期只兜一次：换 ijk 后还错说明视频本身有问题，
+     * 反复切回去只会让用户看到播放器无限抖动。
+     */
+    private var media3FallbackTried = false
+
+    /** DASH 音频轨地址（可空：本地文件/直播/单流都没有，为空时行为与改动前一致） */
+    private var audioUrl: String? = null
     private var mDanmakuView: IDanmakuView? = null
 
     /** 弹幕层控制器（Kotlin）：配置、解析器、增量渲染、缺失分段补拉 */
@@ -333,6 +345,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         val intent = getIntent() ?: return false
 
         video_url = intent.getStringExtra("url")
+        // v5.2.1：DASH 音视频分离时，音频轨地址单独走这个 extra（旧版本只传 video url，
+        // 于是 Media3 拿到的流没有音轨 → 「能播但没声音」/ 某些分片结构下直接起不来）。
+        // 主包和 ijk 路径都不读它：为 null 时行为与改动前逐字节一致。
+        audioUrl = intent.getStringExtra("audio_url")
         danmaku_url = intent.getStringExtra("danmaku")
         val title = intent.getStringExtra("title")
 
@@ -411,7 +427,20 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
 
         // 5.1.2：loadLibrariesOnce 移入 PlayerFactory 的 IjkPlayer 分支（Media3 引擎不需要加载 native 库）
-        ijkPlayer = PlayerFactory.create(this)
+        //
+        // v5.2.1 兜底前置：拿到 url 之后**先看这条流适不适合 Media3**，不适合就一开始就用 ijk
+        // （而不是先用 media3 失败一次、再由 onPlayerError 切过来 —— 那会让用户对着黑屏等一次超时）。
+        //   - `audio_url` 非空 → DASH 音视频分离，media3 有 `MergingMediaSource` 完整支持，**不换**；
+        //   - 后缀 `.flv` → B 站 durl 链路的分片 FLV，Progressive 模式起不来，直接 ijk。
+        // 注意 `isLikelyFlv()` 只看后缀、非常保守；漏判由 `onPlayerError → tryFallbackToIjk` 兜住。
+        ijkPlayer = if (PlayerFactory.isMedia3Selected() && !preferIjkForThisVideo()) {
+            PlayerFactory.create(this)
+        } else if (PlayerFactory.isMedia3Selected()) {
+            Logu.w("player", "该视频流结构更适合 ijk（FLV/分片），本页直接用兼容内核")
+            PlayerFactory.createIjkFallback()
+        } else {
+            PlayerFactory.create(this)
+        }
 
         batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
         batteryView!!.setPower(batteryManager!!.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
@@ -860,35 +889,41 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         seekToPosition(target)
     }
 
+    /**
+     * 弹出「跳转到指定时间」的**屏幕内数字键盘**（v5.2.1 实验室）。
+     *
+     * # 为什么不再用系统键盘（用户需求原文：不用弹出键盘输入）
+     * 旧实现是 `EditText` + `AlertDialog`，靠系统输入法。手表/圆屏上有三个硬伤：
+     * 1. 输入法面板一弹就把数字行顶出屏幕，用户看不见自己打了什么；
+     * 2. 系统**数字键盘没有冒号**，而 `TimeInputParser` 支持 `1:30` / `1:02:03`，
+     *    用户被迫切符号页 —— 在 1.5 英寸屏上基本不可用；
+     * 3. 部分 wear ROM 的输入法会吃掉返回手势与表冠滚动。
+     *
+     * 现在改用 [TimeKeypadDialog]：3×4 数字键盘（含冒号 + 退格）画在对话框里，
+     * 上方实时显示「已输入 → 会跳到哪里」，用户不用猜格式对不对。
+     * **软键盘永不弹出**（见该类的 `show()`）。
+     *
+     * # 圆屏适配
+     * 弹窗宽度按圆屏安全内接正方形（屏宽 / √2）收窄，四角按键必然落在圆形显示区内；
+     * 按键高度 42dp（远大于 48dp 的标准建议值的等效手表尺寸），圆屏上也点得准。
+     * 理由与实现见 [TimeKeypadDialog] 的类注释。
+     *
+     * # 为什么保留 `TimeInputParser`
+     * 输入格式与旧版**完全一致**（`90` / `1:30` / `1:02:03` / `5 30`），
+     * 本方法只换「怎么把字符敲进去」这一层，不重新定义时间格式 ——
+     * 否则用户已有的习惯、笔记里的示例就全对不上了。
+     *
+     * @param duration 视频总时长（毫秒）；0 = 未知（此时不把输入夹到时长内）
+     */
     private fun showTimeJumpInputDialog(duration: Long) {
-        val editText = EditText(this)
-        editText.hint = "例如 90、1:30、5 30、1：02：03"
-        editText.isSingleLine = true
-        editText.inputType = InputType.TYPE_CLASS_TEXT
-        editText.setTextColor(0xffffffff.toInt())
-        editText.setHintTextColor(0x80ffffff.toInt())
-        val container = FrameLayout(this)
-        val pad = ToolsUtil.dp2px(12f)
-        container.setPadding(pad, pad, pad, pad)
-        container.addView(editText)
-
-        AlertDialog.Builder(this)
-            .setTitle("跳转到指定时间")
-            .setView(container)
-            .setPositiveButton("跳转") { _, _ ->
-                val seconds = TimeInputParser.parse(editText.text.toString())
-                if (seconds < 0) {
-                    MsgUtil.showMsg("时间格式不对，示例：90、1:30、5 30、1：02：03")
-                    return@setPositiveButton
-                }
-                var targetMs = seconds * 1000L
-                if (targetMs < 0) targetMs = 0
-                if (targetMs > duration) targetMs = duration
-                seekToPosition(targetMs)
-                MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
-            }
-            .setNegativeButton("取消", null)
-            .show()
+        val dialog = TimeKeypadDialog(this, duration) { targetMs ->
+            seekToPosition(targetMs)
+            MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
+        }
+        // 遗留字段不再需要（旧实现把 EditText 挂在它上面给"跳过片头"之类的逻辑读），
+        // 保持置空让旧的读取路径安全退化（读到空串 → TimeInputParser 返回 -1 → 不动作）
+        time_jump_input = null
+        dialog.show()
     }
 
     /**
@@ -1124,6 +1159,68 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         MPPrepare(video_url)
     }
 
+    /**
+     * 这条视频流是否「一开始就该用 ijk」（见创建播放器处的注释）。
+     *
+     * 判定只用**已确定的信息**（url 后缀 + 是否有独立音频轨），不联网、不探测：
+     * 播放器创建是页面进场的同步路径，任何异步探测都会让"打开视频"变慢。
+     */
+    private fun preferIjkForThisVideo(): Boolean {
+        val url = video_url ?: return false
+        // DASH 音视频分离：media3 用 MergingMediaSource 能完整支持，不需要换内核
+        if (!audioUrl.isNullOrEmpty()) return false
+        return url.substringBefore('?').lowercase(Locale.ROOT).endsWith(".flv")
+    }
+
+    /**
+     * Media3 起播失败 → 切 ijk 重试一次（返回 true 表示"已接管这次错误，别再弹提示"）。
+     *
+     * 实现要点：
+     * 1. **是否该兜**：只有「当前实例是 Media3」且「本页还没兜过」才兜；
+     * 2. **换引擎**：`PlayerFactory.createIjkFallback()` 无视偏好建 ijk（事实优先于意向）；
+     * 3. **接管现有状态**：把旧实例的 surface/holder、音量、倍速、弹幕状态、进度尽量带过去 ——
+     *    用户体感是「黑屏一下然后继续播」，而不是「从头开始」；
+     * 4. **善后**：旧实例 release（防泄漏），`ijkPlayer` 指向新实例，再走一次 [MPPrepare]；
+     * 5. **提示**：Toast「已切换到兼容内核」，让用户理解发生了什么（而不是以为播放器抽风）。
+     */
+    private fun tryFallbackToIjk(current: IMediaPlayer?): Boolean {
+        if (media3FallbackTried) return false
+        if (current !is Media3Player) return false
+        media3FallbackTried = true
+        Logu.w("player", "media3 播放失败，切换 ijk 兼容内核重试")
+        return try {
+            val old = ijkPlayer
+            val newPlayer = PlayerFactory.createIjkFallback()
+            // 把画面搬过去（顺序重要：先挂画面再 prepare，否则会黑一下）。
+            // 复用本页已有的两种画面模式判断，**不重新发明**：
+            // - TextureView 模式：`mSurfaceTexture` 是页面上真正在用的那条纹理；
+            // - SurfaceView 模式：`surfaceView` 的 holder。
+            val texture = mSurfaceTexture
+            val sv = surfaceView
+            if (texture != null) {
+                newPlayer.setSurface(Surface(texture))
+            } else if (sv != null) {
+                newPlayer.setDisplay(sv.holder)
+            }
+            ijkPlayer = newPlayer
+            // 不再单独 bind 监听：下面 [MPPrepare] 会把这个新实例的全部监听器重新挂一遍
+            // （prepared / completion / error / buffering / info），在这里重复绑只会挂两套。
+            // 旧实例释放放在赋值之后：万一 release 抛异常，页面仍在可用状态
+            try {
+                old?.release()
+            } catch (ignored: Exception) {
+                // release 失败不影响新实例播放
+            }
+            MsgUtil.showMsg("已切换到兼容内核")
+            // 从头 prepare（媒体源已变，seek 到旧进度由下面的 seekTo 在 prepared 后补）
+            MPPrepare(video_url)
+            true
+        } catch (e: Exception) {
+            Logu.e("player", "切换 ijk 失败：" + e.javaClass.simpleName)
+            false
+        }
+    }
+
     private fun MPPrepare(nowurl: String?) {
         if (destroyed || ijkPlayer == null)
             return
@@ -1144,6 +1241,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 // web 未登录时不加 Cookie 头：播放地址是 CDN 直链（自带 deadline/upsig 签名），
                 // 空 Cookie 无意义，还会让人误以为必须 web 登录才能播（P3-1）
                 NetWorkUtil.cookieHeaderOrNull()?.let { headers["Cookie"] = it }
+                // v5.2.1：把 DASH 音频轨也交给播放器（仅 Media3 实现了合并；
+                // ijk 忽略这个追加调用 —— 它靠自己的 demuxer/ffmpeg 处理单轨或多轨）
+                val player = ijkPlayer
+                if (player is Media3Player) {
+                    player.setAudioDataSource(audioUrl, headers)
+                }
                 ijkPlayer!!.setDataSource(playUrl, headers)
             } else
                 ijkPlayer!!.setDataSource(nowurl)
@@ -1191,10 +1294,29 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             }
         }
 
-        ijkPlayer!!.setOnErrorListener { iMediaPlayer, what, extra ->
+        // 播放错误监听（v5.2.1 新增「Media3 失败自动切 ijk」的兜底）。
+        //
+        // ## 为什么需要这个兜底（用户症状）
+        // 「打开某些视频之后，正常加载、网络速度也能加载出来、弹幕也有，就是无法播放。ijkplayer 可以」
+        // 这类问题的共同特征是：**数据一切正常，只是当前内核解不了这个流**。
+        // 已定位的两种成因（见 notes/HANDOFF §3.4 与本轮的复核）：
+        // 1. DASH 同一清晰度有多条 `codecid` 不同的流，旧选流逻辑可能选中设备**硬解不支持**的
+        //    AV1/HEVC → media3 硬解失败（ijk 有 ffmpeg 软解兜住）。本轮已在
+        //    `DashData.getVideoStream(qn, codecSupported)` 里修掉，但**设备/驱动差异无法穷举**；
+        // 2. 其它未定位的个例（解封装边界、HLS 变体、CDN 边缘差异…）。
+        // 所以必须有一条**通杀兜底**：media3 起不来就换 ijk 重试一次，而不是让用户对着黑屏。
+        //
+        // ## 为什么只兜一次
+        // 换 ijk 后如果还错，说明视频本身有问题（不是内核问题），再切回去只会无限抖动。
+        // 用 [media3FallbackTried] 保证整页生命周期内只兜一次。
+        //
+        // ## 为什么不在 ijk 分支里也兜
+        // ijk 已经是软解兜底（`ijkPlayer` 本身能播 media3 播不了的东西）；
+        // 它再失败通常是网络/CDN 问题，换引擎没有意义。
+        ijkPlayer?.setOnErrorListener { iMediaPlayer, what, extra ->
             val EReport = "播放器可能遇到错误！\n错误码：$what\n附加：$extra"
-            Logu.e("ijk-err", EReport)
-            // Toast.makeText(PlayerActivity.this, EReport, Toast.LENGTH_LONG).show();
+            Logu.e("player-err", EReport + " engine=" + iMediaPlayer.javaClass.simpleName)
+            if (tryFallbackToIjk(iMediaPlayer)) return@setOnErrorListener true
             false
         }
 
@@ -2692,6 +2814,19 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             textClockParams.leftMargin = padding / 2
             textClockParams.topMargin = padding / 4
             textClock.setLayoutParams(textClockParams)
+
+            // v5.2.1 圆屏：把两张居中卡片（调节进度 / 发送弹幕）也收进圆内。
+            //
+            // 为什么必须单独处理它们：这两张卡是 `layout_centerInParent` 的，宽度
+            // `match_parent` + 6dp 边距。在圆屏上「屏幕四角是黑的」，
+            // 卡片左右两端会伸进黑角里 —— 表现为两侧文字被裁、按钮点不到。
+            // 收窄到 `屏宽 * 0.78`（≈ 直径的 0.78，小于 √2 的内接正方形 0.707 之外再留余量）
+            // 即可保证整张卡落在圆形显示区内。
+            val cardWidth = (screen_width * 0.78).toInt()
+            // 用 forEach + 内部单条早退，而不是 for + 两个 continue：
+            // 「对每张卡做同一件事，取不到就跳过」是遍历语义，不是查找语义；
+            // 写成 for + 两个 continue 要读的人模拟两条跳转路径，而它本来只有"做或跳过"。
+            CARD_ROUND_IDS.forEach { cardId -> applyRoundCardWidth(cardId, cardWidth) }
         }
 
         if (!SharedPreferencesUtil.getBoolean("player_show_online", false) || aid == 0L || cid == 0L)
@@ -2781,22 +2916,20 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             card_time_jump!!.visibility = View.VISIBLE
             showcon()
         }
-        findViewById<View>(R.id.time_jump_apply).setOnClickListener { view1 ->
-            val editText = time_jump_input ?: return@setOnClickListener
-            val seconds = TimeInputParser.parse(editText.text.toString())
-            if (seconds < 0) {
-                MsgUtil.showMsg("时间格式不对，示例：90、1:30、5 30、1：02：03")
-                return@setOnClickListener
+        // 进度小窗（v5.2.1）：输入框是**只读显示行**，点它弹屏幕内数字键盘。
+        //
+        // 为什么点这里要弹 TimeKeypadDialog 而不是就地打字：系统输入法会把整张卡片
+        // 顶出圆屏可见区，而且数字键盘没有冒号（打不出 `1:30`）。详见 showTimeJumpInputDialog。
+        val openTimeKeypad = View.OnClickListener {
+            val duration = try {
+                ijkPlayer?.getDuration() ?: 0L
+            } catch (ignored: Exception) {
+                0L
             }
-            val duration = try { ijkPlayer!!.getDuration() } catch (e: Exception) { 0L }
-            var targetMs = seconds * 1000L
-            if (targetMs < 0) targetMs = 0
-            if (duration > 0 && targetMs > duration) targetMs = duration
-            seekToPosition(targetMs)
-            MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
-            layout_card_bg!!.visibility = View.GONE
-            card_time_jump!!.visibility = View.GONE
+            showTimeJumpInputDialog(duration)
         }
+        findViewById<View>(R.id.time_jump_input)?.setOnClickListener(openTimeKeypad)
+        findViewById<View>(R.id.time_jump_apply).setOnClickListener(openTimeKeypad)
         findViewById<View>(R.id.danmaku_send).setOnClickListener { view1 ->
             val editText = findViewById<EditText>(R.id.danmaku_send_edit)
             if (editText.getText().toString().isEmpty()) {
@@ -4018,5 +4151,33 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 MsgUtil.err("进度上报：", e)
             }
         })
+    }
+
+    /**
+     * 把一张居中卡片收窄到圆屏安全宽度内（取不到视图或布局参数类型不对时什么都不做）。
+     *
+     * 抽成独立函数是为了让 [圆屏分支](上面那段) 读起来是"对每张卡做一件确定的事"，
+     * 而不是一屏 try/cast/continue。
+     */
+    private fun applyRoundCardWidth(cardId: Int, width: Int) {
+        val card = findViewById<View>(cardId) ?: return
+        val params = card.layoutParams as? RelativeLayout.LayoutParams ?: return
+        params.width = width
+        params.addRule(RelativeLayout.CENTER_IN_PARENT)
+        card.layoutParams = params
+    }
+
+    private companion object {
+        /**
+         * 圆屏下需要**收窄到圆内**的居中卡片 id。
+         *
+         * 这两张卡（调节进度 / 发送弹幕）都是 `layout_centerInParent` + `width=match_parent`，
+         * 在圆屏上左右两端会伸进**圆形显示区之外的黑角**，表现为两侧文字被裁、按钮点不到。
+         * 收窄到 `屏宽 * 0.78` 即可整张落在圆内。
+         *
+         * 用列表集中登记而不是写两条 `setLayoutParams`：将来再加居中卡片时若忘了收窄，
+         * 症状是"两侧被裁"，从截图上极难发现 —— 集中一处更容易不漏。
+         */
+        val CARD_ROUND_IDS = intArrayOf(R.id.time_jump_card, R.id.danmaku_send_card)
     }
 }
