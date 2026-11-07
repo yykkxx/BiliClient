@@ -550,10 +550,35 @@ object ApiRouter {
     }
 
     /**
+     * 校验回包里是否存在要求的字段。
+     *
      * 检查 [fields] 里每个「点号路径」是否都能在回包的 `data` 里找到。
      * @param presenceOnly true 时只校验「`data` 字段存在且非 null」，不做字段下钻
      *        （登录态接口的通用底线：data 都没有的回包必然不可用）
      * @return 第一个缺失的路径；全部存在返回 null
+     *
+     * # 为什么「顶层必须有 data」这条要加上 `result` 例外（v5.3.0 实测修正）
+     *
+     * 番剧/影视走的是 PGC 那组端点（路径以斜杠加单星号结尾，写成字面量会触发
+     * Kotlin 的嵌套块注释——plan.md 第二十八轮坑 #1 记的就是这个），它们的业务数据在**顶层 `result`**，回包里
+     * **根本没有 `data` 键**。实测（notes/api_matrix_v530.md §5）：
+     * ```
+     * {"code":0,"message":"success","result":{"season_title":"名侦探柯南","episodes":1281}}
+     * ```
+     * 旧实现在这里直接 `return "data"`，等于**只要给番剧配了 `requiredDataFields` 或
+     * `loginRequired`，番剧就必然被判「缺字段」而回退**（v5.2.1 之后连回退都没有，
+     * 直接就是功能消失）。
+     *
+     * 目前**侥幸没触发**：现有的 4 条番剧规则都是 `login=false, required=null`，
+     * 走不到这行。但这种「靠没人配置才没炸」的代码是定时炸弹 —— 下一个人给番剧加
+     * `requiredDataFields` 就会踩上去，而那时排查成本极高（现象是「番剧全都打不开」）。
+     *
+     * 所以这里放宽为「`data` 与 `result` 认其一」：
+     * - 有 `data` → 原有逻辑（在 data 里查字段）；
+     * - 没有 `data` 但有 `result` → 认为结构合法（`result` 是 PGC 的标准外壳），
+     *   存在性校验直接放行（**不**去 result 里找字段：`requiredDataFields` 的点号路径
+     *   是按 `data` 的层级写的，拿到 result 下比对只会得出错误的「缺字段」）。
+     * - 两者都没有 → 仍然判「data 缺失」（保持原行为，绝大多数接口是这种）。
      */
     private fun firstMissingField(jsonText: String, fields: List<String>?, presenceOnly: Boolean = false): String? {
         if (!presenceOnly && (fields == null || fields.isEmpty())) return null
@@ -563,7 +588,11 @@ object ApiRouter {
             // 只读到前缀时 JSON 可能被截断，这时无法做字段校验 → 按「缺字段」回退 web
             return "响应不是完整JSON(" + e.javaClass.simpleName + ")"
         }
-        if (!root.has("data") || root.isNull("data")) return "data"
+        // PGC（番剧/影视）用顶层 result 作外壳（见上面的注释）
+        val hasData = root.has("data") && !root.isNull("data")
+        if (!hasData) {
+            return if (root.has("result") && !root.isNull("result")) null else "data"
+        }
         if (presenceOnly) return null
         val checked = fields ?: return null
         return missingDataShape(root, checked)

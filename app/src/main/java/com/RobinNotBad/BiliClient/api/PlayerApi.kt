@@ -291,6 +291,44 @@ object PlayerApi {
         if (System.currentTimeMillis() - playerData.timeStamp < 600000)
             return
 
+        // v5.3.0：**Media3 内核改走 DASH**（这是「画面停在开头」的治本修复之一）。
+        //
+        // ## 为什么必须改（这一步之前，v5.2.1 的 DASH 修复在播放路径上全是死代码）
+        // 正常播放原本一律走下面 fnval=1 的 durl 单流分支，而 v5.2.1 做的两件事
+        // —— `DashData.getVideoStream(qn, codecSupported)` 的 codecid 过滤、
+        // `MergingMediaSource` 的音视频合并 —— **只存在于 [getVideoDash] 里**。
+        // [getVideoDash] 的调用方只有两处：`QualityChooserActivity`（仅音频下载）与
+        // `DownloadService`。也就是说：用户点开视频时，那两条修复**一行都没执行到**。
+        // （这也解释了为什么 v5.2.1 改完用户仍然报障。）
+        //
+        // ## 为什么 DASH 能解决「画面冻在首帧」
+        // durl 分支拿到的是一条 **FLV/单流**，media3 对它的支持很勉强（分片 FLV、
+        // 起播即 EOF 都是已知问题）；而 DASH 给的是标准 fMP4 分片 + 独立音轨，
+        // media3 的原生支持最好。用哪条链路本来就不该由「古老的下拉菜单」决定，
+        // 而应该由**播放内核**决定：ijk 有 ffmpeg 软解、通吃单流；media3 只有硬解，
+        // 必须拿到它能解的容器与编码。
+        //
+        // ## 为什么只对 Media3 生效、且不碰下载
+        // - ijk 路径逐字节不变（用户明确要求「不要回归」，且 ijk 播 durl 一直正常）；
+        // - `download=true` 时保持 durl：下载器按单文件保存，DASH 需要音视频分别下载/合并，
+        //   那是下载链路的另一件事，不在本次修复范围。
+        // - 番剧（`getBangumi`）不走这里，它有自己的解析。
+        //
+        // 兜底
+        // `getVideoDash` 内部在回包里没有 `dash` 节点时会**自己回落到** [getVideo]（见它的 else 分支），
+        // 所以「某些视频不给 DASH」的情况不会变成打不开，只是回到原链路。
+        // 注意那条回退传的是 `download=true`，本函数的 Media3 分支条件是 `!download`，
+        // 所以回退进去**不会再跳回 getVideoDash**，不存在递归。
+        if (!download && PlayerFactory.isMedia3Selected()) {
+            Logu.d("player", "Media3 内核：走 DASH 解析（codecid 选流 + 音视频合并）")
+            getVideoDash(playerData)
+            // DASH 分支已经填好 videoUrl / audioUrl / qn 列表 / 历史锚点，直接返回。
+            // ⚠️ timeStamp 的赋值必须留在这里（历史上它在函数最开头）：
+            // 十分钟缓存靠它，漏写会让同一个 PlayerData 每次都重新请求 playurl。
+            playerData.timeStamp = System.currentTimeMillis()
+            return
+        }
+
         playerData.timeStamp = System.currentTimeMillis()
 
         playerData.danmakuUrl = "https://comment.bilibili.com/" + playerData.cid + ".xml"

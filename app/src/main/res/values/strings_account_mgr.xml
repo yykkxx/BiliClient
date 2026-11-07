@@ -61,10 +61,10 @@
     <!-- ============ 高级 ============ -->
     <string name="acct_mgr_section_advanced">高级</string>
     <string name="acct_mgr_advanced_hint">下面的选项只影响请求的签名口径，不影响账号本身。遇到问题再动。</string>
-    <string name="acct_mgr_phone_tv_sign_title">手机端口用同源签名（消除「鉴权失败」）</string>
-    <string name="acct_mgr_phone_tv_sign_desc">手机端口的扫码与请求都使用同一套 TV 密钥签名。历史做法是「扫码用 TV 密钥、请求用手机密钥」，部分严格校验接口会因此返回 -663「鉴权失败，请联系账号管理员」。打开后两者同源可消除该错误；切换不会丢失已登录账号，重新进页面后生效。</string>
-    <string name="acct_mgr_phone_tv_sign_on">已切换为同源签名，重新进页面后生效</string>
-    <string name="acct_mgr_phone_tv_sign_off">已切回历史签名口径</string>
+    <string name="acct_mgr_phone_tv_sign_title">退回旧签名口径（android 密钥，会 -404）</string>
+    <string name="acct_mgr_phone_tv_sign_desc">v5.3.0 起手机端口默认就是「同源签名」（扫码与请求都用 TV 密钥），实测可用。历史上这里是相反的：扫码用 TV 密钥、请求用 android 密钥，两组密钥不同源，实测连 /x/v2/account/myinfo 都会返回 -404，其它接口普遍拿不到数据。这个开关现在只用于复现旧行为排查问题——除非你在做对比排查，否则请保持关闭。</string>
+    <string name="acct_mgr_phone_tv_sign_on">已退回旧签名口径（android 密钥，实测会 -404，仅供排查）</string>
+    <string name="acct_mgr_phone_tv_sign_off">已切回同源签名（TV 密钥，实测可用）</string>
 
     <!-- ============ 凭据统一操作 ============ -->
     <string name="acct_mgr_section_credentials">登录凭据（四端统一）</string>

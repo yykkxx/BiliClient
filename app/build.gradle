@@ -36,10 +36,11 @@ android {
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
-        // 5.2.1：versionCode 按「构建当天日期」规则 = 20261106（见 agent.md / plan.md 版本号约定）
-        // 只升修补号：本版是时间管理重写 + 登录体系重构 + 图片预览/收藏夹/Media3 修复的汇总修补。
-        versionCode 20261106
-        versionName "5.2.1"
+        // 5.3.0：versionCode 按「构建当天日期」规则 = 20261107（见 agent.md / plan.md 版本号约定）
+        // 次版本号：本版有「同账号多凭据切换」这条新能力（存储模型扩展），不是纯修补，
+        // 按语义版本从 5.2.1 → 5.3.0。
+        versionCode 20261107
+        versionName "5.3.0"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

@@ -114,6 +114,14 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
      * 长按一次加入稍后再看（Toast 提示），再次长按移出。
      * 已知状态缓存到 watchLaterKnown，只有第一次长按才全量拉列表判断，
      * 之后直接按记录的状态切换，避免每次长按都请求。
+     *
+     * # v5.3.0：不再静默失败
+     * 旧代码在这里是 `if (card.aid <= 0) return` —— **什么都不做、也不提示**。
+     * 而 web 推荐端口给出的卡片长期只有 bvid（aid=0），于是用户长按推荐页卡片
+     * 「完全没反应」，看起来像手势没生效。现在分三条：
+     * 1. aid>0：正常走 aid 路径；
+     * 2. aid<=0 但 bvid 非空：用 bvid **反查 aid** 后再走（`WatchLaterApi.resolveAid`）；
+     * 3. 两者都没有：明确 Toast 告诉用户这张卡不支持，而不是装作没听见。
      */
     fun toggleWatchLater() {
         val card = boundCard ?: return
@@ -121,43 +129,72 @@ class VideoCardHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             MsgUtil.showMsg("此类卡片不支持稍后再看")
             return
         }
-        if (card.aid <= 0) return
+        val bvid = card.bvid
+        if (card.aid <= 0 && bvid.isNullOrBlank()) {
+            // 直播/番剧推广这类卡片既没有 aid 也没有 bvid，如实说明
+            MsgUtil.showMsg("这类卡片不支持稍后再看")
+            return
+        }
 
         val willAdd = !watchLaterKnown
         MsgUtil.showMsg(if (willAdd) "正在加入稍后再看…" else "正在移出稍后再看…")
-        CenterThreadPool.run(Runnable {
-            try {
-                if (!watchLaterKnown) {
-                    // 第一次长按：先确认是否已在列表里（用户可能在别处加过）
-                    val inList = try {
-                        WatchLaterApi.getWatchLaterList().any { it.aid == card.aid }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        MsgUtil.showMsg("操作失败，请稍后再试")
-                        return@Runnable
-                    }
-                    if (inList) {
-                        // 已在列表里 → 这次长按是移出
-                        val result = WatchLaterApi.delete(card.aid)
-                        if (result == 0) {
-                            watchLaterKnown = false
-                            MsgUtil.showMsg("已移出稍后再看")
-                        } else MsgUtil.showMsg("操作失败，错误码：" + result)
-                        return@Runnable
-                    }
-                }
-                val result = if (willAdd) WatchLaterApi.add(card.aid)
-                else WatchLaterApi.delete(card.aid)
-                if (result == 0) {
-                    watchLaterKnown = willAdd
-                    MsgUtil.showMsg(if (willAdd) "已加入稍后再看" else "已移出稍后再看")
-                } else {
-                    MsgUtil.showMsg("操作失败，错误码：" + result)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                MsgUtil.showMsg("操作失败，请稍后再试")
+        CenterThreadPool.run(Runnable { performWatchLaterToggle(willAdd, card.aid, bvid) })
+    }
+
+    /**
+     * 后台线程实际执行「加入/移出稍后再看」。
+     *
+     * 从 [toggleWatchLater] 拆出来的唯一目的是**控制圈复杂度**（detekt CyclomaticComplexMethod
+     * 阈值 15）：UI 入口负责「能不能做 + 提示」，本函数负责「做」和「结果怎么说」，
+     * 两条职责本来就该分开，合在一起时任何一个新增分支都会顶破阈值。
+     *
+     * @param willAdd 期望的动作方向（true=加入）。注意它只是**期望**：
+     *   如果查到该视频已在稍后再看列表里，方向会被改成「移出」（见下面的 inList 分支）。
+     */
+    private fun performWatchLaterToggle(willAdd: Boolean, rawAid: Long, bvid: String?) {
+        try {
+            // 先确保有 aid：web 推荐卡片可能只带 bvid（v5.3.0 的反查兜底）。
+            // resolveAid 在 aid 已有时直接返回，不产生网络请求。
+            val aid = WatchLaterApi.resolveAid(rawAid, bvid)
+            if (aid <= 0L) {
+                MsgUtil.showMsg("拿不到这个视频的 aid，稍后再看失败")
+                return
             }
-        })
+            if (!watchLaterKnown && isAlreadyInWatchLater(aid)) {
+                // 已在列表里 → 这次长按是移出（方向与 willAdd 相反）
+                reportResult(WatchLaterApi.delete(aid), false)
+                return
+            }
+            reportResult(if (willAdd) WatchLaterApi.add(aid) else WatchLaterApi.delete(aid), willAdd)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            MsgUtil.showMsg("操作失败，请稍后再试")
+        }
+    }
+
+    /**
+     * 该视频是否已在稍后再看列表里（只在第一次长按时问一次）。
+     *
+     * 查询本身失败时返回 false 而不是抛出去：调用方据此当作「不在列表里」继续走加入流程，
+     * 比整条长按直接失败更符合用户预期（多试一次加入是幂等的）。
+     */
+    private fun isAlreadyInWatchLater(aid: Long): Boolean {
+        return try {
+            WatchLaterApi.getWatchLaterList().any { it.aid == aid }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            MsgUtil.showMsg("操作失败，请稍后再试")
+            false
+        }
+    }
+
+    /** 按服务端返回码更新本地已知状态并提示用户 */
+    private fun reportResult(code: Int, added: Boolean) {
+        if (code != 0) {
+            MsgUtil.showMsg("操作失败，错误码：" + code)
+            return
+        }
+        watchLaterKnown = added
+        MsgUtil.showMsg(if (added) "已加入稍后再看" else "已移出稍后再看")
     }
 }

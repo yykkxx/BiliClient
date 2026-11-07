@@ -7,10 +7,24 @@ package com.RobinNotBad.BiliClient.time
  * 1. **总开关关** → [Decision.PASS]
  * 2. **今天被 bypass**（长按 45 秒解除）→ [Decision.PASS]
  * 3. **还没选今天是什么日子** → [Decision.ASK_DAY_TYPE]
- * 4. **配额已耗尽** → [Decision.BLOCK]
- * 5. **21:30 之后** → [Decision.PASS]
- * 6. **需要等待** → [Decision.WAIT]
- * 7. 否则 → [Decision.PASS]
+ * 4. **今天是休息日** → [Decision.PASS]（不拦、也不倒计时等待）
+ * 5. **配额已耗尽** → [Decision.BLOCK]
+ * 6. **21:30 之后** → [Decision.PASS]
+ * 7. **需要等待** → [Decision.WAIT]
+ * 8. 否则 → [Decision.PASS]
+ *
+ * ## 为什么第 4 步「休息日直接放行」必须显式写出来（v5.3.0 修的 bug）
+ * 有人会想：休息日配额是 `Int.MAX_VALUE`，第 5 步的 BLOCK 本来就落不到它头上，
+ * 于是「休息日不用管」——**这个推理漏掉了第 7 步**。
+ * [waitSeconds] 是按 `levelOf(usedMsToday())`（绿 0 / 黄 5 / 红 10）算的，
+ * 而**颜色分档与配额无关**：休息日用了 70 分钟照样是红档 → 返回 10 秒 →
+ * 第 7 步返回 WAIT → 用户明明是「休息日、随便玩」，进 App 却还要盯 10 秒倒计时。
+ * 这就是用户报的「休息日进入应用无需倒计时」。
+ *
+ * 所以休息日必须在**配额判定之后、等待判定之前**显式 PASS：
+ * 它既不该被拦（配额无限），也不该被等（无配额压力，等待在这里没有任何意义）。
+ * 同时 [waitSeconds] 是**独立入口**（倒计时页会单独调它），那边也要返回 0，
+ * 否则「判定说 PASS、页面却拿着 10 秒自己等」这种自相矛盾的组合迟早出现。
  *
  * ## 为什么 ASK_DAY_TYPE 必须排在 BLOCK 之前（最容易搞反的一步）
  * 配额的值**取决于**日子类型：上学日 120 分钟、休息日无限制。
@@ -21,13 +35,14 @@ package com.RobinNotBad.BiliClient.time
  *
  * 先问再判就没有这个问题：问完之后 [DailyPlan.dayType] 已是用户选的类型，
  * 紧接着的 BLOCK 判定用的是**正确**配额；休息日配额是 `Int.MAX_VALUE`，
- * 自然不会被判耗尽，直接走到第 6 步（甚至第 7 步 PASS）。
+ * 自然不会被判耗尽。但**「不被拦」不等于「能直接进」**——它还会撞上第 7 步的等待，
+ * 所以第 4 步必须显式 PASS（见上一节，那是 v5.3.0 补的）。
  *
  * 这条是 v5.2.0 用血换来的结论（plan.md 第二十七轮「关键设计决策 1」：
  * 「每日询问必须排在配额判定之前，且放在启动页……先判定再问会按错误配额拦人」）。
  *
  * ## 为什么 21:30 之后是 PASS 而不是跳过等待
- * 两步等价（第 6 步本来就会算 0 秒），但**写成显式 PASS 更能表达意图**：
+ * 两步等价（[waitSeconds] 本来就会算 0 秒），但**写成显式 PASS 更能表达意图**：
  * 夜里连「等待 0 秒」的页面都不该闪一下。同时它必须排在 BLOCK **之后**
  * —— 21:30 之后配额用完了**照样要拦**（规格 §5.3 规则 4/5：只有「等待」不看时段，
  * 「拦截」与时段无关）。夜里让人继续玩到天亮才是真正的问题。
@@ -71,10 +86,11 @@ object Gate {
      * 1. 总开关关 → PASS
      * 2. 今天已 bypass → PASS
      * 3. 今天还没选日子 → ASK_DAY_TYPE
-     * 4. 配额耗尽 → BLOCK
-     * 5. 21:30 之后 → PASS
-     * 6. 需要等待（秒数 > 0）→ WAIT
-     * 7. PASS
+     * 4. 今天是休息日 → PASS（不拦、不等；理由见类注释第 4 步那一节）
+     * 5. 配额耗尽 → BLOCK
+     * 6. 21:30 之后 → PASS
+     * 7. 需要等待（秒数 > 0）→ WAIT
+     * 8. PASS
      */
     @JvmStatic
     fun decide(): Decision {
@@ -84,13 +100,17 @@ object Gate {
         if (DailyPlan.isBypassedToday()) return Decision.PASS
         // 3. 还没选今天是什么日子 → 先问。必须在配额判定之前，否则按错误配额拦人
         if (!DailyPlan.hasDayTypeToday()) return Decision.ASK_DAY_TYPE
-        // 4. 配额耗尽 → 拦。这一步用的配额已是「用户选完日子之后」的正确配额
+        // 4. 休息日 → 直接放行。它既不会被第 5 步拦（配额 Int.MAX_VALUE），
+        //    也不该被第 7 步等 —— 而第 7 步只看颜色档、与配额无关，休息日用了 70 分钟
+        //    就是红档 10 秒。这条不显式写出来，休息日照样要倒计时（v5.3.0 修的 bug）。
+        if (DailyPlan.isRestDay()) return Decision.PASS
+        // 5. 配额耗尽 → 拦。这一步用的配额已是「用户选完日子之后」的正确配额
         if (DailyPlan.isExhaustedToday()) return Decision.BLOCK
-        // 5. 21:30 之后不做倒计时等待（只跳过等待，不影响上面的拦截）
+        // 6. 21:30 之后不做倒计时等待（只跳过等待，不影响上面的拦截）
         if (DailyPlan.isInNoCountdownWindow()) return Decision.PASS
-        // 6. 需要等待就等（0~30min 不等 / 30~60min 5 秒 / >=60min 10 秒）
+        // 7. 需要等待就等（0~30min 不等 / 30~60min 5 秒 / >=60min 10 秒）
         if (waitSeconds() > 0) return Decision.WAIT
-        // 7. 其它情况放行
+        // 8. 其它情况放行
         return Decision.PASS
     }
 
@@ -100,12 +120,21 @@ object Gate {
      * 用 [DailyPlan.waitSecondsFor] 从**今日已用**派生，不在这里另算一套阈值
      * ——否则「颜色变黄了但没等待」这类自相矛盾的组合迟早会出现。
      *
-     * 21:30 之后返回 0：否则倒计时页拿到非 0 秒数会照样等，第 5 步的 PASS 就形同虚设
-     * （`decide` 与 `waitSeconds` 是两个独立入口，UI 可能只调后者）。
+     * ## 两个「返回 0」的例外（都是同一种坑：本函数是独立入口）
+     * [decide] 已经先把这两种情况判成 PASS 了，但倒计时页是**单独**读本函数拿秒数的，
+     * 如果这里不挡住，页面会拿到非 0 值并真的等下去 —— 判定说放行、页面照样拦，
+     * 用户看到的就是「明明该进却还要等」。
+     *
+     * 1. **21:30 之后** → 0（夜间不再加摩擦）；
+     * 2. **休息日** → 0（v5.3.0 新增）。这条最容易被漏掉，因为「休息日不会被拦」是真的，
+     *    但颜色档是按「今日已用」算的、与配额无关：休息日用了 70 分钟就是红档 → 原本返回
+     *    10 秒 → 休息日照样要倒计时。这正是用户报的那个 bug。
      */
     @JvmStatic
     fun waitSeconds(): Int {
         if (DailyPlan.isInNoCountdownWindow()) return 0
+        // 休息日不等待：理由同上，这一条与 decide 第 4 步互为兜底
+        if (DailyPlan.isRestDay()) return 0
         return DailyPlan.waitSecondsFor(DailyPlan.usedMsToday())
     }
 

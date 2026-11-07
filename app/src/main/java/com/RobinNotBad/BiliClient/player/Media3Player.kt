@@ -211,6 +211,97 @@ class Media3Player(context: Context) : IMediaPlayer {
     private var completionNotified = false
     private var lastPlaybackState = Player.STATE_IDLE
 
+    // ---- 画面冻结观测（v5.3.0）--------------------------------------------
+    // 为什么需要这三个字段：用户反馈「media3 播视频时画面停在开头不动，但声音、弹幕、
+    // 网速都正常」。这类故障**不产生 onPlayerError**（解码器没报错，只是不再吐新帧），
+    // 所以 PlayerActivity 的「onError 才切 ijk」兜底永远不触发；PlaybackWatchdog 又只
+    // 看「播放位置是否推进」—— 音视频合并后位置由音频驱动照常前进，它同样不触发。
+    // 两个监控同时失效，用户只能退出重进。
+    //
+    // 判据必须回答「**解码器到底有没有继续输出新帧**」，位置和缓冲状态都回答不了。
+    // media3 1.4.1 的 ExoPlayer.getVideoDecoderCounters().renderedOutputBufferCount
+    // 就是这个信号：它是**单调递增的真实渲染帧数**（javap 核对过该公开字段）。
+    // 用它做差分比拦截逐帧回调便宜得多（不占渲染热路径、不新建任何对象）。
+    //
+    // 三重信号分工：
+    // - [firstFrameAtMs]：AnalyticsListener.onRenderedFirstFrame 置位。为 0 表示
+    //   「还没出图」，此时一律不判冻结（起播缓冲期本来就没有帧，否则必然误判）；
+    // - [renderedFrameCount]：ticker 每 500ms 采样的渲染帧计数镜像；
+    // - [lastRenderedFrameAtMs]：最近一次观测到「帧数变了」的时刻，冻结判据的锚点。
+    @Volatile
+    private var firstFrameAtMs = 0L
+
+    @Volatile
+    private var lastRenderedFrameAtMs = 0L
+
+    private var renderedFrameCount = 0
+
+    /** 「本次 prepare 进入 STATE_READY」的时刻：首帧超时判据的起算点（0 = 还没 READY） */
+    @Volatile
+    private var readyAtMs = 0L
+
+    /**
+     * 是否对上层「视频轨在解码但渲染帧不推进」的冻结状态作出判定（v5.3.0）。
+     *
+     * 由 `PlayerActivity` 在引擎是 Media3 且非听视频模式时置 true。
+     * 为什么需要开关而不是一直判：听视频模式（vn=1）本来就禁了视频轨、不会渲染帧，
+     * 若照判必然误报；纯音频文件同理。
+     */
+    @Volatile
+    private var renderStallMonitorEnabled = false
+
+    /**
+     * 是否存在一条**在解码但没出帧**的视频轨（等价于「画面冻住」）。
+     *
+     * 判据（三个条件必须同时成立，缺一不可，见 [updateRenderStallSample]）：
+     * 1. 播放器在播（`isPlaying`）且不处于缓冲态 —— 暂停/缓冲时不出帧是正常的；
+     * 2. 已经出过首帧（[firstFrameAtMs] > 0）—— 起播前没有帧也是正常的；
+     * 3. 渲染帧计数在 [RENDER_STALL_TIMEOUT_MS] 内**一次都没涨过** ——
+     *    注意这里用「计数没涨」而不是「位置没动」：位置由音频轨驱动，
+     *    画面冻住时它照常前进，这正是旧看门狗失明的原因。
+     *
+     * 供 `PlayerActivity` 的冻结兜底轮询调用（任意线程安全：只读 @Volatile 字段，
+     * 唯一的内存读写都发生在主线程 ticker 里）。
+     */
+    fun isRenderStalled(): Boolean {
+        if (!renderStallMonitorEnabled || released) return false
+        val first = firstFrameAtMs
+        if (first <= 0L) return false
+        val last = lastRenderedFrameAtMs
+        if (last <= 0L) return false
+        return SystemClock.elapsedRealtime() - last >= RENDER_STALL_TIMEOUT_MS
+    }
+
+    /** 是否已经出过首帧（供上层区分「黑屏起不来」与「出过图后冻住」） */
+    fun hasRenderedFirstFrame(): Boolean = firstFrameAtMs > 0L
+
+    /**
+     * prepare 完成之后多久仍然一帧都没渲染出来（v5.3.0）。
+     *
+     * 与 [isRenderStalled] 是**互补**的两条判据，覆盖两个不同的用户症状：
+     * - 这条管「黑屏起不来」：`STATE_READY` 了（音频都出来了）却完全没有首帧 ——
+     *   典型是硬解器初始化成功但 surface 上不出图，**不报错**；
+     * - [isRenderStalled] 管「出过图之后冻住」：用户本轮反馈的那个。
+     *
+     * 为什么两者都要：media3 在「视频轨解码失败但音频正常」时既不报 onPlayerError，
+     * 也不会让位置停住；上一轮修的「onError 才切 ijk」对这两种形态都够不着。
+     *
+     * @return true 表示超时无首帧，上层应切内核
+     */
+    fun isFirstFrameOverdue(): Boolean {
+        if (!renderStallMonitorEnabled || released) return false
+        if (firstFrameAtMs > 0L) return false
+        val readyAt = readyAtMs
+        if (readyAt <= 0L) return false
+        return SystemClock.elapsedRealtime() - readyAt >= FIRST_FRAME_TIMEOUT_MS
+    }
+
+    /** 冻住之后要重置观测锚点（兜底动作执行前调用）。 */
+    fun resetRenderStallAnchor() {
+        renderedFrameCount = currentRenderedFrameCount()
+        lastRenderedFrameAtMs = SystemClock.elapsedRealtime()
+    }
+
     /** HTTP 数据源工厂：prepareAsync 时按当前 option / headers 重配，MediaSource 构建时引用 */
     private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
 
@@ -301,6 +392,22 @@ class Media3Player(context: Context) : IMediaPlayer {
         if (headers != null && dataSourceHeaders == null) dataSourceHeaders = headers
     }
 
+    /**
+     * 开启/关闭「画面冻住」观测（v5.3.0，新增 API，不影响任何已有签名）。
+     *
+     * 调用方需要在**每次 prepare 之前**按当前模式设置，因为同一实例可能被复用
+     * （story 切集走 `reset()`）。听视频模式必须关闭：那时视频轨被禁用，
+     * 渲染帧永远不涨，开着就会立刻误判成冻结。
+     */
+    fun setRenderStallMonitorEnabled(enabled: Boolean) {
+        renderStallMonitorEnabled = enabled
+        if (!enabled) {
+            firstFrameAtMs = 0L
+            lastRenderedFrameAtMs = 0L
+            renderedFrameCount = 0
+        }
+    }
+
     override fun getDataSource(): String? = dataSourceUrl
 
     override fun prepareAsync() {
@@ -336,6 +443,9 @@ class Media3Player(context: Context) : IMediaPlayer {
         runOnMain {
             // 速率状态先清：即使实例已不在（player==null 的早退路径），也不能留上一段的旧值
             resetSpeedSample()
+            // 冻结观测同理必须清：上一段的首帧时刻若留着，复用实例起新流后会误判
+            // 「已经出过首帧但现在不涨帧」→ 把正常起播当成冻结
+            resetRenderStallSample()
             val p = player ?: return@runOnMain
             p.stop()
             p.clearMediaItems()
@@ -347,6 +457,14 @@ class Media3Player(context: Context) : IMediaPlayer {
             mirrorPositionMs = 0L
             mirrorDurationMs = 0L
         }
+    }
+
+    /** 清空冻结观测状态（reset/release/新一段媒体开始前调用） */
+    private fun resetRenderStallSample() {
+        firstFrameAtMs = 0L
+        lastRenderedFrameAtMs = 0L
+        renderedFrameCount = 0
+        readyAtMs = 0L
     }
 
     override fun release() {
@@ -527,6 +645,26 @@ class Media3Player(context: Context) : IMediaPlayer {
         if (released) return
         val url = dataSourceUrl ?: return
         val p = obtainPlayer()
+
+        // 每次开始一条新流都重新起算冻结观测：首帧时刻必须由本条流自己的
+        // onRenderedFirstFrame 重新置位，否则复用实例（story 切集）会把上一段的
+        // 首帧时刻当成自己的，导致新流还没出图就"已经出过首帧"。
+        resetRenderStallSample()
+
+        // v5.3.0：**每次 prepare 都要清 prepared 标记**。
+        //
+        // 为什么（这是「画面停在上一帧不动」的一条真实成因）：
+        // [obtainPlayer] 在拉流档位没变时会**复用同一个 ExoPlayer 实例**，
+        // 然后这里 `setMediaSource` + `prepare()` 重新加载。media3 会正常地
+        // 重新解封装、重新初始化解码器、再次进入 `STATE_READY` —— 但
+        // [playerListener] 里的 `if (!preparedNotified)` 因为标记还是上一轮留下的 true
+        // 而**不再回调 onPrepared**。于是上层（PlayerActivity）的 `isPrepared` 永远是 true，
+        // 不会重新走「起播后设尺寸、恢复进度、启动弹幕、start()」这套流程：
+        // 画面就停在复用实例保留的上一帧（surface 不清屏），声音/位置却按新流在走。
+        // 表现正是用户说的「能加载、有网速、有弹幕、有声音，但画面停在开头不动」。
+        preparedNotified = false
+        completionNotified = false
+        lastPlaybackState = Player.STATE_IDLE
 
         // ---- HTTP 配置：UA / 超时 / 跨协议重定向 / headers ----
         // UA：ijk 路径两条调用链都会显式 setOption("user_agent", USER_AGENT_WEB)，
@@ -726,6 +864,10 @@ class Media3Player(context: Context) : IMediaPlayer {
                     // 复用实例再 prepare 时由 reset()/重建逻辑重置标记
                     if (!preparedNotified) {
                         preparedNotified = true
+                        // 首帧超时的起算点：READY 意味着解封装+解码器都已就绪，
+                        // 正常情况下首帧会在几百毫秒内到达；从这里开始计时最有意义
+                        // （从 prepare 开始计会把网络等待也算进去，误判率太高）。
+                        readyAtMs = SystemClock.elapsedRealtime()
                         runOnMain { preparedListener?.onPrepared(this@Media3Player) }
                     }
                 }
@@ -806,8 +948,49 @@ class Media3Player(context: Context) : IMediaPlayer {
             output: Any,
             renderTimeMs: Long,
         ) {
+            // 首帧时刻是冻结判据的「起算点」：没出过图之前一律不判冻结，
+            // 否则起播缓冲（本来就没帧）会被当成冻住并误切内核。
+            val now = SystemClock.elapsedRealtime()
+            firstFrameAtMs = now
+            lastRenderedFrameAtMs = now
+            renderedFrameCount = currentRenderedFrameCount()
             // MEDIA_INFO_VIDEO_RENDERING_START(3)：story 的 6s 首帧看门狗依赖
             notifyInfo(IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START, 0)
+        }
+    }
+
+    /**
+     * 读「已渲染输出帧数」——冻结判据的唯一可靠信号。
+     *
+     * 为什么要防御：`getVideoDecoderCounters()` 只能在应用主线程调用（ExoPlayerImpl 里
+     * 先 `verifyApplicationThread()`），且实例可能在 release 后为 null。 ticker 恒在主线程，
+     * 但仍做 try/catch —— 一旦这里抛异常，整个 ticker 会死掉，连带网速/缓冲/镜像全都停更，
+     * 那比画面冻结更严重（用户会看到进度条彻底不动）。
+     */
+    private fun currentRenderedFrameCount(): Int {
+        val p = player ?: return 0
+        return try {
+            p.videoDecoderCounters?.renderedOutputBufferCount ?: 0
+        } catch (ignored: IllegalStateException) {
+            // 非主线程 / 已释放：拿不到就当作「没有新帧」，由 [isRenderStalled] 的
+            // 「已出过首帧」前置条件兜住，不会在起播阶段炸出误判
+            0
+        }
+    }
+
+    /**
+     * 冻结观测的一拍（只由主线程 ticker 调用）。
+     *
+     * 只在「确实该出帧」的状态下推进锚点，否则每次缓冲/暂停都会把
+     * [lastRenderedFrameAtMs] 刷新成当下，反而让真正的冻结被掩盖。
+     */
+    private fun updateRenderStallSample(p: Player) {
+        if (!renderStallMonitorEnabled) return
+        if (p.playbackState != Player.STATE_READY || !p.isPlaying) return
+        val count = currentRenderedFrameCount()
+        if (count != renderedFrameCount) {
+            renderedFrameCount = count
+            lastRenderedFrameAtMs = SystemClock.elapsedRealtime()
         }
     }
 
@@ -830,6 +1013,7 @@ class Media3Player(context: Context) : IMediaPlayer {
                     }
                 }
                 updateSpeedSample(p)
+                updateRenderStallSample(p)
             }
             mainHandler.postDelayed(this, POLL_INTERVAL_MS)
         }
@@ -919,5 +1103,25 @@ class Media3Player(context: Context) : IMediaPlayer {
 
         /** HTTP 超时缺省（微秒）：与 story 的 timeout option 一致（15s） */
         const val DEFAULT_TIMEOUT_US = 15_000_000L
+
+        /**
+         * 渲染帧停止推进多久判定为「画面冻住」（v5.3.0）。
+         *
+         * 取值理由：正常 24~60fps 视频在 500ms 内至少出 12 帧，连续 6 秒**一帧都没有**
+         * 已经远超任何正常抖动（解码器换档、surface 重建都在百毫秒级）。
+         * 同时这个时长要小于用户「以为播放器坏了」的忍耐阈值（10 秒级），
+         * 又不能太短 —— 太短会把「音频在播、画面正在等关键帧」的正常起播尾段误判掉。
+         * 6 秒与 story 的首帧看门狗一致，便于用户与日志对照。
+         */
+        const val RENDER_STALL_TIMEOUT_MS = 6_000L
+
+        /**
+         * `STATE_READY` 之后多久仍然没有任何首帧，判定为「黑屏起不来」（v5.3.0）。
+         *
+         * 为什么比 [RENDER_STALL_TIMEOUT_MS] 长：READY 之后还要等第一个关键帧
+         * （B 站 DASH 分片的 IDR 间隔可达 2~4 秒），而 8 秒是 HANDOFF §3.4 里
+         * 已经定下的口径（"prepare 后 8 秒无首帧 → 自动切 ijk"），保持一致便于对照。
+         */
+        const val FIRST_FRAME_TIMEOUT_MS = 8_000L
     }
 }

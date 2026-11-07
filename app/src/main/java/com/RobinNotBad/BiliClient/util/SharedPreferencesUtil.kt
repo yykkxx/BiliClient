@@ -131,6 +131,16 @@ object SharedPreferencesUtil {
     // 全新命名键（player_media3），只新增不改旧键；切换在下次创建播放器时生效（PlayerFactory）。
     const val PLAYER_MEDIA3 = "player_media3"
 
+    /**
+     * 时间跳转的输入方式（v5.3.0）：
+     * - `true`（默认）= 播放器内自绘的屏幕数字键盘（ui/widget/TimeKeypadDialog），不弹系统输入法；
+     * - `false` = 回退到 v5.2.0 的旧实现：EditText + 系统输入法（能打冒号，但键盘会顶起内容）。
+     *
+     * 默认 true 是为了「升级零感知」：v5.2.1 的行为就是屏幕键盘，老用户不点开关时表现不变。
+     * 键名在「实验室 → 播放器」分组里暴露成开关，读写逻辑只在 ui/widget/TimeJumpInput 一处。
+     */
+    const val PLAYER_TIME_JUMP_KEYPAD = "player_time_jump_keypad"
+
     @JvmField
     val RECENT_UP_DISPLAY_ENABLE = "recent_up_display_enable"
 

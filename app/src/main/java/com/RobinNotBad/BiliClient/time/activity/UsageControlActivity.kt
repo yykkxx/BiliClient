@@ -1,5 +1,8 @@
 package com.RobinNotBad.BiliClient.time.activity
 
+import android.content.Intent
+import com.RobinNotBad.BiliClient.util.Logu
+import com.RobinNotBad.BiliClient.util.MsgUtil
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
@@ -9,10 +12,7 @@ import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.time.DailyPlan
 import com.RobinNotBad.BiliClient.time.TimeFormat
 import com.RobinNotBad.BiliClient.time.TimePrefs
-import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.google.android.material.switchmaterial.SwitchMaterial
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 
 /**
  * 小栏 1：使用控制（总开关 / 上学日配额 / 休息日说明 / 三色图例 / 各项等待秒数 / 长按解除说明）。
@@ -38,10 +38,22 @@ import kotlinx.coroutines.delay
  * 取消语义是安全的：「不关闭」不改变任何受限状态，只是回到原状。
  * 而「调大配额」的倒计时也一样可取消。
  *
- * ## 为什么用协程而不是 Handler.postDelayed
- * 项目门禁禁止新增 `runOnUiThread` / `Thread.sleep`，统一走
- * [CoroutineScopes.launchUi]。协程还有个好处：`onDestroy` 里 `job.cancel()` 就干净了，
- * Handler 需要自己 removeCallbacks 且容易漏。
+ * ## v5.3.0：两条倒计时都搬到独立的倒计时页面了
+ * 用户要求「包括那几个关闭按钮的所有倒计时都统一用那个独立的倒计时界面」。
+ * 所以本页**不再自己跑倒计时**：`startCloseGuard` / `startQuotaGuard` 现在只是
+ * 「拉起 [CountdownGateActivity] + 等结果」的薄壳（`registerForActivityResult`）。
+ *
+ * 三个直接收益（都不是「为统一而统一」）：
+ * 1. **大数字看得清**：原地只是一行 11sp 小字，圆屏上几乎看不出还剩几秒；
+ *    独立页有按位数自适应的 96sp 大数字；
+ * 2. **息屏/切后台不继续倒计时**：独立页有 `ACTION_SCREEN_OFF` 广播 + `elapsedRealtime`
+ *    累计，而原地协程在息屏时会被系统挂起、回前台一次性补发，等于白等；
+ * 3. **等待期间不计入使用时长**：独立页会 `UsageTracker.pause()`，
+ *    原地版本不会 —— 也就是说旧实现里「为了关掉限制而等待的 120 秒」反而被算进了使用时长，
+ *    这本身就是个自相矛盾的 bug。
+ *
+ * 取消能力**保留**：倒计时页 `RESULT_CANCELED` → 本页不写任何偏好。
+ * 原来原地提示可以点取消，换页后不能反而丢掉「反悔」能力。
  */
 class UsageControlActivity : BaseActivity() {
 
@@ -60,11 +72,64 @@ class UsageControlActivity : BaseActivity() {
      */
     private var suppressChange = false
 
-    /** 正在进行的「关闭总开关」倒计时；非 null 表示倒计时中 */
-    private var closeGuardJob: Job? = null
+    /**
+     * 是否有一个「关闭总开关」的倒计时页正在前台。
+     *
+     * v5.3.0 起倒计时由独立的 [CountdownGateActivity] 承担（用户要求统一），
+     * 本页不再持有协程 Job，只记「派人出去了」这个状态 —— 用于两件事：
+     * 1. 挡住等待期间的重复点击（否则用户狂点开关会叠出好几个倒计时页）；
+     * 2. 结果回来时知道该执行什么动作。
+     *
+     * 用布尔 + 单独的目标值而不是「Job != null」：协程 Job 那套随倒计时一起搬走了，
+     * 但「有没有在等」这个语义仍然需要，只是载体从 Job 换成了 ActivityResult 在途标志。
+     */
+    private var closeGuardLauncherPending = false
 
-    /** 正在进行的「调大配额」倒计时；非 null 表示倒计时中 */
-    private var quotaGuardJob: Job? = null
+    /** 关闭总开关的等待秒数（>0 表示正在等）；仅用于诊断与状态一致性 */
+    private var closeGuardPending = 0
+
+    /** 是否有一个「调大配额」的倒计时页正在前台 */
+    private var quotaGuardLauncherPending = false
+
+    /** 调大配额的目标值；0 = 没有在等 */
+    private var quotaGuardTarget = 0
+
+    /**
+     * 「关闭总开关」倒计时页的结果回调。
+     *
+     * 只有 `RESULT_OK`（真的走完）才写 `setEnabled(false)`；其余情况一律复位，
+     * 保证「取消 = 什么都没发生」。
+     */
+    private val closeGuardLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        closeGuardLauncherPending = false
+        val waitedSec = closeGuardPending
+        closeGuardPending = 0
+        if (result.resultCode == RESULT_OK) {
+            TimePrefs.setEnabled(false)
+            setSwitchProgrammatically(false)
+            renderSwitch()
+            MsgUtil.showMsg(getString(R.string.tm2_guard_done, waitedSec))
+        } else {
+            // 取消：开关本来就是「开」，只需按真实偏好重画一次（幂等）
+            renderSwitch()
+        }
+    }
+
+    /** 「调大配额」倒计时页的结果回调（语义同 [closeGuardLauncher]） */
+    private val quotaGuardLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        quotaGuardLauncherPending = false
+        val target = quotaGuardTarget
+        quotaGuardTarget = 0
+        if (result.resultCode == RESULT_OK && target > 0) {
+            applyQuota(target, R.string.tm2_control_quota_increase_done)
+        } else {
+            cancelQuotaGuard()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,12 +152,23 @@ class UsageControlActivity : BaseActivity() {
         renderLevels()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 从倒计时页返回时会先走本回调（结果回调紧随其后）：
+        // 这里把「在途」标志清掉，避免结果回调与 onResume 的顺序差异导致标志残留。
+        // 真正的动作仍在 ActivityResult 回调里执行，这里不写任何偏好。
+        if (closeGuardLauncherPending || quotaGuardLauncherPending) {
+            renderSwitch()
+        }
+    }
+
     override fun onDestroy() {
-        // 协程在 onDestroy 必须取消：否则它每秒还会去碰已经销毁的 View
-        closeGuardJob?.cancel()
-        closeGuardJob = null
-        quotaGuardJob?.cancel()
-        quotaGuardJob = null
+        // 本页已不持有协程（倒计时搬到独立页），这里只需清掉在途标志，
+        // 避免页面重建后「以为还在等」而把开关锁死。
+        closeGuardLauncherPending = false
+        closeGuardPending = 0
+        quotaGuardLauncherPending = false
+        quotaGuardTarget = 0
         super.onDestroy()
     }
 
@@ -118,19 +194,25 @@ class UsageControlActivity : BaseActivity() {
      * - 其它（打开方向 / 等待为 0）：立即写偏好。
      */
     private fun onSwitchToggled(isChecked: Boolean) {
-        if (closeGuardJob != null) {
+        // 倒计时页正在前台（用户去等待了）：这一页此时是 onPause，正常不会再收到
+        // 开关回调；但部分 ROM 会在返回瞬间补发一次，此时把开关顶回「开」即可，
+        // 真正的结果由 ActivityResult 回调统一处理。
+        if (closeGuardLauncherPending) {
             setSwitchProgrammatically(true)
             return
         }
         val waitSec = TimePrefs.toggleOffWaitSec()
         if (!isChecked && waitSec > 0) {
+            // v5.3.0：不再在原地跑协程倒计时，改为拉起**统一的独立倒计时页**
+            // （用户要求「所有倒计时都统一用那个独立的倒计时界面」）。
+            // 开关先顶回「开」：等待期间偏好仍是 true，界面与真实状态一致；
+            // 只有倒计时页返回 RESULT_OK 才真正写 false。
             setSwitchProgrammatically(true)
             startCloseGuard(waitSec)
             return
         }
         // 打开方向立即生效（用户口径明确：只有关闭要等）
         TimePrefs.setEnabled(isChecked)
-        if (isChecked) cancelCloseGuard()
         renderSwitch()
     }
 
@@ -148,37 +230,49 @@ class UsageControlActivity : BaseActivity() {
     }
 
     /**
-     * 启动「关闭总开关」的原地倒计时。
+     * 启动「关闭总开关」的等待。
      *
-     * 每一秒刷新提示；归零后**真正写入 false** 并把开关拨到关。
-     * 提示可点击 → [cancelCloseGuard]。
+     * v5.3.0：**改由独立倒计时页承担**（用户要求「所有倒计时都统一用那个独立的倒计时界面」）。
+     * 本函数只剩「拉起页面 + 处理结果」两件事，原来的协程倒计时循环与
+     * `guardTipView` 逐秒刷文案已删除。
+     *
+     * 结果处理：
+     * - `RESULT_OK` → 倒计时真的走完了 → 此刻才写 `setEnabled(false)`；
+     * - 其它（用户按返回 / 页面被系统回收）→ **不写任何偏好**，开关复位成「开」。
+     *
+     * 取消路径是刻意保留的：原来原地提示可以点取消，换成独立页后如果丢掉这个能力，
+     * 用户误拨开关就只能干等两分钟。
      */
     private fun startCloseGuard(totalSec: Int) {
-        cancelCloseGuard()
-        val tip = guardTipView
-        tip?.visibility = View.VISIBLE
-        closeGuardJob = CoroutineScopes.launchUi {
-            var remaining = totalSec
-            while (remaining > 0) {
-                // 每秒写一次文案；totalSec 与 remaining 的顺序必须与 strings 的 %1$d/%2$d 一致
-                tip?.text = getString(R.string.tm2_guard_tip, totalSec, remaining)
-                delay(TICK_INTERVAL_MS)
-                remaining -= 1
-            }
-            // 归零：此刻才真正关闭
+        closeGuardPending = totalSec
+        val intent = Intent(this, CountdownGateActivity::class.java)
+        intent.putExtra(CountdownGateActivity.EXTRA_TOTAL_SEC, totalSec)
+        intent.putExtra(
+            CountdownGateActivity.EXTRA_TITLE,
+            getString(R.string.tm2_guard_title, totalSec)
+        )
+        // 不显示「当天使用时间详情」：这条等待与"今天用了多久"无关，
+        // 点开详情只会让用户以为关个开关也被计入使用时长。
+        intent.putExtra(CountdownGateActivity.EXTRA_SHOW_DETAIL, false)
+        closeGuardLauncherPending = true
+        try {
+            closeGuardLauncher.launch(intent)
+        } catch (e: Exception) {
+            // 页面未注册 / 系统限制后台启动：宁可立刻生效也不要卡住用户
+            closeGuardLauncherPending = false
+            closeGuardPending = 0
+            Logu.w(TAG, "拉起倒计时页失败，直接关闭总开关：" + e.javaClass.simpleName)
             TimePrefs.setEnabled(false)
-            closeGuardJob = null
-            tip?.visibility = View.GONE
-            setSwitchProgrammatically(false)
             renderSwitch()
         }
     }
 
-    /** 取消「关闭总开关」的倒计时：开关保持开启、偏好不写 */
+    /** 取消「关闭总开关」的等待：开关保持开启、偏好不写 */
     private fun cancelCloseGuard() {
-        closeGuardJob?.cancel()
-        closeGuardJob = null
+        closeGuardLauncherPending = false
+        closeGuardPending = 0
         guardTipView?.visibility = View.GONE
+        renderSwitch()
     }
 
     /**
@@ -257,33 +351,35 @@ class UsageControlActivity : BaseActivity() {
     }
 
     /**
-     * 「调大配额」的倒计时。归零后写目标值；期间提示可点击取消。
+     * 「调大配额」的等待。
+     *
+     * v5.3.0：与 [startCloseGuard] 一样改由独立倒计时页承担。
+     * `RESULT_OK` 才写目标配额；取消则提示「已取消，配额未变」。
      */
     private fun startQuotaGuard(target: Int, totalSec: Int) {
-        val hint = quotaHintView
-        hint?.visibility = View.VISIBLE
-        quotaGuardJob = CoroutineScopes.launchUi {
-            var remaining = totalSec
-            while (remaining > 0) {
-                hint?.text = getString(
-                    R.string.tm2_control_quota_increase_hint,
-                    target,
-                    totalSec,
-                    remaining
-                )
-                delay(TICK_INTERVAL_MS)
-                remaining -= 1
-            }
-            quotaGuardJob = null
+        quotaGuardTarget = target
+        val intent = Intent(this, CountdownGateActivity::class.java)
+        intent.putExtra(CountdownGateActivity.EXTRA_TOTAL_SEC, totalSec)
+        intent.putExtra(
+            CountdownGateActivity.EXTRA_TITLE,
+            getString(R.string.tm2_quota_guard_title, target, totalSec)
+        )
+        intent.putExtra(CountdownGateActivity.EXTRA_SHOW_DETAIL, false)
+        quotaGuardLauncherPending = true
+        try {
+            quotaGuardLauncher.launch(intent)
+        } catch (e: Exception) {
+            // 拉不起来就直接生效（同上：卡住用户比少等 120 秒更糟）
+            quotaGuardLauncherPending = false
+            Logu.w(TAG, "拉起倒计时页失败，直接调整配额：" + e.javaClass.simpleName)
             applyQuota(target, R.string.tm2_control_quota_increase_done)
         }
     }
 
-    /** 取消「调大配额」的倒计时并给出「已取消」提示（用户必须知道配额没变） */
+    /** 取消「调大配额」的等待并给出「已取消」提示（用户必须知道配额没变） */
     private fun cancelQuotaGuard() {
-        val job = quotaGuardJob ?: return
-        job.cancel()
-        quotaGuardJob = null
+        quotaGuardLauncherPending = false
+        quotaGuardTarget = 0
         quotaHintView?.visibility = View.VISIBLE
         quotaHintView?.text = getString(
             R.string.tm2_control_quota_increase_cancelled,
@@ -313,7 +409,7 @@ class UsageControlActivity : BaseActivity() {
         guardTipView?.setOnClickListener { cancelCloseGuard() }
         quotaHintView?.setOnClickListener {
             // 只有「调大等待中」才有可取消的东西；其它情况（边界提示/成功提示）点了就收起来
-            if (quotaGuardJob != null) cancelQuotaGuard() else quotaHintView?.visibility = View.GONE
+            if (quotaGuardLauncherPending) cancelQuotaGuard() else quotaHintView?.visibility = View.GONE
         }
     }
 
@@ -373,9 +469,8 @@ class UsageControlActivity : BaseActivity() {
     }
 
     private companion object {
-        /** 倒计时心跳：1 秒 */
-        const val TICK_INTERVAL_MS = 1000L
-
+        /** 日志标签 */
+        private const val TAG = "usage-control"
         /** 配额加减步长（分钟）：手表上一格 1 分钟要点太多次，10 分钟一档最省事 */
         const val QUOTA_STEP_MIN = 10
 

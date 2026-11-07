@@ -75,6 +75,7 @@ import com.RobinNotBad.BiliClient.ui.widget.BatteryView
 import com.RobinNotBad.BiliClient.ui.widget.HighEnergyProgressBar
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
@@ -82,7 +83,7 @@ import com.RobinNotBad.BiliClient.util.NetWorkUtil.USER_AGENT_WEB
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
 import com.RobinNotBad.BiliClient.util.StringUtil
-import com.RobinNotBad.BiliClient.ui.widget.TimeKeypadDialog
+import com.RobinNotBad.BiliClient.ui.widget.TimeJumpInput
 import com.RobinNotBad.BiliClient.util.TimeInputParser
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import com.RobinNotBad.BiliClient.util.WifiPreloadManager
@@ -146,9 +147,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
     private var subtitleLinks: Array<SubtitleLink?>? = null
     private var subtitles: Array<Subtitle?>? = null
-    private var subtitle_curr_index = 0
     private var subtitle_count = 0
     private var subtitle_delta = 0f
+
+    /**
+     * [changeVideoSize] 拿不到尺寸时的延迟重试计数（v5.3.0 恢复）。
+     *
+     * v5.0.2-alpha8 引入、v5.1.0「播放器整体回退」时被误删。没有它的时候
+     * 「prepared 时宽度还是 0」会让画面框永远停在布局初始的 1px × 1px。
+     */
+    private var videoSizeRetry = 0
 
     private var layout_control: RelativeLayout? = null
     private var layout_top: RelativeLayout? = null
@@ -916,14 +924,17 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      * @param duration 视频总时长（毫秒）；0 = 未知（此时不把输入夹到时长内）
      */
     private fun showTimeJumpInputDialog(duration: Long) {
-        val dialog = TimeKeypadDialog(this, duration) { targetMs ->
-            seekToPosition(targetMs)
-            MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
-        }
+        // v5.3.0：改走 TimeJumpInput 统一入口 —— 它按实验室开关
+        // （SharedPreferencesUtil.PLAYER_TIME_JUMP_KEYPAD）决定弹「屏幕内数字键盘」
+        // 还是「系统输入法」，播放器不再直接 new TimeKeypadDialog。
+        // 这样「加开关」这件事只在一个地方生效，播放器不需要知道有几个实现。
         // 遗留字段不再需要（旧实现把 EditText 挂在它上面给"跳过片头"之类的逻辑读），
         // 保持置空让旧的读取路径安全退化（读到空串 → TimeInputParser 返回 -1 → 不动作）
         time_jump_input = null
-        dialog.show()
+        TimeJumpInput.show(this, duration) { targetMs ->
+            seekToPosition(targetMs)
+            MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
+        }
     }
 
     /**
@@ -1247,6 +1258,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 if (player is Media3Player) {
                     player.setAudioDataSource(audioUrl, headers)
                 }
+                // v5.3.0：告诉 Media3 适配器「这次要不要观测画面冻结」。
+                // 必须在 setDataSource/prepareAsync 之前，因为 prepare 时会重置观测锚点；
+                // 听视频模式与直播都不观测（前者没有视频轨，后者没有可切的内核语义）。
+                (player as? Media3Player)?.setRenderStallMonitorEnabled(
+                    !isAudioOnlyMode && !isLiveMode)
                 ijkPlayer!!.setDataSource(playUrl, headers)
             } else
                 ijkPlayer!!.setDataSource(nowurl)
@@ -1319,6 +1335,18 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             if (tryFallbackToIjk(iMediaPlayer)) return@setOnErrorListener true
             false
         }
+
+        // 视频尺寸监听（v5.3.0 恢复，v5.1.0 回退时丢失）：
+        // 硬解/换源常在 onPrepared 之后才上报真实宽高，而画面框的初始值是 1px×1px。
+        // 没有这个监听，就只能靠 onPrepared 那一刻的采样碰运气 —— 采样到 0 就
+        // 一路停在 1 像素（用户看到的是"画面不动"）。有监听则"尺寸一变就重算"。
+        ijkPlayer?.setOnVideoSizeChangedListener { _, width, height, _, _ ->
+            Logu.v("视频尺寸", "尺寸变化回调：${width}x${height}")
+            videoSizeRetry = 0
+            changeVideoSize()
+        }
+        // 每条新流从零开始计重试次数：上一个视频的重试计数不该影响这一个
+        videoSizeRetry = 0
 
         ijkPlayer!!.setOnBufferingUpdateListener { mp, percent ->
             // #1：percent 变化顺带校准总时长——部分流 prepare 完时 getDuration 仍是 0
@@ -1521,28 +1549,12 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             updateAudioOnlyUI()
         }
 
-        // 自动恢复：无论偏好如何，都必须回到卡死前的进度
-        if (pendingRecoverySeek > 0 && !isLiveMode) {
-            val seekTarget = pendingRecoverySeek
-            pendingRecoverySeek = -1L
-            ijkPlayer!!.seekTo(seekTarget)
-            if (hasDanmaku() && danmakuReady()) {
-                danmakuController!!.seekTo(seekTarget)
-            }
-            Logu.d("恢复播放", "已跳回 " + seekTarget + "ms")
-            runOnUiThread { MsgUtil.showMsg("已恢复播放") }
-        }
-
-        if (SharedPreferencesUtil.getBoolean("player_from_last", true) && !isLiveMode) {
-            if (progress_history > 5) {
-                ijkPlayer!!.seekTo(progress_history)
-                if (hasDanmaku() && danmakuReady()) {
-                    danmakuController!!.seekTo(progress_history)
-                }
-                Logu.d("进度跳转", progress_history.toString())
-                runOnUiThread { MsgUtil.showMsg("已从上次的位置播放") }
-            }
-        }
+        // 起播后跳到哪里：恢复/兜底位置 > 上次播放进度 > 不跳。
+        // 抽成函数是因为这里原本是两段独立的 if，第二段（progress_history）会**覆盖**
+        // 第一段（pendingRecoverySeek）刚 seek 到的位置 —— 对 recoverPlayback 那条路径
+        // 恰好两者相等所以看不出来，但「画面冻结切内核」时 progress_history 还是打开视频时
+        // 的旧值（通常 0），会把刚从冻结位置恢复的画面又拽回开头。
+        applyStartSeek()
 
         loading_info!!.visibility = View.GONE
         anim_loading!!.stop()
@@ -1577,6 +1589,46 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         btn_control!!.setOnClickListener { view -> controlVideo() }
         btn_subtitle!!.setOnClickListener { view -> CenterThreadPool.run(Runnable { downSubtitle(true) }) }
+    }
+
+    /**
+     * 起播后决定跳到哪个位置，并同步弹幕时间轴。
+     *
+     * 优先级（先命中先返回，**互斥**）：
+     * 1. [pendingRecoverySeek]：卡死自动恢复 / 画面故障切内核留下的位置，必须优先；
+     * 2. `progress_history`：用户偏好「从上次位置播放」时的历史进度；
+     * 3. 都不满足 → 不 seek，从头播。
+     *
+     * ## 为什么必须互斥（v5.3.0 修的）
+     * 原实现是两段独立 if 依次执行，第二段会把第一段的结果覆盖掉。对「卡死恢复」
+     * 那条路径两者通常相等（recoverPlayback 会把 resumePosition 同时写进 progress_history），
+     * 所以历史上看不出问题；但「画面冻结切内核」是新路径 —— 它**只**设
+     * pendingRecoverySeek、不动 progress_history，于是第二次 seek 用打开视频时的旧值
+     * （往往是 0）把画面拽回开头，用户会以为"切内核之后从头开始了"。
+     */
+    private fun applyStartSeek() {
+        if (isLiveMode) return
+        val recovery = pendingRecoverySeek
+        if (recovery > 0L) {
+            pendingRecoverySeek = -1L
+            seekPlayerAndDanmaku(recovery)
+            Logu.d("恢复播放", "已跳回 " + recovery + "ms")
+            CoroutineScopes.launchUi { MsgUtil.showMsg("已恢复播放") }
+            return
+        }
+        if (SharedPreferencesUtil.getBoolean("player_from_last", true) && progress_history > 5) {
+            seekPlayerAndDanmaku(progress_history)
+            Logu.d("进度跳转", progress_history.toString())
+            CoroutineScopes.launchUi { MsgUtil.showMsg("已从上次的位置播放") }
+        }
+    }
+
+    /** 播放器与弹幕层一起 seek（两者必须同帧对齐，否则弹幕会整体错位） */
+    private fun seekPlayerAndDanmaku(positionMs: Long) {
+        ijkPlayer?.seekTo(positionMs)
+        if (hasDanmaku() && danmakuReady()) {
+            danmakuController?.seekTo(positionMs)
+        }
     }
 
     @SuppressLint("SetTextI18n")
@@ -1642,19 +1694,44 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         return String.format(Locale.CHINA, "%.1f", speedBytesPerSec / 1024f) + "KB/s"
     }
 
+    /**
+     * 按视频真实宽高把画面框等比摆好。
+     *
+     * ## v5.3.0 修的两件事
+     *
+     * **① 尺寸可能来得比 onPrepared 晚，不能一拿了之。**
+     * 这里原本只在 `onPrepared` 调一次，如果那一刻 `getVideoWidth()` 还是 0
+     * （media3 的 `videoWidthPx` 只在 `onVideoSizeChanged` 回调里才被写，
+     * 而 ijk 是 native 读——两者时序不同），就直接 `return` 了。
+     * 而布局里 `videoArea` 的初始尺寸是 **1px × 1px**
+     * （`activity_player.xml`），一旦 early-return 就意味着画面框永远停在 1 像素 ——
+     * 这在用户看来正是「图像不动/停在开头」：**不是解码没出帧，是显示区域只有 1 像素大**。
+     * 所以拿不到尺寸时做有限次延迟重试（v5.0.2-alpha8 曾有过这段，
+     * v5.1.0「播放器整体回退」时被一并删掉了，属于**回退引入的回归**）。
+     *
+     * **② 补回 `setOnVideoSizeChangedListener`（同上，v5.1.0 回退时丢失）。**
+     * 硬解在 prepared 之后才上报真实尺寸，光靠重试仍可能错过；有监听就
+     * 「尺寸一变就重算」，两种时序都能覆盖。监听在 [MPPrepare] 里注册。
+     */
     private fun changeVideoSize() {
-        if (!isPrepared || ijkPlayer == null)
+        val player = ijkPlayer
+        if (!isPrepared || player == null)
             return
-        val width = ijkPlayer!!.getVideoWidth() // quality-allow 回退保留的旧播放器代码，调用点前已有判空
-        val height = ijkPlayer!!.getVideoHeight() // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+        val width = player.getVideoWidth()
+        val height = player.getVideoHeight()
         Logu.v("screen", "$screen_width x$screen_height")
         Logu.v("video", "$width x$height")
 
-        // 在听视频模式下，视频宽高可能为0，跳过尺寸调整
-        if (width == 0 || height == 0) {
-            Logu.v("视频尺寸", "视频宽高为0，跳过尺寸调整（可能处于听视频模式）")
+        if (width <= 0 || height <= 0) {
+            // 听视频模式本来就没有视频轨，宽高必为 0，无需重试
+            if (isAudioOnlyMode) {
+                Logu.v("视频尺寸", "视频宽高为0，跳过尺寸调整（听视频模式）")
+                return
+            }
+            scheduleVideoSizeRetry()
             return
         }
+        videoSizeRetry = 0
 
         if (SharedPreferencesUtil.getBoolean("player_ui_round", false)) {
             val video_mul = height.toFloat() / width.toFloat()
@@ -1686,6 +1763,26 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 Logu.v("改变视频位置", (((screen_width - video_width) / 2).toString() + "," + ((screen_height - video_height) / 2)))
             }, 60) // 别问为什么，问就是必须这么写，要等上面的绘制完成
         }
+    }
+
+    /**
+     * 拿不到视频尺寸时的有限次延迟重试（见 [changeVideoSize] 的 ①）。
+     *
+     * 为什么必须有上限：某些流（纯音频、损坏的流）永远不会有尺寸，
+     * 无上限重试就是一个永不停止的定时器链 —— 页面退出后仍在跑，白耗电。
+     */
+    private fun scheduleVideoSizeRetry() {
+        if (videoSizeRetry >= VIDEO_SIZE_MAX_RETRY) {
+            Logu.w("视频尺寸", "重试 $VIDEO_SIZE_MAX_RETRY 次仍无尺寸，放弃（画面框保持现状）")
+            return
+        }
+        videoSizeRetry++
+        Logu.v("视频尺寸", "尚未拿到视频尺寸，${VIDEO_SIZE_RETRY_DELAY_MS}ms 后重试（第 $videoSizeRetry 次）")
+        mainHandler?.postDelayed({
+            // 退出页面、或已经通过尺寸监听拿到了尺寸，就不再重试
+            if (!destroyed && isPrepared)
+                changeVideoSize()
+        }, VIDEO_SIZE_RETRY_DELAY_MS)
     }
 
     private fun progressChange() {
@@ -1799,37 +1896,82 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     /**
      * 计算当前应显示的字幕文本（纯计算，可在子线程执行）。
      * 原实现在子线程直接操作 View，这里拆开以保证线程安全。
+     *
+     * ## v5.3.0 重写：从「一格一格挪」改成「二分定位」
+     *
+     * 旧实现是一个 `while(need_adjust)` 状态机，靠 [subtitle_curr_index] 前后挪一格
+     * 来跟随播放位置。它在**顺序播放**时没问题，但有两个硬伤，正好对上用户报的
+     * 「跳转后字幕全错」：
+     *
+     * 1. **每次调用最多只挪一格**。进度定时器 250ms 一拍，而一次 seek 可能跨几分钟、
+     *    几百条字幕 —— 按一格/拍去追，要几百拍（几十秒到几分钟）才能追上，
+     *    这期间的每一帧都显示着**错误的那一条**。用户看到的就是「字幕和视频对不上」。
+     *    （`subtitle_curr_index--` 同理：往回 seek 也是慢慢退，而且退到 `to` 条件不满足
+     *    就停了，实际上会卡在一个中间位置，永远不再前进。）
+     * 2. **跨视频/跨流复用同一份状态**。换字幕文件、切分P 后旧索引若没归零，
+     *    新字幕会从旧位置开始匹配。
+     *
+     * 现在改成：每拍做一次**二分查找**定位到精确区间。字幕数组按时间升序
+     * （B 站返回的 body 就是升序），O(log n) 在 250ms 的节拍上完全可忽略
+     * （几千条字幕约 12 次比较），却换来「任意 seek 之后立刻对齐」。
+     *
+     * `subtitle_curr_index` 这个跨拍的索引状态**整个删掉了**（不再是字段）。
+     * 它存在的唯一理由是「顺序扫描需要一个游标」，换成二分之后每拍都能独立定位，
+     * 留着只会变成"只写不读"的死状态，还会误导后来人以为它影响匹配结果。
+     *
+     * @param curr_sec 已叠加用户校准偏移的播放时间（秒）
      */
     private fun computeSubtitle(curr_sec: Float): String? {
-        if (subtitles == null || subtitle_count == 0)
+        val list = subtitles
+        val count = subtitle_count
+        if (list == null || count <= 0)
             return null
 
-        var subtitle_curr = subtitles!![subtitle_curr_index]
-        var need_adjust = true
-        var need_show = true
+        val index = findSubtitleIndex(list, count, curr_sec)
+        if (index < 0)
+            return null
+        return list[index]?.content
+    }
 
-        while (need_adjust) {
-            if (curr_sec < subtitle_curr!!.from) {
-                if (subtitle_curr_index != 0 && curr_sec < subtitles!![subtitle_curr_index - 1]!!.to) {
-                    subtitle_curr_index--
-                    subtitle_curr = subtitles!![subtitle_curr_index]
-                } else {
-                    need_adjust = false
-                    need_show = false
-                }
-            } else if (curr_sec > subtitle_curr!!.to) {
-                if (subtitle_curr_index + 1 < subtitle_count && curr_sec > subtitles!![subtitle_curr_index + 1]!!.from) {
-                    subtitle_curr_index++
-                    subtitle_curr = subtitles!![subtitle_curr_index]
-                } else {
-                    need_adjust = false
-                    need_show = false
-                }
-            } else
-                need_adjust = false
+    /**
+     * 二分定位「curr_sec 落在哪一条字幕的 [from, to] 区间内」。
+     *
+     * 找不到（落在字幕间隙里）返回 -1，调用方据此隐藏字幕。
+     *
+     * 为什么不用「先用上次下标做局部修正、再二分」：那等于把旧状态机的正确性
+     * 隐患又引回来一半。二分本身极便宜，直接全量定位最不容易出错。
+     *
+     * 边界处理：
+     * - `from/to` 是 Double 秒，`curr_sec` 是 Float → 统一转 Double 比较，避免精度丢失
+     *   让「刚好卡在边界」的字幕闪一下；
+     * - 相邻字幕可能有重叠（B 站偶尔出现），以**后一条**为准（与顺序扫描的最终结果一致）。
+     */
+    private fun findSubtitleIndex(list: Array<Subtitle?>, count: Int, currSec: Float): Int {
+        val t = currSec.toDouble()
+        var low = 0
+        var high = count - 1
+        var candidate = -1
+        // 找「最后一条 from <= t」的下标
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val item = list[mid]
+            if (item == null) {
+                // 理论上不该有 null；有就当作时间 0，继续二分而不是崩掉
+                low = mid + 1
+                continue
+            }
+            if (item.from <= t) {
+                candidate = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
         }
-
-        return if (need_show) subtitles!![subtitle_curr_index]!!.content else null
+        if (candidate < 0)
+            return -1
+        // 命中的那条必须还没结束；否则说明落在间隙里
+        val hit = list[candidate] ?: return -1
+        return if (t <= hit.to) candidate else -1
     }
 
     private fun onlineChange() {
@@ -1879,11 +2021,28 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 return
 
             subtitle_count = subtitles!!.size
-            subtitle_curr_index = 0
             runOnUiThread { btn_subtitle!!.setImageResource(R.mipmap.subtitle_on) }
         } catch (e: Exception) {
             MsgUtil.err(e)
         }
+    }
+
+    /**
+     * 清空字幕的全部状态（换分P / 切清晰度 / 听视频模式 / 退出时调用）。
+     *
+     * ## 为什么需要一个函数而不是在每处手写三行
+     * 原来有三处分别写了 `subtitles = null` / `subtitleLinks = null` /
+     * `subtitle_selected = -1`，但**都漏了** `subtitle_count`。
+     * 后果：`subtitle_count` 还留着上一个视频的条数，而 `subtitles` 已经是 null ——
+     * `computeSubtitle` 的 `subtitles == null` 分支能兜住空指针，但新字幕加载回来之前
+     * 那段时间的计数是不自洽的（越界风险取决于读取顺序）。
+     * 用「一处清全部」把这类漏项从"每次新增清理点都要记得写全"变成"调一个函数"。
+     */
+    private fun clearSubtitleState() {
+        subtitles = null
+        subtitleLinks = null
+        subtitle_selected = -1
+        subtitle_count = 0
     }
 
     private var subtitle_selected = -1
@@ -1903,7 +2062,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 return
             }
 
-            subtitle_delta = SharedPreferencesUtil.getFloat("player_subtitle_delta", 0.3f)
+            subtitle_delta = SharedPreferencesUtil.getFloat("player_subtitle_delta", 0f)
 
             val ai_not_only = subtitleLinks!!.size > 2 || (subtitleLinks!!.size == 2 && !subtitleLinks!![0]!!.isAI)
             val ai_allowed = from_btn || SharedPreferencesUtil.getBoolean("player_subtitle_ai_allowed", false)
@@ -1993,8 +2152,114 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     }
                 }
             }
+
+            /**
+             * 画面冻结 → 切兼容内核（v5.3.0）。
+             *
+             * 为什么不复用 [recoverPlayback]：那是「重建数据源」的恢复动作，
+             * 针对的是网络/解码卡死；冻结的原因是**当前内核渲染不出画面**，
+             * 数据本身完好（声音、弹幕、网速都正常），重建数据源只会重来一遍同样的冻结。
+             * 唯一有效的动作是换成能渲染的内核，也就是已有的 [tryFallbackToIjk]。
+             */
+            override fun onVideoFrozen(frozenMs: Long) {
+                if (destroyed)
+                    return
+                Logu.w("播放卡死", "画面冻结 " + frozenMs + "ms 无新帧，尝试切换兼容内核")
+                switchToIjkOnPictureTrouble("画面冻结")
+            }
+
+            override fun onFirstFrameTimeout() {
+                if (destroyed)
+                    return
+                Logu.w("播放卡死", "就绪后超时无首帧（黑屏），尝试切换兼容内核")
+                switchToIjkOnPictureTrouble("无首帧")
+            }
         })
-        playbackWatchdog!!.start()
+        // 冻结判据只在 Media3 引擎下成立：ijk 没有渲染帧计数这个信号，
+        // 而听视频模式（vn=1）本来就禁了视频轨，一判就误报。
+        // 这里刚赋值过（非 null），用局部变量承接而不是再写一遍非空断言
+        val watchdog = playbackWatchdog
+        if (watchdog != null) {
+            watchdog.setFrozenProbe(::isMedia3VideoFrozen)
+            watchdog.setFirstFrameOverdueProbe(::isMedia3FirstFrameOverdue)
+            watchdog.start()
+        }
+    }
+
+    /**
+     * 画面是否真的冻住了（供看门狗回调的判据本体）。
+     *
+     * 前置条件全部在这里收口，**不**散到看门狗里：
+     * 1. 当前实例必须是 [Media3Player]（ijk 无渲染帧计数，不能判）；
+     * 2. 非听视频模式 / 非直播（直播走另一条链路，且没有可切的分P语义）；
+     * 3. 用户确实在播（暂停时画面本来就不动）；
+     * 4. 播放器自己已经出过首帧（没出过图属于「起不来」，由下面那条判据处理）。
+     */
+    private fun isMedia3VideoFrozen(): Boolean {
+        if (!isPictureWorthJudging()) return false
+        val player = ijkPlayer as? Media3Player ?: return false
+        return player.isRenderStalled()
+    }
+
+    /**
+     * 是否「就绪后超时仍无首帧」——黑屏但有声音的那个形态。
+     *
+     * 与 [isMedia3VideoFrozen] 共用前置条件，区别只在下层的判据不同：
+     * 这里问的是「一帧都没出过且已超时」。
+     */
+    private fun isMedia3FirstFrameOverdue(): Boolean {
+        if (!isPictureWorthJudging()) return false
+        val player = ijkPlayer as? Media3Player ?: return false
+        return player.isFirstFrameOverdue()
+    }
+
+    /**
+     * 画面类判据的共同前置条件（两条判据都必须先过这里）。
+     *
+     * 抽出来是因为两条判据的前置条件**必须完全一致** —— 否则会出现
+     * 「冻结判据说能判、首帧判据说不能判」这种自相矛盾的状态，兜底时序就乱了。
+     */
+    private fun isPictureWorthJudging(): Boolean {
+        if (destroyed || !isPrepared || !isPlaying) return false
+        if (isAudioOnlyMode || isLiveMode) return false
+        return true
+    }
+
+    /**
+     * 画面类故障兜底：切 ijk 并**从当前播放位置继续**。
+     *
+     * 与 `tryFallbackToIjk` 的分工：那个是「onError 触发的通用兜底」只做换引擎；
+     * 这里多两件事 —— ①先确认不是已经切过（一次为限）；②把当前进度显式带给新内核，
+     * 否则用户会发现画面从故障那一刻跳回开头（故障期间位置其实一直在前进）。
+     *
+     * @param reason 仅用于日志/提示，区分「画面冻结」与「无首帧」两种入口
+     */
+    private fun switchToIjkOnPictureTrouble(reason: String) {
+        if (media3FallbackTried) {
+            Logu.w("player", "本页已兜底过一次（$reason），不再重复切换")
+            return
+        }
+        // 先读诊断信息（换内核后旧实例就没了）：有没有出过首帧，决定了
+        // 「黑屏起不来」与「出过图后冻住」两种形态在日志里能不能区分开
+        val media3 = ijkPlayer as? Media3Player
+        val everRendered = media3?.hasRenderedFirstFrame() ?: false
+        // 故障期间位置是准的（由音频驱动），先取下来再换内核
+        val resumePos = try {
+            ijkPlayer?.getCurrentPosition() ?: 0L
+        } catch (ignored: Exception) {
+            0L
+        }
+        // 重置观测锚点：万一兜底没接管成功、页面继续用同一实例，
+        // 不重置会每个 tick 都判定"还冻着"，把一次性兜底变成死循环（v5.3.0）
+        media3?.resetRenderStallAnchor()
+        if (resumePos > 0L) pendingRecoverySeek = resumePos
+        if (tryFallbackToIjk(ijkPlayer)) {
+            // 只有真的接管了才提示：没接管说明不是 Media3 或已兜过，
+            // 那时弹「已切换到兼容内核」是假消息
+            Logu.w("player", "$reason（已渲染过首帧=$everRendered）→ 已切换到 ijk，回跳 ${resumePos}ms")
+        } else {
+            Logu.w("player", "画面故障兜底未接管（$reason，已渲染过首帧=$everRendered）")
+        }
     }
 
     /**
@@ -2988,6 +3253,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     if (hasDanmaku() && danmakuReady()) {
                         danmakuController!!.seekTo(seekPos.toLong())
                     }
+                    // 与 seekToPosition 同理：拖动进度条后清冻结计时，避免误判（v5.3.0）
+                    playbackWatchdog?.onSeek()
                     autohideReset()
                 }
             }
@@ -3101,6 +3368,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             if (hasDanmaku() && danmakuReady()) {
                 danmakuController!!.seekTo(position)
             }
+            // seek 后画面必然短暂黑一下再出帧：告诉看门狗清掉冻结计时，
+            // 否则一次正常跳转会被误判成「画面冻住」并误切内核（v5.3.0）
+            playbackWatchdog?.onSeek()
         }
     }
 
@@ -3366,9 +3636,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     isPlaying = false
                     finishWatching = false
                     progress_history = 0
-                    subtitles = null
-                    subtitleLinks = null
-                    subtitle_selected = -1
+                    clearSubtitleState()
                     viewPoints = null
                     viewPointAdapter = null
                     if (btn_viewpoint != null) {
@@ -3923,9 +4191,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     isPlaying = false
                     finishWatching = false
                     progress_history = 0
-                    subtitles = null
-                    subtitleLinks = null
-                    subtitle_selected = -1
+                    clearSubtitleState()
                     viewPoints = null
                     viewPointAdapter = null
                     if (btn_viewpoint != null) {
@@ -4179,5 +4445,14 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
          * 症状是"两侧被裁"，从截图上极难发现 —— 集中一处更容易不漏。
          */
         val CARD_ROUND_IDS = intArrayOf(R.id.time_jump_card, R.id.danmaku_send_card)
+
+        /**
+         * 拿不到视频尺寸时的重试间隔与上限（v5.3.0 恢复 alpha8 的行为）。
+         *
+         * 200ms × 5 = 1 秒：硬解/换源上报尺寸通常在首帧前完成，1 秒足够；
+         * 再久就说明这条流确实没有视频轨，继续重试只是空转。
+         */
+        const val VIDEO_SIZE_RETRY_DELAY_MS = 200L
+        const val VIDEO_SIZE_MAX_RETRY = 5
     }
 }

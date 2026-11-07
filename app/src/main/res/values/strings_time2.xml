@@ -32,6 +32,14 @@
          这条被 adapter/SettingsAdapter.kt 引用，键名与占位符顺序不能改。 -->
     <string name="tm2_guard_tip">需等待 %1$d 秒才能关闭（剩余 %2$d 秒）</string>
 
+    <!-- v5.3.0：倒计时统一到独立的 CountdownGateActivity 后，这两条是「页面的标题」。
+         与 tm2_guard_tip 的区别：那条要每秒刷新（带剩余秒数），这两条是静态标题，
+         只在拉起页面时传一次。tm2_guard_tip 仍被 SettingsAdapter 用到，不要删。 -->
+    <string name="tm2_guard_title">关闭使用控制需等待 %1$d 秒</string>
+    <!-- %1$d = 目标配额分钟数，%2$d = 总秒数 -->
+    <string name="tm2_quota_guard_title">配额调大到 %1$d 分钟需等待 %2$d 秒</string>
+    <string name="tm2_guard_done">已等待 %1$d 秒，使用控制已关闭</string>
+
     <!-- 单位与通用短语 -->
     <string name="tm2_unit_minute">%1$d 分钟</string>
     <string name="tm2_unit_hour">%1$d 小时</string>

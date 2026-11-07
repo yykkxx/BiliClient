@@ -72,6 +72,7 @@
             android:visibility="gone" />
 
         <TextView
+            android:id="@+id/tm2_countdown_tap_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"

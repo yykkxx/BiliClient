@@ -102,8 +102,17 @@ open class SettingTerminalPlayerActivity : RefreshListActivity() {
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 
+        // 字幕校准默认值 v5.3.0 从 0.3 改成 0（用户报障「字幕和视频不对应」的直接成因之一）。
+        //
+        // 为什么 0.3 是错的：B 站字幕的 from/to 已经是**绝对秒**，播放器里
+        // `computeSubtitle(curr_sec + subtitle_delta)` 加正数等于让字幕**整体提前 300ms**。
+        // 300ms 在字幕上是肉眼可见的错位（一句 2 秒的字幕，前 300ms 显示的是上一句）。
+        // 这个 0.3 当初大概是某人手动校准后忘了归位留下的，对**没手动校准过的用户**
+        // 它就是纯粹的偏置 —— 默认值必须是「不偏移」。
+        //
+        // 已经把 0.3 写进偏好的老用户不受影响（值还在），他们本来就是要那个偏移。
         sectionList.add(SettingSection("input_float", "字幕校准", "player_subtitle_delta",
-                "将字幕提前/退后一段时间，从而与视频对齐", "0.3"))
+                "将字幕提前/退后一段时间，从而与视频对齐（单位秒，正数=字幕提前；默认 0 不偏移）", "0.0"))
 
         sectionList.add(SettingSection("divider", "", "", "", ""))
 

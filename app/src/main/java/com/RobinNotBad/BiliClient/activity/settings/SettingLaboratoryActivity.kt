@@ -107,6 +107,15 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 getString(R.string.setting_lab_media_session), "false"))
         sectionList.add(SettingSection("switch", "互动视频调试", "player_interaction_debug",
                 getString(R.string.setting_lab_interaction_debug), "false"))
+        // 时间跳转的输入方式（v5.3.0，#3/#4）：
+        // 开着 = 播放器内自绘的屏幕数字键盘（v5.2.1 的默认行为，圆屏不弹系统键盘）；
+        // 关掉 = 回退旧实现（EditText + 系统输入法，能打冒号，但输入法会把内容顶出圆屏）。
+        // 文案写在本文件而不是 strings.xml：这一行是本轮新增的、还没进资源的实验项，
+        // 与同文件里「文字跑马灯」等老行的写法保持一致即可，避免为一个开关新增资源键。
+        sectionList.add(SettingSection("switch", "时间跳转用屏幕数字键盘",
+                SharedPreferencesUtil.PLAYER_TIME_JUMP_KEYPAD,
+                "关闭后改用系统输入法打字（可以打冒号）；打开则用播放器内自绘的数字键盘，不弹系统键盘",
+                "true"))
     }
 
     /** 调试：日志等级与详细报错 */

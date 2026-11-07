@@ -64,24 +64,81 @@ object RecommendApi {
             .put("screen", "1100-2056")
 
         val result = NetWorkUtil.getJson(ConfInfoApi.signWBI(url))  //得到一整个json
-
-        val data = result.getJSONObject("data")  //推荐列表中的data项又是一个json，把它提出来
-
-        val item = data.getJSONArray("item")  //data里面的items是视频卡片列表，把它提出来
+        val item = requireRcmdItems(result)
 
         for (i in 0 until item.length()) {    //遍历所有的视频卡片
             val card = item.getJSONObject(i)
-            val bvid = card.getString("bvid")    //bv号
+            val bvid = card.optString("bvid")    //bv号
             if (TextUtils.isEmpty(bvid)) {
                 Log.d("BiliClient", "RecommendApi getRecommend: isAd")
                 continue
             }
-            val cover = card.getString("pic")    //封面图片
-            val title = card.getString("title")    //标题
-            val upName = card.getJSONObject("owner").getString("name")  //up主名字
-            val view = StringUtil.toWan(card.getJSONObject("stat").getInt("view").toLong()) + "观看"    //播放量
-            videoCardList.add(VideoCard(title, upName, view, cover, 0, bvid))
+            // v5.3.0：web 推荐的卡片**带 aid**（字段名是 `id`，不是 `aid`）—— 旧代码一律传 0。
+            //
+            // 为什么必须修（用户报障「web 推荐端口时无法长按视频添加稍后再看」）：
+            // `VideoCardHolder.toggleWatchLater()` 首行是 `if (card.aid <= 0) return`，
+            // aid 恒为 0 ⇒ 长按**静默返回，连 Toast 都没有**，用户只看到「长按没反应」。
+            // 而 APP 端口推荐（getRecommendApp 从 player_args.aid / param 取）有 aid，
+            // 所以整页只有「web 端口」坏 —— 与用户描述逐字吻合。
+            //
+            // 实测证据（notes/api_matrix_v530.md，tmp_api/probe_ports.py 可复现）：
+            // web rcmd 的每个 av 卡片都有 `id`（= aid，已用 /x/web-interface/view 按 bvid
+            // 反查核对一致）、`cid`（= 首P cid）、`owner`、`stat`。
+            // 所以这里改成取 `id` 与 `cid`，aid 不再丢。
+            //
+            // 为什么用 optLong 而不是 getLong：广告条（goto=ad）没有 id/owner/stat，
+            // 老代码对它们靠「bvid 为空」先跳过；改用 opt* 后即使顺序变化也不会抛 JSONException
+            // 打断整页（`getJSONObject("owner")` 在 ad 卡上是必抛的）。
+            val aid = card.optLong("id", 0L)
+            val cid = card.optLong("cid", 0L)
+            val cover = card.optString("pic")    //封面图片
+            val title = card.optString("title")    //标题
+            val upName = card.optJSONObject("owner")?.optString("name") ?: ""    //up主名字
+            // 播放量：某些卡片（直播间/番剧推广）没有 stat，缺了就留空而不是抛异常
+            val viewCount = card.optJSONObject("stat")?.optLong("view", 0L) ?: 0L
+            val view = if (viewCount > 0L) StringUtil.toWan(viewCount) + "观看" else ""
+            val videoCard = VideoCard(title, upName, view, cover, aid, bvid)
+            // 顺手带上 cid：详情页/播放器可以直接用，省一次 x/player/pagelist 请求
+            if (cid > 0L) videoCard.cid = cid
+            videoCardList.add(videoCard)
         }
+    }
+
+    /**
+     * 从 web 推荐回包里取出 item 数组，**失败时给出能定位原因的消息**（v5.3.0）。
+     *
+     * # 为什么要单独拆一个函数
+     * 用户报障「web 端口无法刷新」。实测（`notes/api_matrix_v530.md` §2，
+     * `tmp_api/probe_ports.py` 可复现）web 推荐接口本身 `code=0`、`item[30]` 完全正常，
+     * **接口是健康的**，所以问题在客户端解析/状态机。
+     * 旧代码直接 `result.getJSONObject("data")` / `data.getJSONArray("item")`：
+     * 一旦服务端返回 `code=0 + data:null`（风控降级、接口改版、登录态异常时的常见形态），
+     * 抛出的 `JSONException` 会被上层 catch 吞成一句笼统的「加载失败」，
+     * 用户完全无法判断是网络、风控还是代码问题。
+     *
+     * 现在把三类失败**分开报**：服务端明确错误码 / data 为空 / item 结构缺失。
+     * 三者在日志和 Toast 里都是不同的文案，下次排查不用靠猜。
+     *
+     * 拆成独立函数还有一个作用：`getRecommendWeb` 里的 throw 会因此只留 1 处，
+     * 满足 detekt 的 `ThrowsCount`（最多 2 处）。
+     */
+    @Throws(IOException::class)
+    private fun requireRcmdItems(result: JSONObject): JSONArray {
+        val code = result.optInt("code", -1)
+        if (code != 0) {
+            throw IOException("推荐接口返回错误码 $code：" + result.optString("message", ""))
+        }
+        // data 与 item 两级缺失合并成一条消息：对用户来说都是「回包结构不对」，
+        // 分开报只会多一个 throw（detekt ThrowsCount 上限 2），而 name 已经指明缺哪一级。
+        val data = result.optJSONObject("data")
+        val item = data?.optJSONArray("item")
+        if (item == null) {
+            throw IOException(
+                if (data == null) "推荐接口返回 data 为空（可能被风控或接口改版），请稍后重试"
+                else "推荐接口回包里没有 item 列表（接口结构可能已变更）"
+            )
+        }
+        return item
     }
 
     /**

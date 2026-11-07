@@ -71,6 +71,24 @@ object UsageTracker {
     @Volatile
     private var pageStartElapsed = 0L
 
+    /**
+     * 本轮前台会话里**已经真正在用**的毫秒（暂停闸门那段时间已扣除）。
+     *
+     * 与 [pausedMs] 的分工：`pausedMs` 是「攒着还没开票的暂停时长」，本字段是
+     * 「已经结算并开票过的净使用时长」。每次 [settleUsageInternal] 把两者的差
+     * 累加进来，所以**即使前台中途调了 [flush]**（settle 会把 [foregroundStartElapsed]
+     * 推到当前时刻），本字段也保持单调递增，不会被清零。
+     *
+     * 存在的唯一理由：[UsageReminder] 要问「这轮前台到底用了多久」（读法是
+     * [activeMsInSession]，**不是**本私有字段）。
+     * 不能用 `now - foregroundStartElapsed`（那是含暂停的毛时长，且会被 flush 重置），
+     * 也不能用 [DailyPlan.usedMsToday]（它只在结算点落盘，前台期间不涨）。
+     *
+     * 只在 [onForeground] 与 [reset] 里归零。
+     */
+    @Volatile
+    private var activeMsSinceForeground = 0L
+
     // ==========================================================================================
     // 前台边沿
     // ==========================================================================================
@@ -88,6 +106,30 @@ object UsageTracker {
     fun currentPageName(): String? = currentPage
 
     /**
+     * 本轮前台会话里**已经真正用**了多少毫秒（暂停闸门期间不算）。
+     *
+     * 返回值 = 已结算并落盘的净时长 + **此刻正在走、还没结算的那一截**。
+     * 后者要单独补上，否则前台连续使用期间两次 [flush]（或只在退后台才结算）之间，
+     * 调用方看到的永远是 0 —— 15 分钟提醒正是靠它判断「到点了没」，漏这一段就永远不提醒。
+     *
+     * 「正在走的那一截」的算法与 [settleUsageInternal] 保持同一口径：先扣 [pausedMs]，
+     * 再扣当前这一段暂停段（`pauseStartElapsed` 到此刻），否则在倒计时页待着也会把周期推满。
+     */
+    @JvmStatic
+    fun activeMsInSession(): Long {
+        val base = activeMsSinceForeground
+        val start = foregroundStartElapsed
+        if (start <= 0L) return base
+        val now = SystemClock.elapsedRealtime()
+        val totalMs = (now - start).coerceAtLeast(0L)
+        val pendingPause = pauseStartElapsed.takeIf { it > 0L }
+            ?.let { (now - it).coerceAtLeast(0L) }
+            ?: 0L
+        val pendingActive = (totalMs - pausedMs - pendingPause).coerceAtLeast(0L)
+        return saturatingAddSession(base, pendingActive)
+    }
+
+    /**
      * App 真正回到前台（startedCount 0→1）。
      *
      * 幂等：已经在前台时重复调用直接返回，不会把起点重置（否则每次 Activity 切换都重开一段）。
@@ -98,6 +140,8 @@ object UsageTracker {
         val now = SystemClock.elapsedRealtime()
         foregroundStartElapsed = now
         sessionStartWallMs = System.currentTimeMillis()
+        // 新的一轮前台会话：15 分钟提醒的周期从这里重新起算（见 UsageReminder 的「回前台重置」）
+        activeMsSinceForeground = 0L
         // 前台恢复时立刻处理跨天：把「昨天」的累计落进历史，今天的计数从 0 重新开始。
         // 读路径本身也按 USED_DAY 判断（不依赖这里），这一步只是把旧数据落盘，避免丢历史。
         DailyPlan.rotateIfDayChanged()
@@ -268,9 +312,20 @@ object UsageTracker {
         foregroundStartElapsed = now
         // 下一段从这个墙钟时刻开始算，所以跨午夜只会在「第一段」里发生，不需要额外状态
         sessionStartWallMs = System.currentTimeMillis()
+        // 净使用时长先累进会话计数（**在 `activeMs <= 0` 提前返回之前**）：
+        // 15 分钟提醒读的是这个值，它必须与「真的在用的时间」严格同步。
+        // 放在 creditUsage 之后也行，但那样 0 毫秒的分支会把它漏掉。
+        activeMsSinceForeground = saturatingAddSession(activeMsSinceForeground, activeMs)
         if (activeMs <= 0L) return
         creditUsage(activeMs, startWall)
     }
+
+    /** 会话内累计的饱和加法（上界同 [DailyPlan] 的量级，防止时钟异常把它撑爆） */
+    private fun saturatingAddSession(used: Long, add: Long): Long =
+        (used + add).coerceIn(0L, MAX_SESSION_MS)
+
+    /** 会话内累计的上界：100 年，与 [DailyPlan] 的日累计上界同量级 */
+    private const val MAX_SESSION_MS = 100L * 365L * 24L * 60L * 60_000L
 
     /**
      * 把 [activeMs] 按午夜切成两段：午夜前的部分归档到那一天的日总数，午夜后的记给今天。
@@ -304,15 +359,47 @@ object UsageTracker {
      *
      * **不结算**未落盘的这段时长（清空语义就是「不要了」）；也不碰偏好，
      * 偏好数据由 [UsageLog.clearAll] 负责。
+     *
+     * ## 前台中调用必须「重置后立刻续上」（v5.3.0 修的历史 bug）
+     * 旧实现无条件把 [foregroundStartElapsed] 置 0，而它同时是「是否在前台」的判据。
+     * 「清空使用记录」是设置页里的按钮，**用户点它时 App 正在前台**：置 0 之后
+     * [isForeground] 变 false，[flush] 直接返回，`UsageLog.clearAll` 之后再也没有
+     * 任何一次结算 —— 从那一刻起「今日已用」永久冻结，直到用户退后台再回来
+     * （而 `onForeground` 的幂等判据也是这个字段，所以前台期间根本不会被调用）。
+     * 表现出来就是「清空了一次记录之后，时间管理再也不记账了」。
+     *
+     * 所以这里记住「清空前是否在前台」，是的话以此刻为起点重开一段会话：
+     * 已累计的时长确实丢了（那是清空语义），但**从下一秒起继续正常累计**。
+     * 暂停层数也保留（清空记录发生在普通页面，不该影响闸门页的暂停状态）。
      */
     @JvmStatic
     fun reset() {
+        val wasForeground = foregroundStartElapsed > 0L
+        val stillPaused = pauseDepth > 0
         foregroundStartElapsed = 0L
         sessionStartWallMs = 0L
-        pauseDepth = 0
         pauseStartElapsed = 0L
         pausedMs = 0L
-        currentPage = null
         pageStartElapsed = 0L
+        activeMsSinceForeground = 0L
+        if (!wasForeground) {
+            // 本来就在后台：保持后台态（各字段归零即可，等下一次 0→1 边沿重新开始）
+            pauseDepth = 0
+            currentPage = null
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        foregroundStartElapsed = now
+        sessionStartWallMs = System.currentTimeMillis()
+        if (stillPaused) {
+            // 暂停中清空（理论上不会发生，但保持状态自洽）：从此刻续上暂停段，
+            // 页面计时保持停止（暂停期间不属于任何业务页面，与 pause() 的口径一致）
+            pauseStartElapsed = now
+            return
+        }
+        pauseDepth = 0
+        // 页面名**保留**：清空记录发生在当前页面上，那个页面并没有变，
+        // 保留它才能让「清空之后继续待在这一页」的停留照常归类（否则这段时长会被丢弃）。
+        pageStartElapsed = now
     }
 }

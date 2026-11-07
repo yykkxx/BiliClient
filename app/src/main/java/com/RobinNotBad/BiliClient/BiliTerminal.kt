@@ -19,6 +19,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
+import com.RobinNotBad.BiliClient.time.UsageReminder
 import com.RobinNotBad.BiliClient.time.UsageTracker
 import java.lang.ref.WeakReference
 
@@ -102,8 +103,10 @@ class BiliTerminal : Application() {
      * 这一层只做一件事：把 `ActivityLifecycleCallbacks` 的多 Activity 事件折叠成
      * 「App 整体进入前台 / 退到后台」两个边沿，交给 [UsageTracker]。
      *
-     * - **0→1**（第一个 Activity started）：[UsageTracker.onForeground] 记下起点；
-     * - **1→0**（最后一个 Activity stopped）：[UsageTracker.onBackground] 一次性结算整段。
+     * - **0→1**（第一个 Activity started）：[UsageTracker.onForeground] 记下起点，
+     *   紧接着 [UsageReminder.onForeground] 开始一轮 15 分钟提醒周期（v5.3.0 需求 6）；
+     * - **1→0**（最后一个 Activity stopped）：[UsageTracker.onBackground] 一次性结算整段，
+     *   同时 [UsageReminder.onBackground] 摘掉提醒回调（后台不计、也不弹）。
      *
      * 为什么用 startedCount 边沿而不是「每个 Activity 的 onResume/onPause 各记一次」：
      * 「推荐↔详情↔播放」来回切时后者会切成很多段，且段与段之间的空档（Activity 交接）
@@ -116,6 +119,10 @@ class BiliTerminal : Application() {
      *
      * 回调里只做轻量调用（都是内存运算 + 偏好 apply 语义），不碰网络/IO，也不自己回主线程
      * （这些回调本来就在主线程）。
+     *
+     * ⚠️ **两个 onForeground 的调用顺序不能换**：[UsageTracker.onForeground] 会把
+     * 「本轮前台净使用时长」归零，[UsageReminder.onForeground] 依赖那个 0 作为新周期的起点。
+     * 反过来调的话，首轮周期会从一个已经走过一段的旧值开始算，提醒会偏早。
      */
     private class ForegroundUsageTracker : Application.ActivityLifecycleCallbacks {
         /** 处于 started 状态的 Activity 数量；只在 0/1 两个状态间判定边沿 */
@@ -123,7 +130,10 @@ class BiliTerminal : Application() {
 
         override fun onActivityStarted(activity: Activity) {
             startedCount += 1
-            if (startedCount == 1) UsageTracker.onForeground()
+            if (startedCount != 1) return
+            // 顺序有依赖：先让 tracker 清掉会话净时长，reminder 再按它起算新周期
+            UsageTracker.onForeground()
+            UsageReminder.onForeground()
         }
 
         override fun onActivityStopped(activity: Activity) {
@@ -131,6 +141,8 @@ class BiliTerminal : Application() {
             startedCount -= 1
             // 还有别的 Activity 处于 started，说明只是页面切换，继续沿用同一个前台会话
             if (startedCount > 0) return
+            // 先停提醒再结算：避免结算瞬间排上的那次 tick 在「已经退后台」之后才跑
+            UsageReminder.onBackground()
             UsageTracker.onBackground()
         }
 

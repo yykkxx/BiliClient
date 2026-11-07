@@ -24,6 +24,7 @@ import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.api.migration.ApiRouter
 import com.RobinNotBad.BiliClient.api.gateway.CredentialStore
 import com.RobinNotBad.BiliClient.util.AccountCredentials
+import com.RobinNotBad.BiliClient.util.AccountCredentialStore
 import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
@@ -157,14 +158,19 @@ class SettingAccountActivity : BaseActivity() {
     }
 
     /**
-     * 手机端口签名口径开关（v5.2.0 P0-2）。
+     * 手机端口签名口径开关（v5.2.0 引入 P0-2；v5.3.0 语义反转）。
      *
-     * 历史做法：手机端口扫码用 TV 密钥、请求用手机密钥 → token 与 appkey **跨源**，
-     * 严格校验的接口会回 -663「鉴权失败，请联系账号管理员」。打开这个开关后扫码与请求同源
-     * （都用 TV 那对密钥），可消除该错误。
+     * 历史做法：手机端口扫码用 TV 密钥、请求用手机 android 密钥 → token 与 appkey **跨源**。
      *
-     * 为什么默认关闭：切换会改变请求风控画像，且旧行为对绝大多数接口是能用的（只有少数严格接口
-     * 受影响）。默认保持历史行为 = 升级零回归；遇到 -663 的用户可以自己打开验证。
+     * ## v5.3.0 为什么把默认值反过来了（实测，不是推测）
+     * 上一版默认「不启用同源」，理由是当时本机没有可用 token，只能按文档推断「少数严格接口会 -663」。
+     * v5.3.0 拿到真实四端凭据实测（`notes/api_matrix_v530.md` §1，`tmp_api/probe_ports.py` 可复现）：
+     * 同一个手机端 access_token，用 android 密钥签名 → **code=-404 全盘失败**；
+     * 用 TV 密钥同源签名 → **code=0 且 mid/coins/level 全对**。
+     * 所以旧默认不是「可能出问题」，而是「一定拿不到数据」。默认改成同源。
+     *
+     * 这个开关现在的含义是「**退回旧的 android 密钥签名**」，只用于排查复现，
+     * 所以文案也改成让人一眼看出「这是退回旧行为、会坏」。
      * 切换不会丢已登录 token（身份 id 仍是 IDENTITY_PHONE，槽位键不变）。
      */
     private fun setupPhoneTvSignSwitch() {
@@ -179,8 +185,8 @@ class SettingAccountActivity : BaseActivity() {
             // 身份变了要清掉挂起的路由决策，让下一次请求立刻按新身份重新判定
             ApiRouter.clearSuspensions()
             MsgUtil.showMsg(
-                if (isChecked) "已切换为同源签名，重新进页面后生效"
-                else "已切回历史签名口径"
+                if (isChecked) "已退回旧签名口径（android 密钥，实测会 -404，仅供排查）"
+                else "已切回同源签名（TV 密钥，实测可用）"
             )
         }
     }
@@ -296,8 +302,12 @@ class SettingAccountActivity : BaseActivity() {
     }
 
     /**
-     * 一行账号：昵称（没有就 uid）+「当前账号」标记 +「切换」「退出」两个按钮。
+     * 一行账号：昵称（没有就 uid）+「当前账号」标记 +「切换」「凭据」「退出」按钮。
      * 激活账号不显示「切换」（再点一次没有意义），避免用户误点。
+     *
+     * 「凭据」按钮是 v5.3.0 新增：同一个账号在同一端口下可以并存多份凭据并随时切换
+     * （用户需求）。按钮文案带上份数，让用户不用点进去就知道这个号存了几份 ——
+     * 手表屏幕上多一次点击就是多一次误触机会。
      */
     private fun buildAccountRow(port: String, entry: AccountStore.AccountEntry): View {
         val row = LinearLayout(this)
@@ -324,6 +334,14 @@ class SettingAccountActivity : BaseActivity() {
             buttons.addView(switchButton, weightedParams())
         }
 
+        val credButton = MaterialButton(this)
+        // 惰性迁移后至少 1 条（见 AccountCredentialStore.credentials 的 KDoc）
+        val credCount = AccountCredentialStore.credentialCount(port, entry.mid)
+        credButton.text = if (credCount > 1) "凭据 " + credCount else "凭据"
+        credButton.textSize = 11f
+        credButton.setOnClickListener { showCredentialDialog(port, entry) }
+        buttons.addView(credButton, weightedParams())
+
         val logoutButton = MaterialButton(this)
         logoutButton.text = "退出"
         logoutButton.textSize = 11f
@@ -347,6 +365,152 @@ class SettingAccountActivity : BaseActivity() {
         }
         MsgUtil.showMsg("已切换到 " + AccountStore.portDisplayName(port) + " 端的该账号")
         refreshAll()
+    }
+
+    // ==================== 多凭据（v5.3.0） ====================
+
+    /**
+     * 弹出该账号的凭据列表：切换 / 重命名 / 删除 / 保存当前。
+     *
+     * # 为什么用 AlertDialog + 自建 RadioGroup 而不是 RecyclerView
+     * 一个账号的凭据通常只有 2~5 份，列表长度很短；`AlertDialog.setItems` 在圆屏上
+     * 会自动收窄并滚动，比自己套一层 RecyclerView 更省事，也不会引入新的 layout 资源
+     * （本轮 res/ 归 Lead 管，尽量不动）。
+     *
+     * # 指纹只显示「字段名 + 长度」
+     * 见 [AccountCredentialStore] 的 `fingerprintOf` 注释：手表屏幕窄、用户会截图求助，
+     * 任何真实字符都是泄露面。用户需要的「区分两份」靠保存时间 + 长度就够了。
+     */
+    @SuppressLint("SetTextI18n")
+    private fun showCredentialDialog(port: String, entry: AccountStore.AccountEntry) {
+        val displayName = entry.name.ifBlank { "uid " + entry.mid }
+        val credentials = AccountCredentialStore.credentials(port, entry.mid)
+        val titles = ArrayList<String>()
+        for (cred in credentials) {
+            val current = if (cred.active) " · 当前" else ""
+            // 第一行：名称 + 当前标记；第二行：保存时间 + 指纹（n 换行在 AlertDialog 里会保留）
+            val savedText = if (cred.savedAt > 0L) formatSavedAt(cred.savedAt) else "旧数据"
+            var line = cred.label + current + "\n" + savedText
+            if (cred.fingerprint.isNotEmpty()) line = line + " · " + cred.fingerprint
+            titles.add(line)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("凭据 · " + AccountStore.portDisplayName(port) + " · " + displayName)
+            .setItems(titles.toTypedArray()) { _, which ->
+                val cred = credentials.getOrNull(which) ?: return@setItems
+                onCredentialChosen(port, entry, cred)
+            }
+            .setPositiveButton("保存当前") { _, _ ->
+                saveCurrentCredential(port, entry)
+            }
+            .setNeutralButton("关闭", null)
+            .show()
+    }
+
+    /** 选中一条凭据：已激活的提示无意义，其余执行切换 */
+    private fun onCredentialChosen(
+        port: String,
+        entry: AccountStore.AccountEntry,
+        cred: AccountCredentialStore.CredentialEntry
+    ) {
+        if (cred.active) {
+            // 已激活的条目再点一次没有意义，但用户可能想改名/删除它 —— 给一条简短提示，
+            // 具体操作走长按（下面的 confirmCredentialAction）
+            showCredentialActions(port, entry, cred)
+            return
+        }
+        if (!AccountCredentialStore.setActive(port, entry.mid, cred.id)) {
+            MsgUtil.showMsg("切换失败：该凭据已不存在")
+            return
+        }
+        MsgUtil.showMsg("已切换到凭据「" + cred.label + "」")
+        refreshAll()
+    }
+
+    /** 对某条凭据的操作菜单（改名 / 删除） */
+    private fun showCredentialActions(
+        port: String,
+        entry: AccountStore.AccountEntry,
+        cred: AccountCredentialStore.CredentialEntry
+    ) {
+        val actions = arrayOf("重命名", "删除")
+        AlertDialog.Builder(this)
+            .setTitle(cred.label)
+            .setItems(actions) { _, which ->
+                if (which == 0) renameCredential(port, entry, cred) else deleteCredential(port, entry, cred)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun renameCredential(
+        port: String,
+        entry: AccountStore.AccountEntry,
+        cred: AccountCredentialStore.CredentialEntry
+    ) {
+        val input = android.widget.EditText(this)
+        input.setText(cred.label)
+        input.setSelection(input.text.length)
+        AlertDialog.Builder(this)
+            .setTitle("重命名凭据")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val name = input.text.toString()
+                if (AccountCredentialStore.rename(port, entry.mid, cred.id, name)) {
+                    MsgUtil.showMsg("已重命名")
+                    refreshAll()
+                } else {
+                    MsgUtil.showMsg("重命名失败")
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun deleteCredential(
+        port: String,
+        entry: AccountStore.AccountEntry,
+        cred: AccountCredentialStore.CredentialEntry
+    ) {
+        // 只剩一条时不允许删：删完这个号就「有账号没凭据」，导出/请求全部静默失效，
+        // 用户还得重新登录才能恢复（AccountCredentialStore.delete 里也有同样的拦截）
+        if (AccountCredentialStore.credentialCount(port, entry.mid) <= 1) {
+            MsgUtil.showMsg("至少要保留一份凭据；要清空请用「退出」")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("删除凭据")
+            .setMessage("将删除凭据「" + cred.label + "」。\n" +
+                    "只影响这一份凭据，账号本身、收藏、历史都不会变。" +
+                    if (cred.active) "\n它是当前使用的凭据，删除后会自动切到另一份。" else "")
+            .setPositiveButton("删除") { _, _ ->
+                if (AccountCredentialStore.delete(port, entry.mid, cred.id)) {
+                    MsgUtil.showMsg("已删除")
+                    refreshAll()
+                } else {
+                    MsgUtil.showMsg("删除失败：至少保留一份")
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 把账号槽当前的值另存为一份新凭据（用户手动打快照） */
+    private fun saveCurrentCredential(port: String, entry: AccountStore.AccountEntry) {
+        val cid = AccountCredentialStore.saveCurrent(port, entry.mid, "")
+        if (cid == null) {
+            MsgUtil.showMsg("当前没有可用凭据可保存")
+            return
+        }
+        MsgUtil.showMsg("已保存为新凭据，可在列表里切换")
+        refreshAll()
+    }
+
+    /** 保存时间格式化：`MM-dd HH:mm`，与凭据默认名同一口径 */
+    private fun formatSavedAt(savedAt: Long): String {
+        return java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(savedAt))
     }
 
     /** 退出需二次确认；退出激活账号后 AccountStore 会自动切到同端口下一个账号，这里只刷新 UI */

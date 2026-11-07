@@ -52,28 +52,39 @@ import org.json.JSONObject // quality-allow 同上（导出/导入的载体就�
  */
 object AccountCredentials {
 
-    /** 导出文件的格式版本（旧扁平格式没有这个键，视为 1） */
-    const val EXPORT_VERSION = 2
+    /**
+     * 导出文件的格式版本。
+     *
+     * 演进史（导入端必须**同时**认这三种）：
+     * - `1`（旧扁平，无 version 键）：顶层直接 `{"cookies":..,"refresh_token":..}`，只有 web 单账号；
+     * - `2`：`{"version":2,"accounts":{port:[{mid,name,face,cookies,...}]}}`，每端多账号，
+     *   但每个账号只有**一份**凭据；
+     * - `3`（v5.3.0）：在 v2 基础上给每个账号加 `credentials[]` + `active_credential`，
+     *   顶层 6 字段保留为「激活凭据的镜像」——所以 v3 文件被 v2 版本的 App 读也能正常导入。
+     */
+    const val EXPORT_VERSION = 3
 
     private const val TAG = "account-creds"
 
     /**
-     * 四端**同时**导出全部账号凭据。
+     * 四端**同时**导出全部账号凭据（含每个账号的全部多份凭据，v5.3.0 格式 v3）。
      *
-     * @return JSON 字符串。没有任何账号时返回 `{"version":2,"accounts":{}}` 而不是空串，
+     * @return JSON 字符串。没有任何账号时返回 `{"version":3,"accounts":{}}` 而不是空串，
      *         这样调用方可以无脑 put 进 JSONObject 而不用先判空。
      *
-     * 注意：**不要**把这个返回值打日志（含 SESSDATA / access_key / refresh_token）。
+     * 注意：**不要**把这个返回值打日志（含 SESSDATA / access_token / refresh_token）。
      */
     @JvmStatic
     fun exportAll(): String {
         val accounts = JSONObject()
         var total = 0
+        var credentialsTotal = 0
         for (port in AccountStore.allPorts()) {
             val list = JSONArray()
             for (mid in AccountStore.midList(port)) {
                 list.put(entryOf(port, mid))
                 total += 1
+                credentialsTotal += AccountCredentialStore.credentialCount(port, mid)
             }
             accounts.put(port, list)
         }
@@ -81,11 +92,23 @@ object AccountCredentials {
         root.put("version", EXPORT_VERSION)
         root.put("exported_at", System.currentTimeMillis())
         root.put("accounts", accounts)
-        Logu.d(TAG, "导出了 $total 个账号（跨 " + AccountStore.allPorts().size + " 个端口）")
+        Logu.d(TAG, "导出了 $total 个账号 / $credentialsTotal 份凭据（跨 "
+                + AccountStore.allPorts().size + " 个端口）")
         return root.toString()
     }
 
-    /** 组装一个账号的导出条目（字段来自 [AccountStore.credentialFields]，本文件不碰内部键名） */
+    /**
+     * 组装一个账号的导出条目。
+     *
+     * v5.3.0 新增两个键：
+     * - `credentials`：该账号的**全部**凭据（每份含 id/label/saved_at + 6 个字段）；
+     * - `active_credential`：当前激活那份的 id。
+     *
+     * 顶层的 6 个字段**保留不动**（= 激活凭据的镜像）。理由：
+     * 1. v2 的读取方（旧版本 App、用户自己的脚本）继续能读；
+     * 2. 导入时若 `credentials` 缺失/损坏，靠顶层字段仍能救回一份；
+     * 3. 导出体积增加有限（每账号多几份），换来的是「换机后凭据不丢」。
+     */
     private fun entryOf(port: String, mid: Long): JSONObject {
         val entry = JSONObject()
         entry.put("mid", mid)
@@ -94,6 +117,21 @@ object AccountCredentials {
         for ((field, value) in AccountStore.credentialFields(port, mid)) {
             entry.put(field, value)
         }
+        // 多凭据（v3）：字段名与顶层同名同义，导入时直接复用同一套映射
+        val credList = JSONArray()
+        for (cred in AccountCredentialStore.credentials(port, mid)) {
+            val item = JSONObject()
+            item.put("id", cred.id)
+            item.put("label", cred.label)
+            item.put("saved_at", cred.savedAt)
+            for ((field, value) in AccountCredentialStore.fieldsOf(port, mid, cred.id)) {
+                item.put(field, value)
+            }
+            credList.put(item)
+        }
+        if (credList.length() > 0) entry.put("credentials", credList)
+        val activeId = AccountCredentialStore.activeId(port, mid)
+        if (activeId.isNotEmpty()) entry.put("active_credential", activeId)
         return entry
     }
 
@@ -175,6 +213,9 @@ object AccountCredentials {
     /**
      * 导入单个账号条目。
      *
+     * v5.3.0：除了写账号（走 loginWeb/loginApp，等于「激活一份」），
+     * 还会把条目里的 `credentials[]` 全部补进凭据层 —— 见 [importCredentialList]。
+     *
      * @return 是否真的写入了（mid 非法、或一条凭据都没有的条目不写）
      */
     private fun importOne(port: String, entry: JSONObject?): Boolean {
@@ -193,8 +234,72 @@ object AccountCredentials {
         } else {
             AccountStore.loginApp(port, mid, token, refresh, cookies, name, face)
         }
+        // 再补齐这个账号的多份凭据（v3 才有）。顺序很重要：必须在上面的 login 之后，
+        // 因为 login 会先落一份「本次登录」凭据，这里再补历史的那几份。
+        importCredentialList(port, mid, entry.optJSONArray("credentials"), entry.optString("active_credential", ""))
         return true
     }
+
+    /**
+     * 把 v3 条目里的 `credentials[]` 补进凭据层（v5.3.0）。
+     *
+     * # 为什么不去重
+     * 导入是**合并**语义：本机可能已经有同名/同内容的凭据。按内容比对会引入
+     * 「怎么算相同」的判定（长度？前 8 位？完整字符串？）——每一种都可能误合并掉
+     * 用户真正想保留的那份。凭据是很小的数据，宁可多一条让用户自己删。
+     *
+     * # 激活哪一份
+     * `active_credential` 指的那份如果导入成功，设为激活。找不到就保持 login 落下的那份
+     * （那是本机可用的最新凭据，比随便挑一条更安全）。
+     */
+    private fun importCredentialList(port: String, mid: Long, list: JSONArray?, activeId: String) {
+        if (list == null || list.length() == 0) return
+        var activeImportedId: String? = null
+        var imported = 0
+        for (i in 0 until list.length()) {
+            // 一条 null 条目直接当成「没有可导入内容」交给 importOneCredential 处理，
+            // 循环体里只留一次判空与一次调用（避免多个 continue，detekt 会拦）
+            val item = list.optJSONObject(i)
+            val cid = if (item == null) null else importOneCredential(port, mid, item)
+            if (cid == null) continue
+            imported += 1
+            if (activeId.isNotEmpty() && item != null && item.optString("id", "") == activeId) {
+                activeImportedId = cid
+            }
+        }
+        // 有明确指定的激活凭据就切过去；切换会顺带把账号槽与激活槽位一起更新
+        if (activeImportedId != null) AccountCredentialStore.setActive(port, mid, activeImportedId)
+        if (imported > 0) Logu.d(TAG, "导入凭据 port=" + port + " mid=" + mid + " 份数=" + imported)
+    }
+
+    /**
+     * 导入凭据数组里的**一条**。
+     *
+     * 从 [importCredentialList] 拆出来是为了控制圈复杂度（detekt CyclomaticComplexMethod 阈值 15）
+     * 与「一个循环里多个 continue」（LoopWithTooManyJumpStatements）：
+     * 「这条要不要导、怎么导」是一个独立的判断，和「遍历整个数组」本来就不是一件事。
+     *
+     * @return 新凭据 id；这条是废数据（没有任何凭据内容）时返回 null
+     */
+    private fun importOneCredential(port: String, mid: Long, item: JSONObject): String? {
+        val fields = HashMap<String, String>()
+        for (field in CREDENTIAL_FIELDS) {
+            val value = item.optString(field, "")
+            if (value.isNotEmpty()) fields[field] = value
+        }
+        // 既没 cookie 也没 token 的条目是废数据（例如导出时该账号只剩昵称），不写进凭据层
+        if (fields["cookies"].isNullOrEmpty() && fields["access_token"].isNullOrEmpty()) return null
+        return AccountCredentialStore.importCredential(
+            port, mid, fields,
+            item.optString("label", ""),
+            item.optLong("saved_at", 0L)
+        )
+    }
+
+    /** 凭据的 6 个字段名（与 [AccountStore.credentialFields] / [AccountCredentialStore] 同一套） */
+    private val CREDENTIAL_FIELDS = listOf(
+        "cookies", "csrf", "access_token", "refresh_token", "name", "face"
+    )
 
     /**
      * 把该端口**第一个有 mid 的条目**设为激活。

@@ -378,6 +378,11 @@ object AccountStore {
             writeActiveSlots(PORT_WEB, mid)
         }
         NetWorkUtil.refreshHeaders()
+        // v5.3.0：把这次登录的凭据**另存为一条独立凭据**（而不是覆盖该账号已有的那份）。
+        // 用户需求是「同一个账号可以并存多份凭据、随时切回」：如果登录直接覆盖账号槽，
+        // 那份旧的 SESSDATA 就再也拿不回来了。saveCurrent 读的是刚写好的账号槽，
+        // 所以这里顺序必须在 writeActiveSlots 之后。
+        AccountCredentialStore.saveCurrent(PORT_WEB, mid, "扫码登录 " + shortNow())
     }
 
     /**
@@ -406,6 +411,14 @@ object AccountStore {
                     name ?: accountName(portValue, mid), face ?: accountFace(portValue, mid))
             writeActiveSlots(portValue, mid)
         }
+        // v5.3.0：同 loginWeb —— 新登录的 token 另存为一条凭据，旧的不被覆盖
+        AccountCredentialStore.saveCurrent(portValue, mid, "扫码登录 " + shortNow())
+    }
+
+    /** `MM-dd HH:mm` 形式的当前时刻（凭据默认名用，避免把具体实现散到 UI 层） */
+    private fun shortNow(): String {
+        return java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date())
     }
 
     /** 更新账号的昵称/头像缓存（拉取到资料后调用；空值不覆盖） */
@@ -655,6 +668,55 @@ object AccountStore {
         if (refreshToken.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_REFRESH_TOKEN), refreshToken)
         if (name.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_NAME), name)
         if (face.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_FACE), face)
+    }
+
+    // ==========================================================================================
+    // 多凭据桥接（v5.3.0）
+    // ==========================================================================================
+    //
+    // 凭据层的**全部实现**在 [AccountCredentialStore]，这里只放两个反向入口：
+    // 1. [writeCredentialFields]：让凭据层能把某份凭据写回账号槽（切号用）；
+    // 2. [credentialFields]（已存在）：账号槽的读取面，凭据层用它做镜像与迁移。
+    //
+    // 为什么不把凭据逻辑写进本类：本类已经 800+ 行且被 detekt 的 LargeClass 盯着
+    // （baseline 按签名匹配，加方法/改签名都会顶破），凭据层单开文件更好维护。
+    // 为什么这两个方向必须都经过本类：账号槽的键名是本类的内部实现细节，
+    // 让凭据层直接拼 `account_mgmt_<port>_<mid>_*`，等于把键结构复制到第二个文件里，
+    // 以后改键名必然漏一处。
+
+    /**
+     * 把一份凭据写回该账号的**账号槽**（切号路径的落地动作）。
+     *
+     * 语义与 [writeAccountSlot] 一致：**空值不覆盖**。这一点很关键 ——
+     * 切到一份「只有 cookies、没有 access_token」的 web 凭据时，
+     * 不能把该账号原来的 access_token 抹掉（那会让 APP 端口一起掉线）。
+     *
+     * @param fields 键为 `cookies`/`csrf`/`access_token`/`refresh_token`/`name`/`face`，
+     *   与 [credentialFields] 的返回键**同一套**
+     */
+    @JvmStatic
+    @JvmSuppressWildcards
+    fun writeCredentialFields(port: String, mid: Long, fields: Map<String, String>) {
+        if (mid <= 0L || fields.isEmpty()) return
+        ensureMigrated()
+        val portValue = normalizePort(port)
+        writeAccountSlot(
+            portValue, mid,
+            fields["cookies"] ?: "",
+            fields["csrf"] ?: "",
+            fields["access_token"] ?: "",
+            fields["refresh_token"] ?: "",
+            fields["name"] ?: "",
+            fields["face"] ?: ""
+        )
+        // 账号槽变了，激活槽位必须跟着变 —— 否则「切了凭据但请求还用旧的」。
+        // 这里只在「该账号就是这个端口的激活账号」时才动激活槽位：
+        // 给一个非激活账号切凭据不该影响当前正在用的账号。
+        if (activeMidValue(portValue) == mid) {
+            writeActiveSlots(portValue, mid)
+            if (portValue == PORT_WEB) NetWorkUtil.refreshHeaders()
+        }
+        Logu.d(TAG, "凭据写回账号槽 port=" + portValue + " mid=" + mid + " fields=" + fields.size)
     }
 
     private fun clearAccountSlot(port: String, mid: Long) {

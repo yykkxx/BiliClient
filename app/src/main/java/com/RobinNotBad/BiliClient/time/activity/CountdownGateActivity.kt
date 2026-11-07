@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -65,6 +66,9 @@ class CountdownGateActivity : BaseActivity() {
     private var detailBorrowedView: TextView? = null
     private var detailLevelView: TextView? = null
 
+    /** 「单击查看详情」的提示行；详情层被关掉时要一起隐藏（v5.3.0 泛化） */
+    private var tapHintView: TextView? = null
+
     /** 本次需要等的总毫秒（来自 [Gate.waitSeconds]） */
     private var totalMs = 0L
 
@@ -82,6 +86,12 @@ class CountdownGateActivity : BaseActivity() {
 
     /** 是否已显示详情层（false = 大数字层，默认） */
     private var showingDetail = false
+
+    /** 调用方传入的自定义标题；null = 沿用按档位生成的文案（启动页口径） */
+    private var customTitle: String? = null
+
+    /** 是否允许「单击查看当天使用时间详情」（启动页 true；UsageControl 的两条守卫 false） */
+    private var showDetail = true
 
     /** 归零是否已处理（防重复 setResult / finish） */
     private var endHandled = false
@@ -124,9 +134,27 @@ class CountdownGateActivity : BaseActivity() {
         detailRemainingView = findViewById(R.id.tm2_countdown_detail_remaining)
         detailBorrowedView = findViewById(R.id.tm2_countdown_detail_borrowed)
         detailLevelView = findViewById(R.id.tm2_countdown_detail_level)
+        tapHintView = findViewById(R.id.tm2_countdown_tap_hint)
 
-        // 秒数来自 Gate（它已经是唯一的口径来源：21:30 之后返回 0）
-        totalMs = Gate.waitSeconds().toLong() * MS_PER_SECOND
+        // ---- 入参（v5.3.0 泛化，见类注释「作为通用倒计时载体」那一节）----
+        // 三个 extra 全都**可选**，不传时逐项回落到「打开应用时的等待」这套原始语义，
+        // 所以启动页那条路径（`LauncherActivity` → 本页，不带任何 extra）行为零变化。
+        customTitle = intent.getStringExtra(EXTRA_TITLE)
+        showDetail = intent.getBooleanExtra(EXTRA_SHOW_DETAIL, true)
+        // 秒数：有 extra 就用它，否则仍然问 Gate（唯一口径来源，21:30 之后返回 0）
+        totalMs = if (intent.hasExtra(EXTRA_TOTAL_SEC)) {
+            intent.getIntExtra(EXTRA_TOTAL_SEC, 0).coerceAtLeast(0).toLong() * MS_PER_SECOND
+        } else {
+            Gate.waitSeconds().toLong() * MS_PER_SECOND
+        }
+
+        // 详情层被关掉时，连「点一下看详情」这个入口也不该留着：
+        // 它是给「今天用了多久」看的，与「关总开关/调大配额」这两条守卫无关，
+        // 留着会让用户以为等待期间能查到什么，点开却是空的（见 usage 的守卫调用点）。
+        if (!showDetail) {
+            detailLayer?.visibility = View.GONE
+            tapHintView?.visibility = View.GONE
+        }
 
         findViewById<View>(R.id.tm2_countdown_root)?.setOnClickListener { onScreenClick() }
         fillTexts()
@@ -134,6 +162,29 @@ class CountdownGateActivity : BaseActivity() {
         refreshDetail()
         registerScreenReceiver()
     }
+
+    /**
+     * 返回键 = **取消**（v5.3.0）。
+     *
+     * 显式写出来而不是靠默认行为：本页现在不只服务「打开应用等待」，还被
+     * 「关闭总开关 / 调大配额」两条守卫复用。那两条的调用方要看 `resultCode` 决定
+     * **要不要真的写偏好**，所以「用户按返回」必须明确表达成 RESULT_CANCELED。
+     *
+     * 对启动页来说这个值原本就是默认值（`LauncherActivity` 不读 resultCode，它一律重问 Gate），
+     * 所以显式设置**不改变启动页行为**。
+     */
+    @Deprecated("Android 13+ 走 OnBackInvokedCallback，但 minSdk 29 仍需覆盖；与本项目其它页面一致")
+    override fun onBackPressed() {
+        cancelAndFinish()
+    }
+
+    /** 用户主动取消：不写任何偏好，只为把 RESULT_CANCELED 带给调用方 */
+    private fun cancelAndFinish() {
+        if (isDestroyed || isFinishing) return
+        setResult(RESULT_CANCELED)
+        finish()
+    }
+
 
     override fun onResume() {
         super.onResume()
@@ -173,6 +224,7 @@ class CountdownGateActivity : BaseActivity() {
         detailRemainingView = null
         detailBorrowedView = null
         detailLevelView = null
+        tapHintView = null
         super.onDestroy()
     }
 
@@ -194,17 +246,31 @@ class CountdownGateActivity : BaseActivity() {
             DailyPlan.LEVEL_YELLOW -> R.string.tm2_countdown_title_mid
             else -> R.string.tm2_countdown_title
         }
-        // 绿色档不会进本页（等待 0 秒），但兜底用无参数那句，避免格式化参数对不上
-        titleView?.text = if (DailyPlan.waitSecondsFor(usedMs) > 0) {
-            getString(titleRes, TimeFormat.duration(usedMs), waitSec)
-        } else {
-            getString(titleRes)
+        // 调用方给了自定义标题就用它（v5.3.0 泛化）：UsageControl 的两条守卫
+        // 说的是「关闭使用控制要等 120 秒」「调大配额要等 120 秒」，与本页默认那句
+        // 「今天已经用了 X 分钟，红档需要等 N 秒」**完全无关** —— 照搬会让用户以为
+        // 关个开关还要被记录使用时长。
+        val custom = customTitle
+        titleView?.text = when {
+            !custom.isNullOrBlank() -> custom
+            // 判据用 **Gate.waitSeconds()**（要等几秒）而不是 DailyPlan.waitSecondsFor（这是哪一档）：
+            // 休息日 / 21:30 之后这两个值故意不同 —— 档位还是红，但一秒都不用等。
+            // 若按档位判，本页会说出「红色档需要等 0 秒」这种自相矛盾的话
+            // （v5.3.0：休息日不再进本页，但页面残留/直接跳转时仍要自洽）。
+            waitSec > 0 -> getString(titleRes, TimeFormat.duration(usedMs), waitSec)
+            else -> getString(R.string.tm2_countdown_title)
         }
 
         // 大数字的颜色也跟三档语义走（黄档黄字、红档红字）：
         // 「为什么让我等」这件事，颜色比一句 13sp 的说明更快被看见。
         // **色值只从 TimeFormat 取**，不在这里写死任何颜色 —— 三档色全 App 只有一个来源。
-        secondsView?.setTextColor(TimeFormat.levelColor(this, DailyPlan.levelOf(usedMs)))
+        //
+        // 自定义标题的场景（关闭总开关/调大配额）**不跟随三档色**：那两条与「今天用了多久」
+        // 无关，染成红色会让用户误以为自己的用量出了问题。用中性白。
+        secondsView?.setTextColor(
+            if (!custom.isNullOrBlank()) Color.WHITE
+            else TimeFormat.levelColor(this, DailyPlan.levelOf(usedMs))
+        )
     }
 
     /**
@@ -379,6 +445,10 @@ class CountdownGateActivity : BaseActivity() {
      * 所以「看详情时倒计时继续」是自然成立的，不需要额外逻辑。
      */
     private fun onScreenClick() {
+        // 调用方关掉详情层时（EXTRA_SHOW_DETAIL=false）整页点击**不响应**：
+        // 那两条守卫（关闭总开关 / 调大配额）没有「今天用了多久」可看，
+        // 点一下却什么都不出现比"点了没反应"更让人困惑，所以索性不动。
+        if (!showDetail) return
         showingDetail = !showingDetail
         bigLayer?.visibility = if (showingDetail) View.GONE else View.VISIBLE
         detailLayer?.visibility = if (showingDetail) View.VISIBLE else View.GONE
@@ -431,7 +501,32 @@ class CountdownGateActivity : BaseActivity() {
         receiverRegistered = false
     }
 
-    private companion object {
+    companion object {
+        /**
+         * 本次要等的**总秒数**（Int extra）。
+         *
+         * 不传 = 沿用 `Gate.waitSeconds()`（打开应用时的等待，启动页那条路径）。
+         * 传了就用它，供「关闭总开关 / 调大配额」这类自定义等待复用本页 ——
+         * 用户要求「所有倒计时都统一用那个独立的倒计时界面」。
+         */
+        const val EXTRA_TOTAL_SEC = "countdown_total_sec"
+
+        /**
+         * 自定义标题（String extra）。不传 = 沿用按档位生成的「今天已经用了 X，红档等 N 秒」。
+         *
+         * 守卫类场景必须传：那句默认文案讲的是「今天用了多久」，与「关个开关要等 120 秒」
+         * 毫无关系，照搬会让用户以为关开关也被计入使用时长。
+         */
+        const val EXTRA_TITLE = "countdown_title"
+
+        /**
+         * 是否允许单击查看「当天使用时间详情」（Boolean extra，默认 **true**）。
+         *
+         * 启动页要（用户需求原文「单击可以浏览当天使用时间详情」）；
+         * 守卫场景不要 —— 那与用量无关。
+         */
+        const val EXTRA_SHOW_DETAIL = "countdown_show_detail"
+
         /** 毫秒 → 秒 */
         const val MS_PER_SECOND = 1000L
 

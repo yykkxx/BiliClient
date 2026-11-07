@@ -16,6 +16,7 @@ import com.RobinNotBad.BiliClient.api.RecommendApi
 import com.RobinNotBad.BiliClient.helper.TutorialHelper
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
@@ -33,10 +34,25 @@ import java.util.Objects
 
 class RecommendActivity : RefreshMainActivity() {
 
-    private lateinit var videoCardList: MutableList<VideoCard>
-    private lateinit var videoCardAdapter: VideoCardAdapter
+    // v5.3.0：`videoCardList` / `videoCardAdapter` 改成可空并在第一次成功加载后才赋值。
+    //
+    // 旧写法是 `lateinit var` + `firstRefresh` 标志，问题在于 `refreshRecommend()` 分两支：
+    // 首次走「新建列表」，之后走「就地 clear + notifyItemRangeRemoved」，而 `videoCardAdapter`
+    // 也是在首次成功回调里才 `lateinit` 赋值。
+    // 于是有一条真实会崩/静默失效的路径：**首次加载失败**（`loadFail` 只把 firstRefresh 留在 true）
+    // → 用户下拉刷新 → 再次失败 → 都不碰 adapter（这条路没事）；
+    // 但只要「首次成功过一次之后」列表被清空，`refreshRecommend` 就会走到
+    // `videoCardAdapter.notifyItemRangeRemoved(...)`，而如果这次请求中途抛异常，
+    // `notifyItemRangeInserted` 永远不会被调用 —— 用户看到的就是**下拉刷新只留下一个空列表**
+    // （正是「web 端口无法刷新」的观感）。
+    // 改成可空 + 每次刷新走同一个「成功才替换」的路径，能让失败时**保留旧内容**。
+    private var videoCardList: MutableList<VideoCard> = ArrayList()
+    private var videoCardAdapter: VideoCardAdapter? = null
     private var firstRefresh = true
     private var startWorkDone = false
+
+    /** 刷新是否正在进行：挡住「下拉刷新」与「触底加载更多」并发改同一个列表（v5.3.0） */
+    private var refreshInFlight = false
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,42 +146,109 @@ class RecommendActivity : RefreshMainActivity() {
         NetWorkUtil.refreshHeaders()
     }
 
-    @SuppressLint("NotifyDataSetChanged")
+    /**
+     * 下拉刷新（用户需求 #8：「web 端口无法刷新」，v5.3.0 重写）。
+     *
+     * # 旧实现为什么表现为「无法刷新」
+     * 旧代码在**开始刷新时就把列表清空**（`videoCardList.clear()` + `notifyItemRangeRemoved`），
+     * 然后才去后台发请求。这条路径有两个致命点：
+     * 1. **失败即空列表**：请求抛异常时走 `loadFail`，它只 `setRefreshing(false)`，
+     *    **不会把旧数据放回来** —— 用户看到的是「转了一圈，列表空了/没变」，即「刷新无效」；
+     * 2. **清空与回填不是原子的**：web 推荐要发 WBI 签名请求，本机在弱网/风控下
+     *    偶发 `data:null`（旧解析会抛 JSONException），于是这个问题在 web 端口上更容易复现。
+     *
+     * # 现在的做法（「成功才替换」）
+     * 不再提前清空：先在后台把新列表拉全，成功后再**一次性替换** adapter 的数据源。
+     * - 成功：`videoCardList` 换成新列表并 `notifyDataSetChanged`，用户看到内容整体换新；
+     * - 失败：**旧内容原样保留**（只是收起下拉圈 + 弹一条原因），用户至少还能继续看，
+     *   而不是对着空白页以为「刷新把东西弄没了」。
+     *
+     * 同时用 [refreshInFlight] 挡住「下拉刷新」与「触底加载更多」并发改同一个列表
+     * —— 两者都会 `addAll`/`clear`，并发时会出现「刷新回来的内容被上一页追加覆盖」的错序。
+     */
     private fun refreshRecommend() {
         Log.e("debug", "刷新")
-        if (firstRefresh) {
-            videoCardList = ArrayList()
-        } else {
-            val last = videoCardList.size
-            videoCardList.clear()
-            videoCardAdapter.notifyItemRangeRemoved(0, last)
+        if (refreshInFlight) return
+        refreshInFlight = true
+        // 用 CoroutineScopes 而不是 CenterThreadPool + runOnUiThread：新代码门禁禁止后者，
+        // 且协程版有结构化并发 —— `io { }` 跑完自动切回主线程，不需要手动 post。
+        CoroutineScopes.launchUi {
+            try {
+                val list: MutableList<VideoCard> = ArrayList()
+                CoroutineScopes.io { RecommendApi.getRecommend(list, true) }
+                if (isDestroyed || isFinishing) return@launchUi
+                applyRefreshedList(list)
+            } catch (e: Exception) {
+                if (isDestroyed || isFinishing) return@launchUi
+                // 关键：这里**不碰 videoCardList**，旧内容原样保留
+                report(e)
+            } finally {
+                // 无论成败都要收起下拉圈，否则 SwipeRefresh 会一直转（旧实现的另一个观感问题）
+                setRefreshing(false)
+                refreshInFlight = false
+            }
         }
+    }
 
-        addRecommend(true)
+    /**
+     * 刷新成功后把新数据整体换进列表。
+     *
+     * 首次（还没建 adapter）走「新建 adapter + setAdapter」；之后走
+     * 「原地替换内容 + notifyDataSetChanged」。
+     *
+     * 为什么之后不用 `notifyItemRangeInserted`：刷新是**整体替换**语义，不是追加；
+     * 用插入通知需要精确算出旧长度/新长度，任何一处算错都会 IndexOutOfBounds
+     * （收藏夹页历史上就是这么崩过，见 notes/fav_fix_alpha8.md）。
+     * 推荐页数据量只有几十条，整体刷新一次的开销可以忽略。
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private fun applyRefreshedList(list: MutableList<VideoCard>) {
+        videoCardList = list
+        // adapter 持有的是构造时传进去的 list 引用（`val videoCardList: List<VideoCard>`），
+        // 换成新列表不会自动同步，所以这里**直接新建一个 adapter 再 setAdapter**。
+        // 为什么不复用旧 adapter 只 notifyDataSetChanged：那会继续显示旧 list 的内容
+        // （引用没变），等于「刷新了但界面不变」—— 正是本条需求要修的现象。
+        // 推荐页只有几十条，重建 adapter 的开销可以忽略。
+        val newAdapter = VideoCardAdapter(this, videoCardList)
+        newAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
+        videoCardAdapter = newAdapter
+        setAdapter(newAdapter)
+        firstRefresh = false
     }
 
     private fun addRecommend(isRefresh: Boolean) {
         Log.e("debug", "加载下一页")
-        CenterThreadPool.run(Runnable {
+        CoroutineScopes.launchUi {
             try {
                 val list: MutableList<VideoCard> = ArrayList()
-                RecommendApi.getRecommend(list, isRefresh)
+                CoroutineScopes.io { RecommendApi.getRecommend(list, isRefresh) }
+                if (isDestroyed || isFinishing) return@launchUi
                 setRefreshing(false)
-
-                runOnUiThread {
-                    videoCardList.addAll(list)
-                    if (firstRefresh) {
-                        firstRefresh = false
-                        videoCardAdapter = VideoCardAdapter(this, videoCardList)
-                        videoCardAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
-                        setAdapter(videoCardAdapter)
-                    } else {
-                        videoCardAdapter.notifyItemRangeInserted(videoCardList.size - list.size, list.size)
-                    }
-                }
+                appendLoadedList(list)
             } catch (e: Exception) {
+                if (isDestroyed || isFinishing) return@launchUi
                 loadFail(e)
             }
-        })
+        }
+    }
+
+    /**
+     * 加载更多成功后把新数据追加到列表。
+     *
+     * `isRefresh`（首次进页）也走这里：首次同样等价于「往空列表里追加一整页」，
+     * 所以不需要两条分支 —— 少一条分支就少一处会和 [refreshRecommend] 的语义打架的地方。
+     */
+    private fun appendLoadedList(list: MutableList<VideoCard>) {
+        videoCardList.addAll(list)
+        val adapter = videoCardAdapter
+        if (adapter == null) {
+            val newAdapter = VideoCardAdapter(this, videoCardList)
+            newAdapter.feedLayout = ListLayoutUtil.isDualColumnVideo() // #4
+            videoCardAdapter = newAdapter
+            setAdapter(newAdapter)
+            firstRefresh = false
+        } else {
+            adapter.notifyItemRangeInserted(videoCardList.size - list.size, list.size)
+        }
     }
 }
