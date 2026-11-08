@@ -188,6 +188,22 @@ object NetWorkUtil {
                 ApiRouter.recordHit(plan)
                 return appResponse
             }
+            // v5.3.1：回退做成**开关**（用户需求「回退 web 可以开关」）。
+            //
+            // 默认关闭 = 保持 v5.2.1~v5.3.0 的行为（坏响应原样交给调用方，让业务码自己说话）。
+            // 打开后：用**原始 URL + 原始 headers（web 头）**重发一次。
+            //
+            // 为什么会有人想打开：只登了 web 的用户、或某端点在 APP 通道长期不可用（-352 风控等），
+            // 关着就等于功能直接消失。代价（必须让用户知道）是「APP 通道的故障会被 web 的
+            // 成功响应掩盖」，所以它是个**要用户自己承担**的选项，不是默认值。
+            //
+            // 安全边界由 ApiRouter.shouldFallbackToWeb 收口：非幂等写操作永远不回退。
+            // GET 全是幂等读，所以这里返回 true 只取决于开关。
+            if (ApiRouter.shouldFallbackToWeb(plan)) {
+                ApiRouter.recordFallback(plan, verdict.reason)
+                Logu.d("api-fallback", "APP 通道不可用，按开关回退 web：" + plan.endpoint)
+                return executeGet(url, headers, redirectHandler)
+            }
             // 不再回退：把这个坏响应交给调用方，让业务码自己说话
             ApiRouter.recordNoFallback(plan, verdict.reason)
             return appResponse
@@ -274,6 +290,23 @@ object NetWorkUtil {
             if (verdict.isOk) {
                 ApiRouter.recordHit(plan)
                 return appResponse
+            }
+            // v5.3.1：POST 也受同一个开关控制，但**安全边界更严**。
+            //
+            // ApiRouter.shouldFallbackToWeb 会检查 plan.replayable：
+            // - 幂等写（点赞/收藏/关注/稍后再看）→ 开关打开时允许回退重发；
+            // - 非幂等写（投币/发评论/发动态/发弹幕/发私信）→ **永远 false**，
+            //   即使开关打开也不回退。请求可能已经到达服务端，重发会造成
+            //   重复投币/重复评论这类不可撤销的副作用。
+            //
+            // 注意：这里**不再需要** v5.2.0 那套「判断请求有没有真的发出去」的逻辑。
+            // 那套逻辑存在的唯一目的是「决定能不能安全重放」，而现在「能不能重放」
+            // 在规则表里已经静态确定了（isPostSafe / isPostWrite），运行时再猜一次
+            // 只会引入不确定性。
+            if (ApiRouter.shouldFallbackToWeb(plan)) {
+                ApiRouter.recordFallback(plan, verdict.reason)
+                Logu.d("api-fallback", "APP 通道不可用，按开关回退 web（幂等写）：" + plan.endpoint)
+                return executePost(url, data, headers, contentType)
             }
             // 不回退：坏响应交给上层按业务码报错
             ApiRouter.recordNoFallback(plan, verdict.reason)

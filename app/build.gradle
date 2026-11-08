@@ -36,11 +36,14 @@ android {
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
-        // 5.3.0：versionCode 按「构建当天日期」规则 = 20261107（见 agent.md / plan.md 版本号约定）
-        // 次版本号：本版有「同账号多凭据切换」这条新能力（存储模型扩展），不是纯修补，
-        // 按语义版本从 5.2.1 → 5.3.0。
-        versionCode 20261107
-        versionName "5.3.0"
+        // 5.3.1：versionCode 按「构建当天日期」规则 = 20261108（见 agent.md 版本号约定）。
+        // 修补号：本轮三项都是**修复既有能力的缺陷**，没有扩展存储模型/新增页面，
+        // 按语义版本从 5.3.0 → 5.3.1。
+        //   ① media3 播几秒误回退 ijk（冻结判据误判）
+        //   ② 「APP 通道失败回退 web」做成开关（能力本身是恢复，不是新模型）
+        //   ③ web 续期修复（借 APP 端口 oauth2 的 refresh_token 换新 web Cookie，实测可行）
+        versionCode 20261108
+        versionName "5.3.1"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

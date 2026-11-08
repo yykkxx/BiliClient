@@ -45,6 +45,25 @@ object SharedPreferencesUtil {
     // 迁移完成哨兵（幂等）
     const val ACCOUNT_MGMT_MIGRATED = "account_mgmt_migrated"
 
+    /**
+     * 「APP 通道失败时自动回退 Web」开关（v5.3.1 用户需求「回退 web 可以开关」）。
+     *
+     * # 为什么做成开关而不是改回默认行为
+     * v5.2.1 删掉回退是**对的**（那条路径会让「APP 通道坏了」永远不被发现，
+     * 而且 web 未登录时回退必然再失败一次，用户白等一个 RTT）。
+     * 但「删掉」和「做成可开」是两回事：确实存在用户只登了 web、
+     * 或某个端点 APP 通道长期不可用的场景，此时回退能救回功能。
+     *
+     * # 默认 false（= 保持 v5.3.0 行为）
+     * 默认必须是关闭：它涉及「请求发几次」和「失败是否被掩盖」，
+     * 不能因为一次更新就让所有人的网络行为悄悄改变。要用的用户自己去账号管理页打开。
+     *
+     * # 安全边界（写在键注释里，防止以后被放宽）
+     * 只有 **GET / 幂等 POST** 允许回退；非幂等写操作（投币、发评论、发动态…）
+     * **任何情况下都不许回退重放** —— 那会造成重复副作用。见 [com.RobinNotBad.BiliClient.api.migration.ApiRouter.isWebFallbackEnabled]。
+     */
+    const val API_WEB_FALLBACK = "api_web_fallback"
+
     // ==================== 三端独立登录（v5.0.0 重构） ====================
     // 每个身份（hd / tv / phone）各有一套独立 token，可同时登录、互不干扰；
     // 禁止跨端转移：web Cookie 不再能转换成任何端 token，三端之间也不共用。

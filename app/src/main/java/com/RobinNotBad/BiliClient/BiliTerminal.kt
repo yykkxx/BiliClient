@@ -81,12 +81,20 @@ class BiliTerminal : Application() {
             // 必须在 onCreate 里注册（而不是更晚）：要覆盖整个进程生命周期的第一个 Activity。
             registerActivityLifecycleCallbacks(ForegroundUsageTracker())
 
-            // Web 主动续期（v5.2.1，用户需求「Web 增加主动续期」）。
+            // Web 主动续期（v5.3.1 修正门槛与回写语义）。
+            //
             // 旧实现只在 RecommendActivity 里被动跑一次：用户长时间不进推荐页时 Cookie 到期
-            // 无人续期，等到某次写操作失败才暴露。这里在进程启动后主动兜一次，
-            // 内部按 30 分钟节流（见 CookieRefreshApi.renewIfNeededOnForeground 的注释），
-            // 所以「频繁冷启动」也不会把网络请求放大成抖动源。
-            // 必须放后台线程（会发网络请求），且抛异常一律吞掉：续期失败不该影响启动。
+            // 无人续期，等到某次写操作失败才暴露。这里在进程启动后主动兜一次。
+            //
+            // v5.3.1 两处变化（都在 CookieRefreshApi 内部，这里只是调用方）：
+            // 1. 门槛从「主端口必须是 web」改成「web 端口已登录」——
+            //    前者会让用户一把其它页面端口选成 android/hd/tv，web Cookie 就再也没人续，
+            //    而推荐页 / web-only 端点 / CDN 鉴权仍然依赖它；
+            // 2. 成功后由唯一入口负责回写账号槽（旧路径漏了这一步，切号或重启就丢新 Cookie）。
+            //
+            // 返回结构化的 RenewResult，但启动路径**不看结果**：静默续期成功不该弹提示，
+            // 失败也不该打扰用户（下一次前台会再试）。所以这里只吞掉异常。
+            // 必须放后台线程（会发网络请求）。
             CenterThreadPool.run(Runnable {
                 try {
                     CookieRefreshApi.renewIfNeededOnForeground(false)

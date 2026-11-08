@@ -17,15 +17,14 @@ import com.RobinNotBad.BiliClient.helper.TutorialHelper
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.CoroutineScopes
+import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 
-import org.json.JSONException
 
 import java.util.ArrayList
-import java.util.Objects
 
 //推荐页面
 //2023-07-13
@@ -112,39 +111,51 @@ class RecommendActivity : RefreshMainActivity() {
         CenterThreadPool.run(Runnable { AppInfoApi.check(this) })
     }
 
+    /**
+     * 进入推荐页时检查一次 Cookie 续期（v5.3.1：转调唯一入口）。
+     *
+     * # 旧实现的两个严重问题（都已在 v5.3.1 修掉，别写回去）
+     *
+     * ## 1. 网络异常会**清掉用户的登录态**
+     * 旧代码的 `catch (e: JSONException)` 和 `catch (e: Exception)` 分支里都调了 `resetLogin()`，
+     * 而 `resetLogin()` 会把 mid / csrf / cookies / refresh_token 全部清空。
+     * 也就是说：**用户在地铁里进一次推荐页、网络抖一下，登录就被清了**，
+     * 必须重新扫码。这是本轮排查里最危险的一处 —— 网络失败与凭据失效是两件事，
+     * 任何情况下都不能因为「请求没成功」就删凭据。
+     * → 现在只有服务端**明确**说 refresh_token 过期（86032）才提示重新登录，
+     *   而且**不自动清号**（清号必须由用户显式操作，见账号管理页的退出）。
+     *
+     * ## 2. 把 refresh_csrf / correspondPath 打在日志里
+     * 旧代码 `Log.e("CorrespondPath", ...)`、`Log.e("RefreshCsrf", ...)` 会把这些值
+     * 完整写进 logcat。它们是凭据链的一环，不该出现。已删。
+     *
+     * # 为什么保留这个入口
+     * 推荐页是用户最常进的页面，在这里兜一次续期能在「长时间不重启 App」的场景下
+     * 补上启动时那一次没有覆盖到的时间窗。节流由 [CookieRefreshApi.renewIfNeededOnForeground] 负责。
+     */
     private fun checkCookieRefresh() {
         try {
-            val cookieInfo = CookieRefreshApi.cookieInfo()
-            if (cookieInfo.optBoolean("refresh")) {
-                Log.e("Cookies", "需要刷新")
-                if (!Objects.equals(SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, ""), "")) {
-                    val correspondPath = CookieRefreshApi.getCorrespondPath(cookieInfo.getLong("timestamp"))
-                    Log.e("CorrespondPath", correspondPath)
-                    val refreshCsrf = CookieRefreshApi.getRefreshCsrf(correspondPath)
-                    Log.e("RefreshCsrf", refreshCsrf)
-                    if (CookieRefreshApi.refreshCookie(refreshCsrf)) {
-                        MsgUtil.showMsg("Cookies已刷新")
-                    } else {
-                        MsgUtil.showMsgLong("登录信息过期，请重新登录！")
-                        resetLogin()
-                    }
-                }
+            val result = CookieRefreshApi.renewIfNeededOnForeground(false)
+            if (result.renewed()) {
+                MsgUtil.showMsg("Cookies已刷新")
             }
-        } catch (e: JSONException) {
-            MsgUtil.showMsgLong("登录信息过期，请重新登录！")
-            resetLogin()
         } catch (e: Exception) {
-            MsgUtil.err(e)
+            // 续期是锦上添花：任何异常都只记日志，**绝不清登录态**
+            Logu.w("Cookies", "推荐页续期检查异常：" + e.javaClass.simpleName)
         }
     }
 
-    private fun resetLogin() {
-        SharedPreferencesUtil.putLong(SharedPreferencesUtil.mid, 0L)
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.csrf, "")
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.cookies, "")
-        SharedPreferencesUtil.putString(SharedPreferencesUtil.refresh_token, "")
-        NetWorkUtil.refreshHeaders()
-    }
+    // v5.3.1：原来的 resetLogin() 已**删除**（不是暂时不用，是刻意不留）。
+    //
+    // 它做的是「把 mid / csrf / cookies / refresh_token 全部清空」——
+    // 而它唯一的两个调用点都在 checkCookieRefresh 的 catch 分支里，
+    // 也就是「网络抖动 → 清空登录态 → 用户必须重新扫码」。
+    // 现在那个入口改成转调唯一续期入口（只记日志、绝不清号），它就没有调用点了。
+    //
+    // 为什么删除而不是留着备用：一个「一调用就把用户账号清掉」的函数留在代码里，
+    // 下次任何人遇到「登录好像有问题」都可能顺手调它，而它的危害是不可逆的
+    // （用户得重新扫码，多设备还要重新授权）。退出登录有正规入口
+    // （账号管理页 → 退出），那里有确认弹窗，语义也对。
 
     /**
      * 下拉刷新（用户需求 #8：「web 端口无法刷新」，v5.3.0 重写）。

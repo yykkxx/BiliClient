@@ -166,6 +166,46 @@ object ApiRouter {
     data class Verdict(val isOk: Boolean, val reason: String)
 
     /**
+     * 「APP 通道失败自动回退 web」开关是否打开（v5.3.1 用户需求「回退 web 可以开关」）。
+     *
+     * # 为什么默认关闭
+     * v5.2.1 删掉回退是经过论证的（见 [com.RobinNotBad.BiliClient.util.NetWorkUtil] 里
+     * `get()` 的注释：回退会让通道故障永远暴露不出来，web 未登录时还会白等一个 RTT）。
+     * 那条结论仍然成立，所以**默认行为必须保持不变**。
+     * 但「删掉」不等于「不能选」：确实有用户只登了 web、或某个端点在 APP 通道长期不可用，
+     * 这时回退能把功能救回来。做成开关，让需要的人自己承担「故障被掩盖」的代价。
+     *
+     * # 安全边界（这条是硬约束，别为了「更彻底」放宽）
+     * 只有 [Plan.replayable] 为 true 的请求才允许回退：
+     * - GET / 幂等读：可以；
+     * - 幂等写（[ApiMigrationRules.Rule.isPostSafe]：点赞/收藏/关注/稍后再看）：可以；
+     * - **非幂等写（[ApiMigrationRules.Rule.isPostWrite]：投币/发评论/发动态/发弹幕/发私信）：
+     *   永远不可以**，即使开关打开也一样。理由：请求可能**已经**到达服务端，
+     *   重发会造成重复投币、重复评论这类**不可撤销**的副作用。
+     *   宁可让用户看到一次错误，也不能替他多发一次币。
+     */
+    @JvmStatic
+    fun isWebFallbackEnabled(): Boolean {
+        return SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.API_WEB_FALLBACK, false)
+    }
+
+    /**
+     * 这次失败是否**真的应该**回退 web。
+     *
+     * 把「开关」和「安全边界」两件事收在一个地方，避免调用方（NetWorkUtil 的 get/post）
+     * 各自判断一遍而漏掉其中一条。
+     *
+     * @param plan 本次 APP 通道计划
+     * @return true 表示调用方可以拿原始 URL 用 web 头重发一次
+     */
+    @JvmStatic
+    fun shouldFallbackToWeb(plan: Plan): Boolean {
+        if (!isWebFallbackEnabled()) return false
+        // 非幂等写操作绝不重放（理由见 isWebFallbackEnabled 的 KDoc）
+        return plan.replayable
+    }
+
+    /**
      * 是否启用 APP 通道路由。
      *
      * 唯一的开关来源是「账号管理 → 其它页面 API」里选的端口（v5.1.5）：

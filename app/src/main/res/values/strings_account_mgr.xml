@@ -66,6 +66,21 @@
     <string name="acct_mgr_phone_tv_sign_on">已退回旧签名口径（android 密钥，实测会 -404，仅供排查）</string>
     <string name="acct_mgr_phone_tv_sign_off">已切回同源签名（TV 密钥，实测可用）</string>
 
+    <!-- 「APP 通道失败自动回退 Web」开关（v5.3.1）-->
+    <string name="acct_mgr_web_fallback_title">APP 通道失败时自动回退 Web</string>
+    <string name="acct_mgr_web_fallback_desc">默认关闭。关闭时：选定的端口就是唯一通道，接口报错就按业务码如实提示，不会偷偷换通道——这样「某个端口坏了」能被看见，也符合「四端分开」的设计。\n打开后：APP 通道响应不可用（-101/-352/风控壳/结构不对等）时，用 Web 凭据再发一次同样的请求。好处是只登了 Web、或某接口在该端口长期不可用时功能还能用；代价是端口故障会被 Web 的成功响应掩盖，排查时看不到真实故障。\n安全边界（打开开关也不变）：投币、发评论、发动态、发弹幕、发私信这类「非幂等写操作」永远不会回退重发——请求可能已经到达服务端，重发会造成重复投币、重复评论这种不可撤销的后果。点赞、收藏、关注这类幂等写操作才会回退。</string>
+    <string name="acct_mgr_web_fallback_on">已开启：APP 通道失败时自动回退 Web（非幂等写操作仍不回退）</string>
+    <string name="acct_mgr_web_fallback_off">已关闭：选定的端口就是唯一通道，失败按业务码如实提示</string>
+
+    <!-- Web 续期结果提示（v5.3.1）。按结局给出可执行的下一步，不再是
+         「可能 Cookie 仍有效，或 refresh_token 已失效」这种什么都不说的话。 -->
+    <string name="acct_mgr_renew_no_token">当前 Web 登录没有 refresh_token，无法自动续期，请重新扫码登录</string>
+    <string name="acct_mgr_renew_token_expired">refresh_token 已过期，请重新扫码登录</string>
+    <string name="acct_mgr_renew_network">网络异常，续期未完成，请稍后重试</string>
+    <string name="acct_mgr_renew_not_needed">Cookie 仍然有效，无需续期</string>
+    <string name="acct_mgr_renew_success">Web 登录已续期</string>
+    <string name="acct_mgr_renew_server_rejected">服务端拒绝了续期（code %1$d），可能需要重新扫码登录</string>
+
     <!-- ============ 凭据统一操作 ============ -->
     <string name="acct_mgr_section_credentials">登录凭据（四端统一）</string>
     <string name="acct_mgr_credentials_desc">导出会把四个端口的全部账号凭据打包成一段文本，可用来迁移设备或备份；导入会按端口逐个写回。凭据等同于账号密码，请勿发给他人。</string>
@@ -85,10 +100,6 @@
     <string name="acct_mgr_export_copied">已复制到剪贴板</string>
     <string name="acct_mgr_export_empty">当前没有任何账号凭据可导出</string>
     <string name="acct_mgr_renew_checking">正在检查续期…</string>
-    <string name="acct_mgr_renew_no_web">Web 端未登录，无需续期（其它端口的凭据不通过 Cookie 续期）</string>
-    <string name="acct_mgr_renew_ok">Web 凭据仍然有效，无需续期</string>
-    <string name="acct_mgr_renew_done">Web 凭据已续期成功</string>
-    <string name="acct_mgr_renew_failed">续期失败，可能需要重新登录 Web 端</string>
     <string name="acct_mgr_clear_title">清除全部凭据</string>
     <string name="acct_mgr_clear_message">将退出四个端口上的全部账号（共 %1$d 个），并清空本机保存的所有登录凭据。\n\n这不会删除收藏、历史、稍后再看等云端数据，但清空后需要重新登录才能使用需要账号的功能。此操作不可撤销。</string>
     <string name="acct_mgr_clear_confirm">确认清除</string>

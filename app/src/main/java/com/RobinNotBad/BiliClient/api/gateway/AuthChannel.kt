@@ -175,37 +175,26 @@ class WebChannel : AuthChannel {
     }
 
     /**
-     * 真正执行一次主动续期。
+     * 真正执行一次主动续期（v5.3.1：**转调唯一入口** [CookieRefreshApi.renewWeb]）。
      *
-     * 只调用 [CookieRefreshApi] 的**现有公开函数**（`cookieInfo` → `getCorrespondPath` →
-     * `getRefreshCsrf` → `refreshCookie`），不修改那个文件 —— 它属于 `gw-auth` 的写域。
+     * # 为什么这里只剩一行
+     * v5.2.1~v5.3.0 有 4 条各自实现的续期路径，本函数是其中一条，步骤与
+     * [CookieRefreshApi] 里的那份**逐行重复**，只多了 `AccountStore.persistActiveWeb()`。
+     * 现在「缺 refresh_token 提前判定」「成功后回写账号槽」都在唯一入口内部做了，
+     * 这里不需要再抄一遍 —— 抄两遍正是当初「有的路径回写、有的不回写」的成因。
      *
-     * 任何异常都吞掉并返回 false：续期失败不能让正常请求抛异常出去。
-     * 用 `catch (ignored: Exception)` 是为了满足 detekt 的 SwallowedException 约定。
+     * 续期是「尽力而为」：任何结局都不抛异常（一次点赞请求不该因为后台续期失败而报错）。
+     * 结果只用于日志，[ApiEndpoint] 只用来标识是哪个请求触发的。
      */
     private fun renewQuietly(endpoint: ApiEndpoint): Boolean {
-        return try {
-            val info = CookieRefreshApi.cookieInfo()
-            if (!info.optBoolean("refresh", false)) return false
-            val timestamp = info.optLong("timestamp", 0L)
-            val correspondPath = CookieRefreshApi.getCorrespondPath(timestamp)
-            if (correspondPath.isEmpty()) return false
-            val refreshCsrf = CookieRefreshApi.getRefreshCsrf(correspondPath)
-            if (refreshCsrf.isEmpty()) return false
-            val refreshed = CookieRefreshApi.refreshCookie(refreshCsrf)
-            if (refreshed) {
-                // 刷新成功后要把新 Cookie 快照回账号槽，否则多账号场景下这个号会永久停在旧 Cookie
-                // （审计 P1-2）。AccountStore 的这个方法就是为这件事准备的。
-                AccountStore.persistActiveWeb()
-                Logu.d(TAG, "web 凭据已主动续期（" + endpoint.id + "）")
-            }
-            refreshed
-        } catch (ignored: Exception) {
-            // 续期是「尽力而为」：网络抖动、服务端拒绝、refresh_token 失效都可能抛。
-            // 这里不能让它冒到调用方 —— 一次点赞请求不该因为后台续期失败而报错。
-            Logu.d(TAG, "web 主动续期失败：" + ignored.javaClass.simpleName)
-            false
+        val result = CookieRefreshApi.renewWeb()
+        if (result.renewed()) {
+            Logu.d(TAG, "web 凭据已主动续期（" + endpoint.id + "）")
+        } else {
+            // 只记结局类型，绝不记凭据内容
+            Logu.d(TAG, "web 主动续期未成功（" + endpoint.id + "）：" + result.javaClass.simpleName)
         }
+        return result.renewed()
     }
 
     companion object {

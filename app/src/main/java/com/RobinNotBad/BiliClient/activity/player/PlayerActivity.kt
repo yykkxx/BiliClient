@@ -297,6 +297,16 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     /** 是否刚从后台切回（#6），用于判断弹幕层要不要重建 */
     private var wentToBackground = false
 
+    /**
+     * 页面是否可见（v5.3.1）。
+     *
+     * 为什么单独记一个字段：`onStop` 之后 Surface 可能已被销毁，但音频仍在播、
+     * 播放位置仍在涨 —— 这正是「画面冻结」判据的特征组合。没有这个门控，
+     * 切后台听声音时会被判成冻结并切内核（用户要的恰恰是「别再乱切」）。
+     * 与 [wentToBackground] 分开：那个是「弹幕层要不要重建」的一次性事件标记。
+     */
+    private var pageVisible = true
+
     /** 弹幕层是否正在重建（#6），避免重入导致同时存在两个弹幕层 */
     private var danmakuRestarting = false
 
@@ -1263,6 +1273,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 // 听视频模式与直播都不观测（前者没有视频轨，后者没有可切的内核语义）。
                 (player as? Media3Player)?.setRenderStallMonitorEnabled(
                     !isAudioOnlyMode && !isLiveMode)
+                // v5.3.1：可见性是本页的状态，而新建/复用的播放器实例不知道 ——
+                // 在后台起播（熄屏继续播放/画中画）时必须同步过去，否则一上来就会误判
+                (player as? Media3Player)?.setPageVisibleForRenderObservation(pageVisible)
                 ijkPlayer!!.setDataSource(playUrl, headers)
             } else
                 ijkPlayer!!.setDataSource(nowurl)
@@ -1629,6 +1642,21 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (hasDanmaku() && danmakuReady()) {
             danmakuController?.seekTo(positionMs)
         }
+        // v5.3.1：这条路径（起播时的恢复/历史进度跳转）**不经过** seekToPosition，
+        // 必须单独通知冻结观测，否则「起播就 seek」会被当成画面冻结
+        notifyRenderObservationSeek()
+    }
+
+    /**
+     * 通知 Media3 的冻结观测「发生了一次 seek」（v5.3.1）。
+     *
+     * 为什么要两处都通知：冻结判据的锚点（帧计数时间戳/位置推进时间戳/seek 宽限）
+     * 都保存在 [Media3Player] 里，而本页有两套 seek 入口 ——
+     * [seekToPosition]（用户拖进度条/按键）与 [seekPlayerAndDanmaku]（起播跳转）。
+     * 只补一处就会留下另一处误判。
+     */
+    private fun notifyRenderObservationSeek() {
+        (ijkPlayer as? Media3Player)?.onRenderObservationSeek()
     }
 
     @SuppressLint("SetTextI18n")
@@ -2218,10 +2246,15 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      *
      * 抽出来是因为两条判据的前置条件**必须完全一致** —— 否则会出现
      * 「冻结判据说能判、首帧判据说不能判」这种自相矛盾的状态，兜底时序就乱了。
+     *
+     * v5.3.1 追加 [pageVisible]：页面不可见（切后台、被其它窗口完全遮挡）时，
+     * Surface 会被销毁或不再合成，而音频/位置照常 —— 这正是冻结判据的特征组合，
+     * 不排除必然误判。用户要的是「别再乱切」，所以看不见的时候一律不判。
      */
     private fun isPictureWorthJudging(): Boolean {
         if (destroyed || !isPrepared || !isPlaying) return false
         if (isAudioOnlyMode || isLiveMode) return false
+        if (!pageVisible) return false
         return true
     }
 
@@ -2237,6 +2270,13 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private fun switchToIjkOnPictureTrouble(reason: String) {
         if (media3FallbackTried) {
             Logu.w("player", "本页已兜底过一次（$reason），不再重复切换")
+            return
+        }
+        // v5.3.1：兜底前再过一次总闸。判据自身已经收得很紧，这里是**最后一道防线** ——
+        // 万一以后有人放松了判据，只要这条前置还在，「页面不可见/已暂停/听视频模式」
+        // 就仍然不可能触发切内核。用户要的是「别再乱切」，这层冗余值得。
+        if (!isPictureWorthJudging()) {
+            Logu.w("player", "画面故障兜底被总闸拦下（$reason，页面不可见或未在播），只记日志不切内核")
             return
         }
         // 先读诊断信息（换内核后旧实例就没了）：有没有出过首帧，决定了
@@ -2688,6 +2728,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     override fun onPause() {
         super.onPause()
         Logu.v("onPause")
+        // v5.3.1：页面失焦即视为「看不见画面」。切后台时 Surface 可能被销毁，
+        // 但「熄屏继续播放」开着时音频/位置照常 —— 不排除会把这种情况判成画面冻结。
+        setPageVisible(false)
         if (!SharedPreferencesUtil.getBoolean("player_background", false)) {
             playerPause()
         }
@@ -2696,6 +2739,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     override fun onResume() {
         super.onResume()
         Logu.v("onResume")
+        // v5.3.1：回到前台，冻结判定重新开始计数（见 onVisibilityChanged 的注释）
+        setPageVisible(true)
         // #6：从后台切回时，弹幕绘制线程可能已经死了（表面被销毁）。
         // 只要发现弹幕层不健康，就整条重建 + 重新拉取，避免"卡死/残留"。
         if (wentToBackground) {
@@ -2705,6 +2750,22 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 restartDanmakuFetch(SharedPreferencesUtil.getBoolean("pref_switch_danmaku", true))
             }
         }
+    }
+
+    /**
+     * 记录页面可见性并同步给看门狗与 Media3 观测（v5.3.1）。
+     *
+     * 为什么要三处一起同步：这三层各自决定「要不要判冻结」的一半前置条件，
+     * 任何一层漏了就会出现「上层说不判、下层说判」的矛盾状态：
+     * 1. [pageVisible]：本页判据 [isPictureWorthJudging] 的门控；
+     * 2. 看门狗：清掉计时，避免不可见期间累积的时长在回到前台瞬间爆掉；
+     * 3. Media3Player：直接停掉观测（它的判据不看本页的 pageVisible）。
+     */
+    private fun setPageVisible(visible: Boolean) {
+        if (pageVisible == visible) return
+        pageVisible = visible
+        playbackWatchdog?.onVisibilityChanged(visible)
+        (ijkPlayer as? Media3Player)?.setPageVisibleForRenderObservation(visible)
     }
 
     /**
@@ -2724,6 +2785,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     override fun onStop() {
         super.onStop()
         Logu.v("onStop")
+        // v5.3.1：onStop 时 Surface 可能已被销毁（切后台/画中画折叠）。
+        // 与 onPause 一起兜住 —— 某些机型只走 onStop 不走 onPause 的顺序差异下也不会漏。
+        setPageVisible(false)
         // #6：记录"曾经切到后台"。回到前台时据此做一次弹幕层健康检查——
         // 弱网下弹幕绘制线程可能卡在内核读取里不再推进（不回调、不报错），
         // 表现就是"切回来弹幕卡死"。这里只记录事件，检查放在 onResume。
@@ -3255,6 +3319,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     }
                     // 与 seekToPosition 同理：拖动进度条后清冻结计时，避免误判（v5.3.0）
                     playbackWatchdog?.onSeek()
+                    // v5.3.1：冻结判据自己的锚点也在 Media3Player 里，必须一起清
+                    notifyRenderObservationSeek()
                     autohideReset()
                 }
             }
@@ -3371,6 +3437,9 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             // seek 后画面必然短暂黑一下再出帧：告诉看门狗清掉冻结计时，
             // 否则一次正常跳转会被误判成「画面冻住」并误切内核（v5.3.0）
             playbackWatchdog?.onSeek()
+            // v5.3.1：冻结判据的锚点在 Media3Player 里，看门狗那侧清了还不够 ——
+            // 不清它就会出现「刚拖完进度条就被判冻结」（拖动本身的宽限也要重建）
+            notifyRenderObservationSeek()
         }
     }
 

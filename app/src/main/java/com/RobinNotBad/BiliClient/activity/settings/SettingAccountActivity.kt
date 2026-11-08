@@ -20,6 +20,7 @@ import com.RobinNotBad.BiliClient.activity.base.BaseActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.AppRcmdLoginActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.LoginActivity
 import com.RobinNotBad.BiliClient.api.AppRcmdApi
+import com.RobinNotBad.BiliClient.api.CookieRefreshApi
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.api.migration.ApiRouter
 import com.RobinNotBad.BiliClient.api.gateway.CredentialStore
@@ -54,6 +55,9 @@ class SettingAccountActivity : BaseActivity() {
 
     /** 程序性回填开关时挡住监听器，避免「读值」被当成「用户点击」立刻写回偏好 */
     private var suppressPhoneTvChange = false
+
+    /** 「回退 web」开关的回填抑制标志（setChecked 会同步回调，必须挡住） */
+    private var suppressWebFallbackChange = false
 
     /** 已经尝试过拉取昵称/头像的账号（避免每次刷新都重试；失败也不反复打网络） */
     private val profileRequests = HashSet<String>()
@@ -155,6 +159,7 @@ class SettingAccountActivity : BaseActivity() {
         findViewById<MaterialButton>(R.id.accountMainLoginNew)?.setOnClickListener { loginNewAccount(false) }
         findViewById<MaterialButton>(R.id.accountStatsClear)?.setOnClickListener { confirmClearStats() }
         setupPhoneTvSignSwitch()
+        setupWebFallbackSwitch()
     }
 
     /**
@@ -187,6 +192,48 @@ class SettingAccountActivity : BaseActivity() {
             MsgUtil.showMsg(
                 if (isChecked) "已退回旧签名口径（android 密钥，实测会 -404，仅供排查）"
                 else "已切回同源签名（TV 密钥，实测可用）"
+            )
+        }
+    }
+
+    /**
+     * 「APP 通道失败时自动回退 Web」开关（v5.3.1 用户需求「回退 web 可以开关」）。
+     *
+     * # 为什么默认关闭，以及为什么现在又提供它
+     * v5.2.1 把回退删掉是经过论证的：回退会让「APP 通道坏了」永远不被发现，
+     * 而且 web 未登录时回退必然再失败一次（用户白等一个 RTT）。
+     * 那条结论今天仍然成立，所以**默认值保持关闭**、行为与 v5.3.0 逐字一致。
+     * 但「删掉」和「不能选」是两回事：只登了 web 的用户、或某端点在 APP 通道长期不可用
+     * （-352 风控等）时，关着就等于功能直接消失。做成开关，让需要的人自己权衡。
+     *
+     * # 为什么切换时要 clearSuspensions
+     * `ApiRouter` 有一套「同端点连续失败 2 次 → 暂停 10 分钟」的止损状态。
+     * 用户刚打开回退开关时，旧端口很可能正处在暂停期里 —— 不清掉的话
+     * 「开关打开了但好像没生效」（因为端点还在暂停，根本没走 APP 通道）。
+     * 清掉之后下一次请求会重新判定，开关的效果立刻可见。
+     *
+     * # 与上面那个签名开关的区别（布局上也特意分了两张卡片）
+     * 签名开关是**排查用**的（默认就是对的，别动）；
+     * 这个是**日常用**的（用户可能真的需要打开）。混在一张卡片里会让人分不清该动哪个。
+     */
+    private fun setupWebFallbackSwitch() {
+        // 与本类其它开关一致（setupPhoneTvSignSwitch 也是这个写法）：页面只有两个开关，
+        // 为它们单独抽一层 ViewBinding 收益不足，且会与既有代码风格分叉。
+        val switch = findViewById<SwitchMaterial>(R.id.accountWebFallback) ?: return // quality-allow：与本类 setupPhoneTvSignSwitch 同一写法，页面仅两个开关
+        // 必须挡住监听器：setChecked 会同步回调，否则「读值回填」会被当成用户点击、立刻写回偏好
+        suppressWebFallbackChange = true
+        switch.isChecked = ApiRouter.isWebFallbackEnabled()
+        suppressWebFallbackChange = false
+        switch.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressWebFallbackChange) return@setOnCheckedChangeListener
+            SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.API_WEB_FALLBACK, isChecked)
+            // 清掉端点暂停状态，让开关立刻生效（理由见 KDoc）
+            ApiRouter.clearSuspensions()
+            MsgUtil.showMsg(
+                getString(
+                    if (isChecked) R.string.acct_mgr_web_fallback_on
+                    else R.string.acct_mgr_web_fallback_off
+                )
             )
         }
     }
@@ -688,29 +735,57 @@ class SettingAccountActivity : BaseActivity() {
      *
      * 用户的真实场景：某次写操作报「登录过期」，他不想重扫二维码，希望有个按钮能先试试
      * 主动续期（`refresh_token` 还有效时能救回来）。所以这里 `force = true`。
-     * 结果分三种如实说：续期成功 / 不需要续（Cookie 还有效）/ 续不了（需要重新扫码）。
+     *
+     * # v5.3.1：按**结构化结果**给可执行的提示
+     * 旧实现只会把 Boolean `false` 统一提示成
+     * 「未续期：可能 Cookie 仍有效，或 refresh_token 已失效（需重新登录）」——
+     * 一句话同时覆盖三种完全不同的结局，等于什么都没说：用户不知道该等一下再试，
+     * 还是该去重新扫码。而「缺 refresh_token」恰恰是最常见的那种（实测：扫码登录回包里
+     * `refresh_token` 是可选的，历史凭据经常没有它，此时服务端直接回 -400）。
+     *
+     * 现在四种结局分开说，每种都告诉用户**下一步该做什么**：
+     * - [CookieRefreshApi.RenewResult.NoRefreshToken] → 只能重新扫码（点重试没有意义）
+     * - [CookieRefreshApi.RenewResult.TokenExpired]   → 只能重新扫码
+     * - [CookieRefreshApi.RenewResult.NetworkError]   → 网络问题，稍后重试即可
+     * - [CookieRefreshApi.RenewResult.ServerError]    → 服务端拒绝，展示业务码便于排查
+     * - [CookieRefreshApi.RenewResult.NotNeeded]      → Cookie 还新鲜，什么都不用做
      */
     private fun onRenewWeb() {
-        if (AccountStore.mainPort() == AccountStore.PORT_WEB && !AccountManager.isWebLoggedIn()) {
-            MsgUtil.showMsg("Web 端当前没有登录，无需续期")
+        if (!AccountStore.isPortLoggedIn(AccountStore.PORT_WEB)) {
+            MsgUtil.showMsg(getString(R.string.acct_mgr_renew_not_needed))
             return
         }
-        MsgUtil.showMsg("正在检查 Web 登录状态…")
+        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_checking))
         CenterThreadPool.run(Runnable {
-            val renewed = try {
-                CredentialStore.renewWeb(true)
+            val result = try {
+                CredentialStore.renewWebDetailed(true)
             } catch (e: Exception) {
                 MsgUtil.err("续期失败", e)
                 return@Runnable
             }
             CoroutineScopes.launchUi {
-                if (renewed) {
-                    MsgUtil.showMsg("Web 登录已续期")
-                    refreshAll()
-                } else {
-                    // false 的含义见 CookieRefreshApi.checkAndRefresh 的注释：
-                    // 「不需要续」与「续失败」都会返回 false，所以文案要覆盖两种可能
-                    MsgUtil.showMsg("未能续期：可能 Cookie 仍有效，或 refresh_token 已失效（需重新登录）")
+                when (result) {
+                    is CookieRefreshApi.RenewResult.Success -> {
+                        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_success))
+                        refreshAll()
+                    }
+                    is CookieRefreshApi.RenewResult.NotNeeded -> {
+                        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_not_needed))
+                    }
+                    is CookieRefreshApi.RenewResult.NoRefreshToken -> {
+                        // 实测最常见的失败：服务端要求 refresh_token，而本机这个号没有
+                        MsgUtil.showMsgLong(getString(R.string.acct_mgr_renew_no_token))
+                    }
+                    is CookieRefreshApi.RenewResult.TokenExpired -> {
+                        MsgUtil.showMsgLong(getString(R.string.acct_mgr_renew_token_expired))
+                    }
+                    is CookieRefreshApi.RenewResult.NetworkError -> {
+                        // 网络问题：登录态没坏，明确告诉用户「稍后重试」而不是「重新登录」
+                        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_network))
+                    }
+                    is CookieRefreshApi.RenewResult.ServerError -> {
+                        MsgUtil.showMsgLong(getString(R.string.acct_mgr_renew_server_rejected, result.code))
+                    }
                 }
             }
         })

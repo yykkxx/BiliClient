@@ -326,11 +326,37 @@ object CredentialStore {
         }
     }
 
-    /** web 校验：读 `cookie/info` 的 `data.isLogin` */
+    /**
+     * web 校验：读 `x/web-interface/nav` 的 `data.isLogin`。
+     *
+     * # 为什么换端点（v5.3.1 实测修正，别改回去）
+     * 旧实现读的是 `cookie/info` 的 `data.isLogin`，并在字段缺失时 `else true`（判为有效）。
+     * 但 2026-11-08 用真实凭据实测：`cookie/info` 的 `data` **只有 `refresh` 和 `timestamp`**，
+     * **根本没有 `isLogin`** →
+     * ```
+     * code=0  data={refresh:true, timestamp:1794099398496}
+     * ```
+     * 于是那个 `else true` 分支**永远命中**，web 凭据永远被判定「有效」，
+     * 账号管理页的校验等于没在工作（用户的过期 Cookie 永远显示"正常"）。
+     *
+     * `nav` 是 web 端判断登录态的权威接口：
+     * - 已登录：`code=0, data.isLogin=true, data.uname=...`
+     * - 未登录：`code=-101, data.isLogin=false`
+     *
+     * # 为什么 `-101` 判无效、网络异常仍返回 null
+     * `-101` 是服务端**明确**说「你没登录」→ 判无效（false）。
+     * 而网络异常由 [validate] 的 catch 统一返回 null（未知）——
+     * **绝不能在弱网下把用户的账号判死并清掉**。这条从 v5.2.1 就定下了，保留。
+     */
+    @Throws(IOException::class, JSONException::class)
     private fun validateWeb(): Boolean {
-        val data = CookieRefreshApi.cookieInfo()
-        // CookieRefreshApi.cookieInfo() 直接返回 data 对象；isLogin 缺省时按「仍然有效」处理，
-        // 避免服务端少回一个字段就把用户的登录态判死
+        val url = "https://api.bilibili.com/x/web-interface/nav"
+        val root = NetWorkUtil.getJson(url)
+        val code = root.optInt("code", 0)
+        if (code == -101) return false // 服务端明确表示未登录
+        if (code != 0) return true // 其它业务码（风控/限流）不能当成「凭据失效」
+        val data = root.optJSONObject("data") ?: return true
+        // 字段缺失时按「仍然有效」处理：宁可多留一个号，也不要因为服务端少回字段就清掉用户账号
         return if (data.has("isLogin")) data.optBoolean("isLogin", true) else true
     }
 
@@ -370,76 +396,45 @@ object CredentialStore {
     // ==================== Web 主动续期 ====================
 
     /**
-     * Web 主动续期：检查 `cookie_refresh` 标志与 `cookie/info` 的 `refresh` 字段，需要就刷新。
+     * Web 主动续期（v5.3.1：**转调唯一入口** [CookieRefreshApi.renewWeb]）。
      *
-     * 为什么要有它：v5.2.0 里 `CookieRefreshApi` 只在 `RecommendActivity` 被动跑一次，
-     * 用户不进推荐页就永远不刷新 → Cookie 过期后整个 web 端静默失效。
-     * 用户明确要求「Web 增加主动续期」，所以这里提供一个**可主动调用**的入口
-     * （启动时、长时间运行后、设置页按钮都可以调）。
+     * # 为什么这里只剩一层转发
+     * v5.2.1~v5.3.0 有 4 条各自实现的续期路径（本函数、[CookieRefreshApi.checkAndRefresh]、
+     * `AuthChannel.renewQuietly`、`RecommendActivity.checkCookieRefresh`），行为互不一致：
+     * 有的成功后回写账号槽、有的不回写，有的检查 refresh_token 存在性、有的不检查。
+     * 结果是「同一个按钮点两次，结果取决于你从哪进」。
+     * v5.3.1 把全部逻辑收进 [CookieRefreshApi.renewWeb]，这里只保留节流语义与结果适配。
      *
-     * 只调用 [CookieRefreshApi] 的**现有公开函数**，不改那个文件（它属于 `gw-auth` 的写域）。
+     * # 保留 `force` 的语义
+     * - `force = true`：用户手动点「立即续期」，忽略 30 分钟节流（但仍要先问服务端）；
+     * - `force = false`：`cookie_refresh` 标志为 false 时直接跳过（省一次请求）。
      *
-     * 刷新成功后写回：
-     * 1. `AccountStore.persistActiveWeb()` 把新 Cookie 快照回账号槽（多账号不丢，审计 P1-2）；
-     * 2. `CookieRefreshApi.refreshCookie` 内部已经写了激活槽位的 cookies / csrf / refresh_token。
-     *
-     * @param force true = 跳过 `cookie_refresh` 标志，直接问服务端要不要刷新。
-     *   false = 只有本地标志为 true 时才尝试（省一次请求）
-     * @return 是否真的刷新了
+     * @return 是否真的刷新成功（调用方要区分失败原因请直接用 [CookieRefreshApi.renewWeb]）
      */
     @JvmStatic
     fun renewWeb(force: Boolean): Boolean {
-        if (!AccountStore.isPortLoggedIn(AccountStore.PORT_WEB)) {
-            // web 未登录时没有可续期的凭据。注意这**不是**错误 ——
-            // 用户可能只登了 APP 端口，此时 web 就是没有登录，不需要刷新
-            Logu.d(TAG, "web 未登录，跳过主动续期")
-            return false
-        }
-        if (!force && !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.cookie_refresh, false)) {
-            return false
-        }
-        return try {
-            doRenewWeb()
-        } catch (ignored: IOException) {
-            Logu.d(TAG, "web 主动续期失败（网络）：" + ignored.javaClass.simpleName)
-            false
-        } catch (ignored: JSONException) {
-            Logu.d(TAG, "web 主动续期失败（响应格式）：" + ignored.javaClass.simpleName)
-            false
-        }
+        return renewWebDetailed(force).renewed()
     }
 
     /**
-     * 真正的续期流程（从 [renewWeb] 拆出来，控制圈复杂度）。
+     * 与 [renewWeb] 相同，但返回**结构化结果**。
      *
-     * 流程照 `bilibili-API-collect` 的 cookie 刷新文档：
-     * `cookie/info` 拿 `refresh` 标志与 `timestamp` → 用它算 `correspondPath` →
-     * 访问 `www.bilibili.com/correspond/1/<path>` 拿 `refresh_csrf` → `cookie/refresh`。
+     * 设置页的「立即续期」用这个：它需要按结果给准确提示
+     * （缺 refresh_token / token 过期 / 网络失败 三种的下一步动作完全不同）。
      */
-    private fun doRenewWeb(): Boolean {
-        val info = CookieRefreshApi.cookieInfo()
-        if (!info.optBoolean("refresh", false)) {
-            Logu.d(TAG, "服务端表示当前 Cookie 不需要刷新")
-            return false
+    @JvmStatic
+    fun renewWebDetailed(force: Boolean): CookieRefreshApi.RenewResult {
+        if (!AccountStore.isPortLoggedIn(AccountStore.PORT_WEB)) {
+            // web 未登录时没有可续期的凭据。这**不是**错误 ——
+            // 用户可能只登了 APP 端口，此时 web 就是没有登录
+            Logu.d(TAG, "web 未登录，跳过主动续期")
+            return CookieRefreshApi.RenewResult.NotNeeded
         }
-        val timestamp = info.optLong("timestamp", 0L)
-        val correspondPath = CookieRefreshApi.getCorrespondPath(timestamp)
-        if (correspondPath.isEmpty()) {
-            Logu.d(TAG, "refresh 标志为真但拿不到 correspondPath")
-            return false
+        if (!force && !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.cookie_refresh, false)) {
+            return CookieRefreshApi.RenewResult.NotNeeded
         }
-        val refreshCsrf = CookieRefreshApi.getRefreshCsrf(correspondPath)
-        if (refreshCsrf.isEmpty()) {
-            Logu.d(TAG, "拿不到 refresh_csrf（Cookie 可能已经不完整）")
-            return false
-        }
-        val refreshed = CookieRefreshApi.refreshCookie(refreshCsrf)
-        if (refreshed) {
-            // 刷新成功：把新 Cookie 快照回账号槽，避免多账号场景下该号永久停在旧 Cookie（审计 P1-2）
-            AccountStore.persistActiveWeb()
-            Logu.d(TAG, "web 主动续期成功")
-        }
-        return refreshed
+        // 唯一入口：内部已含「缺 token 提前判定 + 成功回写账号槽」
+        return CookieRefreshApi.renewWeb()
     }
 
     // ==================== 兼容：AccountStore 的账号列表投影 ====================

@@ -240,6 +240,54 @@ class Media3Player(context: Context) : IMediaPlayer {
     @Volatile
     private var readyAtMs = 0L
 
+    // ---- 画面类判据的辅助信号（v5.3.1：把「单一信号」升级成「多信号同时成立」）------
+    //
+    // v5.3.0 的两条判据各自只看一个信号（渲染帧计数不涨 / READY 后没有首帧），
+    // 而这两个信号在**完全正常**的情况下也会短暂不推进：
+    //   - 硬解换档、DASH 分片边界、自适应切轨、surface 重建（旋转/切前台）时，
+    //     解码器会有百毫秒到数秒的「不出帧」窗口；
+    //   - 只用一个信号 + 6 秒窗口，这些正常窗口一旦叠在一起就变成「冻死」→ 误切内核。
+    // 用户看到的正是「播了几秒之后自动回退 ijk」。
+    //
+    // 现在追加两个**独立**的旁证，任何一条不成立就不判：
+    //   - [positionChangedAtMs]：播放位置是否还在推进。真冻结是「声音在放、位置在涨、
+    //     只有画面不动」；位置也不涨说明是网络/解码卡死，该走看门狗的重建数据源路径；
+    //   - [lastSampleAllowed]：最近一拍是否真的「READY 且在播」。暂停/缓冲时本来就没有帧。
+    // 另外加两道时间闸：[seekAnchorAtMs]（seek 后宽限）与 [videoSurfaceAttached]
+    // （画面被摘掉时根本不可能出帧，判它必错）。
+
+    /** 最近一次「确实该出帧」的采样是否成立（READY 且 isPlaying），由 ticker 维护 */
+    @Volatile
+    private var lastSampleAllowed = false
+
+    /** 播放位置最近一次发生变化的时刻：证明「还在播」的独立信号 */
+    @Volatile
+    private var positionChangedAtMs = 0L
+
+    /** seek 宽限的起算点：seek 后解码器要重建、画面要等关键帧，这段时间不判 */
+    @Volatile
+    private var seekAnchorAtMs = 0L
+
+    /** 画面（Surface/Holder）当前是否挂在播放器上。摘掉画面时不出帧是必然的 */
+    @Volatile
+    private var videoSurfaceAttached = false
+
+    /**
+     * 播放页当前是否可见（v5.3.1）：不可见时一律不判冻结/首帧超时。
+     *
+     * 与 [renderStallMonitorEnabled] 分工不同 —— 后者决定「这个视频该不该观测」
+     * （听视频/直播不该），本条决定「此刻能不能观测」。默认 true，
+     * 不调用 `setPageVisibleForRenderObservation` 的调用方行为与 v5.3.0 一致。
+     */
+    @Volatile
+    private var pageVisibleForRender = true
+
+    /** 上一拍采样到的播放位置（只在主线程 ticker 里读写） */
+    private var lastSampledPositionMs = -1L
+
+    /** 上一拍是否处于「该出帧」状态（暂停→恢复的跳变要靠它识别，见 updateRenderStallSample） */
+    private var wasSampling = false
+
     /**
      * 是否对上层「视频轨在解码但渲染帧不推进」的冻结状态作出判定（v5.3.0）。
      *
@@ -253,53 +301,92 @@ class Media3Player(context: Context) : IMediaPlayer {
     /**
      * 是否存在一条**在解码但没出帧**的视频轨（等价于「画面冻住」）。
      *
-     * 判据（三个条件必须同时成立，缺一不可，见 [updateRenderStallSample]）：
-     * 1. 播放器在播（`isPlaying`）且不处于缓冲态 —— 暂停/缓冲时不出帧是正常的；
-     * 2. 已经出过首帧（[firstFrameAtMs] > 0）—— 起播前没有帧也是正常的；
-     * 3. 渲染帧计数在 [RENDER_STALL_TIMEOUT_MS] 内**一次都没涨过** ——
-     *    注意这里用「计数没涨」而不是「位置没动」：位置由音频轨驱动，
-     *    画面冻住时它照常前进，这正是旧看门狗失明的原因。
+     * ## v5.3.1：从「单信号」升级成「多信号同时成立」
+     *
+     * v5.3.0 原来只要求「已出过首帧 + 渲染帧计数 6 秒没涨」。用户反馈「media3 播了几秒
+     * 就自动回退 ijk」就是这个判据的误报 —— 渲染帧计数在**完全正常**的播放里也会停住
+     * 好几秒（硬解换档、DASH 分片边界、自适应切轨、surface 重建、缓冲），单靠它区分不了
+     * 「正常不出帧」和「真的冻死」。用户明确要求「宁可漏判，不可误判」，所以现在要求
+     * **下列条件全部成立**才判冻结（任何一条不成立就返回 false）：
+     *
+     * 1. 观测开关开、未 release；
+     * 2. 已出过首帧（[firstFrameAtMs] > 0）——起播前没有帧是正常的；
+     * 3. **[lastSampleAllowed]**：最近一拍确实处于「READY + 在播 + 画面挂着」。
+     *    这条堵住 v5.3.0 最大的漏洞 —— 原来判据只看历史时间戳，不看**当前**状态，
+     *    于是「暂停很久 → 恢复播放」的第一拍会因为锚点还停在暂停前而立刻判成冻结；
+     * 4. **[videoSurfaceAttached]**：画面（Surface/Holder）真的挂在播放器上。
+     *    摘掉画面时（切后台 surfaceDestroyed、旋转重建、听视频切换）根本不可能出帧；
+     * 5. **不在 seek 宽限期内**（[seekAnchorAtMs]）：seek 后解码器要重建、要等关键帧，
+     *    B 站 DASH 的 IDR 间隔可达 2~4 秒，这段时间不出帧是必然的；
+     * 6. **播放位置仍在推进**（[positionChangedAtMs]）：这是判「真冻结」的关键旁证。
+     *    真冻结的特征是「**声音在放、位置在涨、只有画面不动**」；位置也不涨说明是
+     *    网络/解码卡死，那该走看门狗「重建数据源」的路径，**换内核没用**；
+     * 7. 渲染帧计数在 [RENDER_STALL_TIMEOUT_MS]（12 秒）内一次都没涨过。
      *
      * 供 `PlayerActivity` 的冻结兜底轮询调用（任意线程安全：只读 @Volatile 字段，
      * 唯一的内存读写都发生在主线程 ticker 里）。
      */
     fun isRenderStalled(): Boolean {
-        if (!renderStallMonitorEnabled || released) return false
+        if (!renderStallMonitorEnabled || released || !pageVisibleForRender) return false
         val first = firstFrameAtMs
-        if (first <= 0L) return false
         val last = lastRenderedFrameAtMs
-        if (last <= 0L) return false
-        return SystemClock.elapsedRealtime() - last >= RENDER_STALL_TIMEOUT_MS
+        // 2)~4)：没出过首帧 / 当前不该出帧 / 画面没挂着 —— 三者都不是「冻住」
+        if (first <= 0L || last <= 0L) return false
+        if (!lastSampleAllowed || !videoSurfaceAttached) return false
+        val now = SystemClock.elapsedRealtime()
+        // 5) seek 宽限：跳转后解码器重建/等关键帧，这段时间不判
+        val seekAt = seekAnchorAtMs
+        val inSeekGrace = seekAt > 0L && now - seekAt < SEEK_GRACE_MS
+        // 6) 位置必须还在推进，否则不是「画面冻结」而是卡死（另有兜底路径）
+        val posChangedAt = positionChangedAtMs
+        val positionAlive = posChangedAt > 0L && now - posChangedAt <= POSITION_ALIVE_MS
+        // 7) 真正的判据：12 秒没有新帧
+        return !inSeekGrace && positionAlive && now - last >= RENDER_STALL_TIMEOUT_MS
     }
 
     /** 是否已经出过首帧（供上层区分「黑屏起不来」与「出过图后冻住」） */
     fun hasRenderedFirstFrame(): Boolean = firstFrameAtMs > 0L
 
     /**
-     * prepare 完成之后多久仍然一帧都没渲染出来（v5.3.0）。
+     * prepare 完成之后多久仍然一帧都没渲染出来（v5.3.0；v5.3.1 大幅收紧）。
      *
      * 与 [isRenderStalled] 是**互补**的两条判据，覆盖两个不同的用户症状：
      * - 这条管「黑屏起不来」：`STATE_READY` 了（音频都出来了）却完全没有首帧 ——
      *   典型是硬解器初始化成功但 surface 上不出图，**不报错**；
      * - [isRenderStalled] 管「出过图之后冻住」：用户本轮反馈的那个。
      *
-     * 为什么两者都要：media3 在「视频轨解码失败但音频正常」时既不报 onPlayerError，
-     * 也不会让位置停住；上一轮修的「onError 才切 ijk」对这两种形态都够不着。
+     * ## v5.3.1 为什么必须收紧
+     * 原来只看「READY 后 8 秒没有首帧」。但**纯网络慢**（弱网、CDN 边缘差、分片大）
+     * 完全可能是「READY 了但 8 秒还没解出第一个关键帧」—— 那时位置根本不推进，
+     * 画面黑着但**内核没问题**，换 ijk 一样黑，只是白扔一次切内核（还会重复弹提示）。
+     * 现在追加三条硬前置，全部成立才判：
+     * - **播放位置确实在推进**：证明音频真的在放 → 才是「有声音没画面」那个真故障；
+     *   位置不动 = 还没开始播，属于网络/加载问题，交给看门狗的重建数据源路径；
+     * - 画面真的挂上了（[videoSurfaceAttached]）；
+     * - 不在 seek 宽限期内；
+     * - 超时从 8 秒拉长到 [FIRST_FRAME_TIMEOUT_MS]（20 秒）。
      *
      * @return true 表示超时无首帧，上层应切内核
      */
     fun isFirstFrameOverdue(): Boolean {
-        if (!renderStallMonitorEnabled || released) return false
+        if (!renderStallMonitorEnabled || released || !pageVisibleForRender) return false
         if (firstFrameAtMs > 0L) return false
         val readyAt = readyAtMs
-        if (readyAt <= 0L) return false
-        return SystemClock.elapsedRealtime() - readyAt >= FIRST_FRAME_TIMEOUT_MS
+        if (readyAt <= 0L || !videoSurfaceAttached) return false
+        val now = SystemClock.elapsedRealtime()
+        val seekAt = seekAnchorAtMs
+        if (seekAt > 0L && now - seekAt < SEEK_GRACE_MS) return false
+        // 位置不推进 = 还没真正播起来（纯加载慢），换内核解决不了任何问题
+        val posChangedAt = positionChangedAtMs
+        if (posChangedAt <= 0L || now - posChangedAt > POSITION_ALIVE_MS) return false
+        return now - readyAt >= FIRST_FRAME_TIMEOUT_MS
     }
 
     /** 冻住之后要重置观测锚点（兜底动作执行前调用）。 */
     fun resetRenderStallAnchor() {
-        renderedFrameCount = currentRenderedFrameCount()
+        currentRenderedFrameCount()?.let { renderedFrameCount = it }
         lastRenderedFrameAtMs = SystemClock.elapsedRealtime()
+        positionChangedAtMs = SystemClock.elapsedRealtime()
     }
 
     /** HTTP 数据源工厂：prepareAsync 时按当前 option / headers 重配，MediaSource 构建时引用 */
@@ -405,6 +492,17 @@ class Media3Player(context: Context) : IMediaPlayer {
             firstFrameAtMs = 0L
             lastRenderedFrameAtMs = 0L
             renderedFrameCount = 0
+            readyAtMs = 0L
+            // v5.3.1：辅助信号同样要清，否则重新开启时会带着上一次会话的旧锚点
+            lastSampleAllowed = false
+            positionChangedAtMs = 0L
+            seekAnchorAtMs = 0L
+            lastSampledPositionMs = -1L
+            wasSampling = false
+        } else {
+            // 开启时把「画面是否挂着」刷新成当下的事实（ticker 每拍也会现算，
+            // 这里只是让开关生效后的第一拍之前就有一个可用的值）
+            videoSurfaceAttached = isVideoSurfaceAlive()
         }
     }
 
@@ -433,8 +531,50 @@ class Media3Player(context: Context) : IMediaPlayer {
                 // seek 是异步生效的，直接以目标位置为锚点，避免后台线程在 seek 生效前外插旧位置
                 mirrorPositionMs = msec
                 mirrorPositionAtRealtimeMs = SystemClock.elapsedRealtime()
+                // 冻结观测：seek 后解码器要重建、画面要等关键帧，这段时间不出帧是必然的。
+                // 只清看门狗那一侧的计时是不够的 —— 冻结判据的锚点在本类里，
+                // 不清它就会「seek 刚完就判冻结」（v5.3.1）
+                onRenderObservationSeek()
             }
         }
+    }
+
+    /**
+     * 通知冻结观测「发生了一次 seek」（v5.3.1）。
+     *
+     * 由本类的 [seekTo] 与上层（播放页的 seekToPosition / seekPlayerAndDanmaku）共同调用。
+     * 上层那两条路径**不经过** [seekTo]（它们直接拿 ijkPlayer.seekTo），所以要单独通知。
+     */
+    fun onRenderObservationSeek() {
+        seekAnchorAtMs = SystemClock.elapsedRealtime()
+        // 位置锚点也一起重起算：seek 目标位置本身不算「位置在推进」的证据
+        positionChangedAtMs = SystemClock.elapsedRealtime()
+        lastSampledPositionMs = -1L
+        // seek 之后必定重新等关键帧，把帧锚点一起重锚，避免「seek 完立刻判冻结」
+        lastRenderedFrameAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * 页面可见性变化（v5.3.1）。
+     *
+     * 不可见时（切后台/画中画折叠/被遮挡）Surface 可能已销毁，**不出帧是必然的**，
+     * 而音频与播放位置照常推进 —— 不排除必然误判成「画面冻结」。
+     * 这里只让判据失效，不改开关（[renderStallMonitorEnabled] 决定的是「这个视频
+     * 该不该观测」，与「此刻能不能观测」是两件事）。
+     */
+    fun setPageVisibleForRenderObservation(visible: Boolean) {
+        if (pageVisibleForRender == visible) return
+        pageVisibleForRender = visible
+        val now = SystemClock.elapsedRealtime()
+        // 两个方向都要重锚（GAP-B）：
+        // - 变成不可见：不可见期间不积累判定，清掉计时；
+        // - **变回可见**：回到前台的那一刻，锚点可能还停在切后台之前（几分钟前），
+        //   如果只在上一个分支清，回前台首拍就会算出「已冻结好几分钟」→ **首拍即误判**。
+        //   同时把 wasSampling 复位，让下一拍走「恢复采样」分支重新建立基线。
+        lastRenderedFrameAtMs = now
+        positionChangedAtMs = now
+        wasSampling = false
+        lastSampledPositionMs = -1L
     }
 
     override fun reset() {
@@ -465,6 +605,13 @@ class Media3Player(context: Context) : IMediaPlayer {
         lastRenderedFrameAtMs = 0L
         renderedFrameCount = 0
         readyAtMs = 0L
+        // v5.3.1 新增的多信号状态必须一起清：留着上一段的「位置在涨」会让新流的
+        // 首帧超时判据一上来就成立（旧值 + 现在的时间差），把正常起播判成黑屏
+        lastSampleAllowed = false
+        positionChangedAtMs = 0L
+        seekAnchorAtMs = 0L
+        lastSampledPositionMs = -1L
+        wasSampling = false
     }
 
     override fun release() {
@@ -492,12 +639,17 @@ class Media3Player(context: Context) : IMediaPlayer {
     override fun setSurface(surface: Surface?) {
         pendingSurface = surface
         pendingHolder = null
+        // 画面摘掉时不出帧是必然的，冻结判据必须立刻失效（v5.3.1）。
+        // ticker 每拍也会现算（见 isVideoSurfaceAlive），这里只是让"下一拍之前"也对。
+        videoSurfaceAttached = isVideoSurfaceAlive()
         runOnMain { if (!released) player?.setVideoSurface(surface) }
     }
 
     override fun setDisplay(sh: SurfaceHolder?) {
         pendingHolder = sh
         pendingSurface = null
+        // 同理：surfaceDestroyed 会走到 setDisplay(null)，那之后判冻结 100% 是误报
+        videoSurfaceAttached = isVideoSurfaceAlive()
         runOnMain {
             if (released) return@runOnMain
             player?.setVideoSurfaceHolder(sh)
@@ -725,6 +877,7 @@ class Media3Player(context: Context) : IMediaPlayer {
         } else {
             created.setVideoSurfaceHolder(pendingHolder)
         }
+        videoSurfaceAttached = isVideoSurfaceAlive()
         applyScreenOn()
         player = created
         bufferFingerprint = fingerprint
@@ -953,7 +1106,11 @@ class Media3Player(context: Context) : IMediaPlayer {
             val now = SystemClock.elapsedRealtime()
             firstFrameAtMs = now
             lastRenderedFrameAtMs = now
-            renderedFrameCount = currentRenderedFrameCount()
+            currentRenderedFrameCount()?.let { renderedFrameCount = it }
+            // 首帧到达本身就证明「位置在推进」这条旁证是活跃的（v5.3.1）：
+            // 有些设备首帧回调早于第一次位置采样，不置位的话首帧超时会在
+            // 出图之后仍被判成立（positionChangedAtMs 还是 0）
+            if (positionChangedAtMs <= 0L) positionChangedAtMs = now
             // MEDIA_INFO_VIDEO_RENDERING_START(3)：story 的 6s 首帧看门狗依赖
             notifyInfo(IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START, 0)
         }
@@ -967,14 +1124,54 @@ class Media3Player(context: Context) : IMediaPlayer {
      * 但仍做 try/catch —— 一旦这里抛异常，整个 ticker 会死掉，连带网速/缓冲/镜像全都停更，
      * 那比画面冻结更严重（用户会看到进度条彻底不动）。
      */
-    private fun currentRenderedFrameCount(): Int {
-        val p = player ?: return 0
+    private fun currentRenderedFrameCount(): Int? {
+        val p = player ?: return null
         return try {
-            p.videoDecoderCounters?.renderedOutputBufferCount ?: 0
+            // ⚠ v5.3.1 修正（GAP-A，高危）：这里**不能**再用 `?: 0`。
+            //
+            // 反编译 media3 1.4.1 确认：`ExoPlayerImpl$ComponentListener.onVideoDisabled`
+            // 会把 `videoDecoderCounters` 置为 **null**（`aconst_null; putfield`），
+            // 触发链是 `MediaCodecVideoRenderer.onDisabled` → `BaseRenderer.disable()`
+            // → `eventDispatcher.disabled(counters)`。
+            //
+            // 旧写法把「读不到计数器」伪装成「计数是 0」，后果非常隐蔽：
+            //   - 出过首帧后 `renderedFrameCount` 被记成 N（比如 500）；
+            //   - 渲染器 disable 后每拍都读到 0；
+            //   - 于是 `count != renderedFrameCount` 恒成立（0 != 500），锚点**每次都在刷新**
+            //     ……看起来反而"安全"？
+            //   - 但真正糟糕的是另一种次序：disable 的那一刻读到 0，把 `renderedFrameCount`
+            //     写成 0；之后一直读 0 → `0 != 0` 不成立 → **锚点永久不再刷新** →
+            //     12 秒后必判冻结，而画面可能完全正常。
+            // 两种次序都不可接受。正确做法是把「读不到」表达成 null（未知），
+            // 由调用方**续命**（把锚点推到当下）而不是「当成没帧」。
+            p.videoDecoderCounters?.renderedOutputBufferCount
         } catch (ignored: IllegalStateException) {
-            // 非主线程 / 已释放：拿不到就当作「没有新帧」，由 [isRenderStalled] 的
-            // 「已出过首帧」前置条件兜住，不会在起播阶段炸出误判
-            0
+            // 非主线程 / 已释放：同样是「未知」，不是「没帧」
+            null
+        }
+    }
+
+    /**
+     * 画面此刻是否真的挂在播放器上（v5.3.1）。
+     *
+     * 两种画面模式都要覆盖：TextureView 走 [pendingSurface]，SurfaceView 走 [pendingHolder]。
+     * 不做 try/catch 之外的花样：`Surface.isValid` / `SurfaceHolder.getSurface` 都是
+     * 轻量同步调用，ticker 每 500ms 跑一次，开销可忽略。
+     */
+    private fun isVideoSurfaceAlive(): Boolean {
+        val surface = pendingSurface
+        if (surface != null) {
+            return try {
+                surface.isValid
+            } catch (ignored: Exception) {
+                false
+            }
+        }
+        val holder = pendingHolder ?: return false
+        return try {
+            holder.surface?.isValid == true
+        } catch (ignored: Exception) {
+            false
         }
     }
 
@@ -983,14 +1180,68 @@ class Media3Player(context: Context) : IMediaPlayer {
      *
      * 只在「确实该出帧」的状态下推进锚点，否则每次缓冲/暂停都会把
      * [lastRenderedFrameAtMs] 刷新成当下，反而让真正的冻结被掩盖。
+     *
+     * v5.3.1 追加的维护项（都是 [isRenderStalled] 的多信号判据要读的）：
+     * - [lastSampleAllowed]：这一拍到底算不算「该出帧」。**每次都要更新**（包括 false），
+     *   因为判据要在暂停/缓冲时立刻失效，而不是等下一条什么边沿事件；
+     * - [positionChangedAtMs]：位置推进的旁证；
+     * - 暂停→恢复的跳变要**重新起算**锚点（见下面 wasSampling 的注释）。
      */
     private fun updateRenderStallSample(p: Player) {
         if (!renderStallMonitorEnabled) return
-        if (p.playbackState != Player.STATE_READY || !p.isPlaying) return
+        val now = SystemClock.elapsedRealtime()
+
+        // 画面是否真的挂着：**每拍现算**，不依赖 setSurface/setDisplay 的边沿事件。
+        // 为什么现算而不是只用边沿赋值：SurfaceView 的 surface 在 surfaceCreated 之前
+        // 就是 invalid 的，靠边沿记录很容易停在「永远 false」（那会让冻结判据彻底失效，
+        // 真冻死时反而不能兜底）。这里读的是同一个 holder 的实时状态，语义更直接。
+        videoSurfaceAttached = isVideoSurfaceAlive()
+
+        // 「这一拍是否确实该出帧」——判据每次读的都是这个最新值，所以先无条件更新它。
+        // 不允许出帧的三种情况：不在 READY（IDLE/BUFFERING/ENDED）、没在播、画面没挂。
+        val allowed = p.playbackState == Player.STATE_READY && p.isPlaying && videoSurfaceAttached
+        lastSampleAllowed = allowed
+
+        // 位置推进是「还在播」的独立证据。即使不允许出帧也要继续记：
+        // 首帧超时判据正是在「音频已经出了、画面还没出」时用位置推进来区分
+        // 「真黑屏」和「纯加载慢」。
+        //
+        // 注意 `>= 0` 这个前置：刚 reset/seek 后基线是 -1，此时任何位置值都
+        // 「不等于 -1」，若不排除就会把「起播时停在 0」误记成「位置在推进」，
+        // 让首帧超时判据的硬前置失效。
+        val position = p.currentPosition
+        if (lastSampledPositionMs >= 0L && position != lastSampledPositionMs) {
+            positionChangedAtMs = now
+        }
+        lastSampledPositionMs = position
+
+        if (!allowed) {
+            // 不允许出帧的这一段，锚点保持不动（不能刷新，否则会掩盖真冻结）；
+            // 但要记住「这一拍没在采样」，好在恢复播放的那一刻重新起算（见下）。
+            wasSampling = false
+            return
+        }
+        // 暂停/缓冲 → 恢复播放的**跳变**：把锚点重锚到当下。
+        //
+        // 这是 v5.3.0 漏掉的一条误判来源：暂停期间 lastRenderedFrameAtMs 冻在暂停前，
+        // 用户暂停 20 秒再继续播，恢复后的第一拍 elapsed-last 已经是 20 秒 > 6 秒，
+        // 于是「刚点继续播就判冻结并切内核」。恢复的瞬间重锚，这一条就消失了。
+        if (!wasSampling) {
+            wasSampling = true
+            currentRenderedFrameCount()?.let { renderedFrameCount = it }
+            lastRenderedFrameAtMs = now
+        }
         val count = currentRenderedFrameCount()
+        if (count == null) {
+            // GAP-A 的落地点：计数器此刻读不到（渲染器被 disable / 已 release）。
+            // 「读不到」不代表「没出帧」—— 无法度量就不该判定，把锚点推到当下续命，
+            // 避免「永久卡在旧锚点 → 12 秒后必判冻结」。
+            lastRenderedFrameAtMs = now
+            return
+        }
         if (count != renderedFrameCount) {
             renderedFrameCount = count
-            lastRenderedFrameAtMs = SystemClock.elapsedRealtime()
+            lastRenderedFrameAtMs = now
         }
     }
 
@@ -1105,23 +1356,59 @@ class Media3Player(context: Context) : IMediaPlayer {
         const val DEFAULT_TIMEOUT_US = 15_000_000L
 
         /**
-         * 渲染帧停止推进多久判定为「画面冻住」（v5.3.0）。
+         * 渲染帧停止推进多久判定为「画面冻住」（v5.3.0；v5.3.1 从 6 秒拉长到 12 秒）。
          *
-         * 取值理由：正常 24~60fps 视频在 500ms 内至少出 12 帧，连续 6 秒**一帧都没有**
-         * 已经远超任何正常抖动（解码器换档、surface 重建都在百毫秒级）。
-         * 同时这个时长要小于用户「以为播放器坏了」的忍耐阈值（10 秒级），
-         * 又不能太短 —— 太短会把「音频在播、画面正在等关键帧」的正常起播尾段误判掉。
-         * 6 秒与 story 的首帧看门狗一致，便于用户与日志对照。
+         * ## 为什么必须拉长（这是本轮误判修复的核心之一）
+         * 6 秒的原始理由「正常 24~60fps 视频 500ms 内至少出 12 帧」只对**稳态播放**成立。
+         * 实测会连续数秒不出帧的正常场景有一大把：
+         * - 硬解换档 / 自适应切轨（`mediacodec-handle-resolution-change`）→ 解码器重建；
+         * - B 站 DASH 分片边界的 IDR 间隔，2~4 秒不出帧是常态；
+         * - 切到后台又切回来、旋转屏幕 → Surface 销毁重建，整条渲染管线重来；
+         * - 弱网下的重缓冲（位置由音频轨驱动仍在涨，画面先停）。
+         * 这些窗口一旦叠起来就超过 6 秒 → 判冻结 → 用户看到「播了几秒就切内核」。
+         *
+         * 12 秒的取值依据：① 它必须**明显大于**上面任何单个正常窗口
+         * （IDR 最长 4 秒 + 解码器重建 < 1 秒 + surface 重建 < 1 秒 ≈ 6 秒，取 2 倍余量）；
+         * ② 真·冻死时用户已经在怀疑播放器了（10 秒级），12 秒切换仍在可接受范围，
+         * 而且真冻死用户还会手动拖进度条（拖完有 seek 宽限 + 位置重建，不会卡住不出手）。
+         * ③ 用户明确要求「宁可漏判，不可误判」—— 多等 6 秒的代价远小于白切一次内核。
          */
-        const val RENDER_STALL_TIMEOUT_MS = 6_000L
+        const val RENDER_STALL_TIMEOUT_MS = 12_000L
 
         /**
-         * `STATE_READY` 之后多久仍然没有任何首帧，判定为「黑屏起不来」（v5.3.0）。
+         * seek 之后的宽限窗口（v5.3.1 新增）：这段时间内一律不判冻结/首帧超时。
          *
-         * 为什么比 [RENDER_STALL_TIMEOUT_MS] 长：READY 之后还要等第一个关键帧
-         * （B 站 DASH 分片的 IDR 间隔可达 2~4 秒），而 8 秒是 HANDOFF §3.4 里
-         * 已经定下的口径（"prepare 后 8 秒无首帧 → 自动切 ijk"），保持一致便于对照。
+         * 为什么需要：seek 会重建解码器并从新的关键帧开始，B 站 DASH 的 IDR 间隔
+         * 可达 2~4 秒；原实现只清了看门狗的计时，没清渲染判据的锚点，
+         * 于是「刚拖完进度条就被判成冻结」（也是一条「播几秒就切内核」的来源）。
+         * 取 5 秒（略大于最长 IDR 间隔 + 重建开销），比冻结阈值短，
+         * 保证 seek 之后仍有可能在 12 秒判出真冻结（5 + 12 = 17 秒内必有一次机会）。
          */
-        const val FIRST_FRAME_TIMEOUT_MS = 8_000L
+        const val SEEK_GRACE_MS = 5_000L
+
+        /**
+         * 「播放位置多久没变化就算没在播」（v5.3.1 新增）：冻结判据的独立旁证。
+         *
+         * 3 秒的取值理由：音频轨驱动的位置每帧都会变，正常播放时**几乎每一拍都在变**；
+         * 这里留 3 秒是给「高倍速下位置跳变极大」「主线程卡顿导致 ticker 漏拍」留余量。
+         * 一旦位置 3 秒没动，就说明不是在播（网络卡死/解码卡死/暂停），
+         * 那属于看门狗「重建数据源」的职责，**换内核解决不了问题**，所以不判冻结。
+         */
+        const val POSITION_ALIVE_MS = 3_000L
+
+        /**
+         * `STATE_READY` 之后多久仍然没有任何首帧，判定为「黑屏起不来」
+         * （v5.3.0；v5.3.1 从 8 秒拉长到 20 秒）。
+         *
+         * 为什么不沿用 8 秒：8 秒是 HANDOFF §3.4 里「prepare 后 8 秒无首帧」的旧口径，
+         * 但它**没有区分「网络慢」和「渲染不出」**。弱网下 READY 之后还要下几个分片、
+         * 等一个 4 秒 IDR、硬解器初始化 —— 8 秒被吃完是常见现象，
+         * 此时换 ijk 同样黑屏，纯属白切。
+         * 20 秒的依据：正常首帧在 3 秒内必到；超过 20 秒还黑着，
+         * 要么真是渲染管线坏了（该切），要么用户早就自己退出了 —— 是个安全的下界。
+         * 再叠加「位置必须在推进」这条硬前置（见 [isFirstFrameOverdue]），
+         * 纯加载慢的场景根本不会触发。
+         */
+        const val FIRST_FRAME_TIMEOUT_MS = 20_000L
     }
 }

@@ -30,8 +30,16 @@ class PlaybackWatchdog @JvmOverloads constructor(
     private val bufferingThresholdMs: Long = 13000L,
     /** 单次会话最多自动恢复次数 */
     private val maxRecoveryAttempts: Int = 3,
-    /** 画面多久没有新帧判定为冻结（v5.3.0；0 表示不判冻结） */
-    private val freezeThresholdMs: Long = 6000L
+    /**
+     * 画面冻结的**确认窗口**（v5.3.0 新增；v5.3.1 从 6000 改到 2000）。
+     *
+     * v5.3.1 语义变更：这个值不再是「多久没帧算冻结」，而是「探测连续成立多久才采信」。
+     * 真正的时长门槛下移到了供数方（`Media3Player.isRenderStalled`，12 秒），
+     * 因为只有它知道「帧计数之外」的信号（位置是否在涨、画面是否挂着、是否刚 seek）。
+     * 本类只做**消抖**：tick 是 1000ms，2000ms 意味着必须连续 3 拍都为 true 才通知，
+     * 单拍抖动（某个 tick 恰好撞上解码器换档）不会再直接触发切内核。
+     */
+    private val freezeThresholdMs: Long = 2000L
 ) {
 
     interface Listener {
@@ -94,6 +102,16 @@ class PlaybackWatchdog @JvmOverloads constructor(
     @Volatile
     private var buffering = false
 
+    /**
+     * 播放页当前是否可见（v5.3.1）。
+     *
+     * 不可见时（切后台、画中画被折叠、被全屏其它窗口遮挡）Surface 会销毁或不再出帧，
+     * 而音频/位置照常 —— 不排除必然把「看不见」判成「冻住了」。
+     * 默认 true：注入方（播放页）如果不调用 [onVisibilityChanged]，行为与 v5.3.0 一致。
+     */
+    @Volatile
+    private var pageVisible = true
+
     /** 最近一次观察到的播放进度 */
     @Volatile
     private var lastPosition = -1L
@@ -113,9 +131,21 @@ class PlaybackWatchdog @JvmOverloads constructor(
     @Volatile
     private var frozenProbe: (() -> Boolean)? = null
 
-    /** 是否已经就「这一次冻结」通知过上层（一次冻结只通知一次，避免刷屏/重复切内核） */
+    /**
+     * 本次冻结是否已经通知过上层（一次冻结只通知一次，避免刷屏/重复切内核）。
+     *
+     * v5.3.1：从原来与首帧超时**共用**一个标记拆成两个独立标记。
+     * 原实现两处共用 `freezeNotified`，于是「冻结报过一次、但切换没成功」
+     * （例如页面已兜底过一次）之后，首帧超时这条就**永远报不出来**了 ——
+     * 两种形态虽然互斥（一个有首帧、一个没有），但跨 prepare 复用实例时
+     * 前后两段媒体可以是不同形态，共用一个标记会让后一段彻底失去兜底。
+     */
     @Volatile
     private var freezeNotified = false
+
+    /** 本次「无首帧」是否已经通知过上层（与 [freezeNotified] 相互独立，见上） */
+    @Volatile
+    private var firstFrameNotified = false
 
     /** 上一次探测时刻：用于把「已经冻了多久」算给上层看 */
     @Volatile
@@ -167,6 +197,7 @@ class PlaybackWatchdog @JvmOverloads constructor(
         lastProgressAt = 0L
         recoveryAttempts = 0
         freezeNotified = false
+        firstFrameNotified = false
         freezeSince = 0L
     }
 
@@ -194,6 +225,7 @@ class PlaybackWatchdog @JvmOverloads constructor(
      */
     fun setFirstFrameOverdueProbe(probe: (() -> Boolean)?) {
         firstFrameOverdueProbe = probe
+        firstFrameNotified = false
     }
 
     fun setUserWantsPlay(wantsPlay: Boolean) {
@@ -202,6 +234,12 @@ class PlaybackWatchdog @JvmOverloads constructor(
             // 恢复播放时重新开始计时，否则会被误判为卡死
             lastProgressAt = System.currentTimeMillis()
             lastPosition = -1L
+            // v5.3.1：冻结计时也必须一起清。
+            // 原实现只清了进度计时，freezeSince 保留暂停前的值 ——
+            // 「暂停时画面本来就不动」这一拍会把 freezeSince 置上，恢复后
+            // 立刻满足「已冻了 N 秒」→ 刚点继续播就切内核。
+            freezeSince = 0L
+            freezeNotified = false
         }
     }
 
@@ -210,12 +248,22 @@ class PlaybackWatchdog @JvmOverloads constructor(
         if (isPrepared) {
             lastProgressAt = System.currentTimeMillis()
             lastPosition = -1L
+            // 同理：换P/切清晰度后是新的一段流，旧的冻结计时不能顺延（v5.3.1）
+            freezeSince = 0L
+            freezeNotified = false
+            firstFrameNotified = false
         }
     }
 
     fun onBufferingStart() {
         buffering = true
         bufferingSince = System.currentTimeMillis()
+        // v5.3.1：缓冲期间 check() 会整段跳过画面判定（缓冲时不出帧是正常的），
+        // 于是 freezeSince 会**停在缓冲前**的值上。缓冲结束、画面若还没起来，
+        // 第一拍就算出「已冻结 N 秒」→ 一次正常重缓冲被当成冻结切内核。
+        // 这里把冻结计时清掉，缓冲结束后重新数。
+        freezeSince = 0L
+        freezeNotified = false
     }
 
     fun onBufferingEnd() {
@@ -224,6 +272,13 @@ class PlaybackWatchdog @JvmOverloads constructor(
         // 缓冲结束后重新计时，给解码器一点恢复时间
         lastProgressAt = System.currentTimeMillis()
         lastPosition = -1L
+        // 冻结计时也要清，与 [onBufferingStart] 和 [onSeek] 保持一致（v5.3.1）。
+        // 只清 onBufferingStart 是不够的：缓冲期间的 freezeSince 已经归零，但缓冲**结束**
+        // 后画面往往还要再等几拍才起来；若此时 freezeSince 又被置上而画面迟迟不出，
+        // 会把「刚重缓冲完的正常等待」算进冻结时长。两端都清，语义最直白：
+        // **缓冲这一段完全不参与冻结判定**。
+        freezeSince = 0L
+        freezeNotified = false
     }
 
     /** 由进度定时器喂入当前播放位置 */
@@ -254,6 +309,23 @@ class PlaybackWatchdog @JvmOverloads constructor(
         lastPosition = -1L
     }
 
+    /**
+     * 页面可见性变化（v5.3.1 新增）。
+     *
+     * 为什么必要：切后台/画中画/被其它窗口完全遮挡时，Surface 会被销毁或不再出帧，
+     * 而**音频仍在播、位置仍在涨** —— 这恰好是冻结判据的特征组合，不排除必然误判。
+     * 本方法只清计时并置位「不可见」，不改变 [userWantsPlay]（用户意图没变，只是看不见）。
+     */
+    fun onVisibilityChanged(visible: Boolean) {
+        pageVisible = visible
+        freezeSince = 0L
+        freezeNotified = false
+        if (!visible) {
+            // 不可见期间发现的「冻结」不作数，回到前台重新数
+            Logu.d("看门狗", "页面不可见，冻结判定挂起")
+        }
+    }
+
     private fun check() {
         if (!running || !prepared || !userWantsPlay) return
 
@@ -265,7 +337,8 @@ class PlaybackWatchdog @JvmOverloads constructor(
         // 永远不触发任何兜底 —— 这正是用户反馈的那个盲区。先问画面，才能在这个
         // 「位置正常、只有画面死」的形态下接管。
         // 缓冲态不判：缓冲时不出帧是正常的，交给下面的缓冲超时判据。
-        if (!buffering && checkVideoFrozen(now)) return
+        // v5.3.1：页面不可见时也不判（Surface 被销毁/遮挡时不出帧是必然的）。
+        if (!buffering && pageVisible && checkVideoFrozen(now)) return
 
         // 1) 缓冲超时
         if (buffering) {
@@ -313,10 +386,13 @@ class PlaybackWatchdog @JvmOverloads constructor(
         }
         if (freezeSince <= 0L) freezeSince = now
         val frozenMs = now - freezeSince
+        // v5.3.1：这里只做**消抖**。freezeThresholdMs 已改为 2000ms 的确认窗口，
+        // 真正的时长门槛在供数方（位置是否在涨、画面是否挂着、是否刚 seek、帧计数 12 秒没动）。
+        // 必须连续多拍都成立才采信，避免某一拍恰好撞上解码器换档就立刻切内核。
         if (frozenMs < freezeThresholdMs || freezeNotified) return false
         // 一次冻结只通知一次：切换内核是重动作，重复通知会让画面反复黑一下
         freezeNotified = true
-        Logu.w("看门狗", "检测到画面冻结（${frozenMs}ms 无新帧），交由上层切换内核")
+        Logu.w("看门狗", "检测到画面冻结（已连续 ${frozenMs}ms 判定成立），交由上层切换内核")
         listener.onVideoFrozen(frozenMs)
         return true
     }
@@ -324,9 +400,10 @@ class PlaybackWatchdog @JvmOverloads constructor(
     /**
      * 无首帧超时是否成立；成立则通知上层并返回 true（本次 tick 已处理完）。
      *
-     * 与 [checkVideoFrozen] 的冻结分支共用 [freezeNotified] 做「一次为限」：
-     * 对上层来说两者是同一类问题的两个形态，兜底动作也一样（切内核），
-     * 一次会话里只需要触发一次，不该先报冻结再报无首帧。
+     * v5.3.1：改用**独立的** [firstFrameNotified] 做「一次为限」，不再与冻结共用
+     * [freezeNotified]。原实现共用会让「冻结报过一次没切成」之后首帧超时永久失效。
+     * 注意两种形态本身仍是互斥的（由供数方保证：出过首帧就不判首帧超时），
+     * 所以拆开标记不会造成同一 tick 双报。
      */
     private fun handleFirstFrameOverdue(): Boolean {
         val probe = firstFrameOverdueProbe ?: return false
@@ -336,8 +413,8 @@ class PlaybackWatchdog @JvmOverloads constructor(
             Logu.w("看门狗", "首帧探测异常: " + e.message)
             false
         }
-        if (!overdue || freezeNotified) return false
-        freezeNotified = true
+        if (!overdue || firstFrameNotified) return false
+        firstFrameNotified = true
         Logu.w("看门狗", "就绪后超时仍无首帧，交由上层切换内核")
         listener.onFirstFrameTimeout()
         return true
