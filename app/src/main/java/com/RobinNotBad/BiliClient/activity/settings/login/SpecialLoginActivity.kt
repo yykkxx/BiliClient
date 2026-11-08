@@ -67,9 +67,9 @@ class SpecialLoginActivity : BaseActivity() {
             SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.setup, true)
             MsgUtil.showMsg("登录凭据已导入")
             openRecommend()
-        } catch (e: org.json.JSONException) { // quality-allow：兼容历史凭据 JSON 格式
+        } catch (ignored: org.json.JSONException) { // quality-allow：兼容历史凭据 JSON 格式
             MsgUtil.showMsg("凭据格式错误，请检查复制内容")
-        } catch (e: IllegalArgumentException) {
+        } catch (ignored: IllegalArgumentException) {
             MsgUtil.showMsg("凭据内容无效，请重新复制")
         }
     }
