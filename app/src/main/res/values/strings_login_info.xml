@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_info_four_ports_desc">以下包含 Web、Android手机、HD、TV 四端的全部账号与多份登录凭据，可用于备份或在其它设备导入。凭据等同账号密码，请勿分享给别人；复制后请妥善保管并及时清理剪贴板。查看不会退出任何端口。</string>
+</resources>
