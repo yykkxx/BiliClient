@@ -77,3 +77,22 @@ releases/5.0.2-alpha6/com.tencent.qqmusicwatchs_20260606_hidden.apk
 - 主线 `app/build.gradle` 里保留了 `//noinspection ExpiredTargetSdkVersion`，否则 `assembleRelease` 的 `lintVitalRelease` 会因 `targetSdk 30` 直接失败。
 - 渠道包使用 **debug 签名**，与主线正式签名无关；仅用于内部/测试分发。
 - 复制 `changed/icon.png` 可作为替换图标的入口；包名、应用名可按需修改脚本顶部的默认值。
+
+## 官方签名包（`sign_platform.sh`，2026-11-08 新增）
+
+用户此前手工用 **MT 管理器「默认签名」** 签两个 `_sign` 渠道包。现在已完全复现，**改为自动签**。
+
+```bash
+# 在 build_flavor.sh 出包之后跑
+bash changed/sign_platform.sh releases/<ver>/com.tencent.qqmusicwatchs_20260606.apk \
+     releases/<ver>/com.tencent.qqmusicwatchs_20260606_sign.apk
+bash changed/sign_platform.sh releases/<ver>/com.tencent.qqmusicwatchs_20260606_hidden.apk \
+     releases/<ver>/com.tencent.qqmusicwatchs_20260606_hidden_sign.apk
+```
+
+- 这套签名实际是 **AOSP `testkey`**（不是 `platform`，platform 的 SHA-256 是 `c8a2e9bc…`）。
+- 证书 SHA-256 `a40da80a…71bf5dc`、SHA-1 `61ed377e…a5af81`、MD5 `e89b158e…78e87`。
+- key 的权威来源：用户从 MT 安装包里提取的 `key/testkey.pk8` + `key/testkey.x509.pem`
+  （与 AOSP 公开 testkey 逐字节一致，sha256 `495675d3…` / `a4384ba8…`）。
+- keystore 落在 `env/keys/testkey/testkey.jks`（alias `testkey`，pass `android`）；**不进 git**。
+- 详细复现记录见 `notes/platform_sign_20261108.md`，规则见 `agent.md` §3.1.1。
