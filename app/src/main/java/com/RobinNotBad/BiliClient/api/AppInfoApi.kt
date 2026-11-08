@@ -1,7 +1,6 @@
 package com.RobinNotBad.BiliClient.api
 
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.text.TextUtils
 import android.util.Log
@@ -9,7 +8,6 @@ import android.util.Log
 import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.BuildConfig
 import com.RobinNotBad.BiliClient.R
-import com.RobinNotBad.BiliClient.activity.update.UpdateInfoActivity
 import com.RobinNotBad.BiliClient.model.Announcement
 import com.RobinNotBad.BiliClient.model.UserInfo
 import com.RobinNotBad.BiliClient.util.MsgUtil
@@ -46,7 +44,6 @@ object AppInfoApi {
 
         try {
             val version = BiliTerminal.getVersion()
-            val curr = ConfInfoApi.getDateCurr()
 
             checkAnnouncement()
 
@@ -80,12 +77,7 @@ object AppInfoApi {
                 SharedPreferencesUtil.putInt("app_version_last", version)
             }
 
-            if (SharedPreferencesUtil.getInt("app_version_check", 0) < curr) {    //限制一天一次
-                Log.e("debug", "检查更新")
-                SharedPreferencesUtil.putInt("app_version_check", curr)
-
-                checkUpdate(context, false)
-            }
+            // 更新信息只由设置内的 Gitee 页面获取，不再自动查询上游终端版本服务。
         } catch (e: IOException) {
             MsgUtil.showMsg("无法连接到终端公告接口\n也许是服务器宕机了？\n（对软件内容无影响）")
         } catch (e: Exception) {
@@ -169,66 +161,6 @@ object AppInfoApi {
             }
         }
         return sb.toString()
-    }
-
-    private fun checkUpdate(context: Context, need_toast: Boolean, debug_ver: Boolean) {
-        try {
-            val realIsDebug = ToolsUtil.isDebugBuild()
-            var url = "http://api.biliterminal.cn/terminal/version/get_last"
-            if (debug_ver) url += "?debug"
-            val result = NetWorkUtil.getJson(url, customHeaders)
-
-            if (result.getInt("code") != 0) throw Exception(result.getString("msg"))
-            val data = result.getJSONObject("data")
-
-            val version_name = data.getString("version_name")
-            val update_log = data.getString("update_log")
-            val latest = data.getInt("version_code")
-            val ctime = data.optLong("ctime", -1)
-            val can_download = data.optInt("can_download", 0)
-            val is_release = data.optInt("is_release", 0)
-
-            val version = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionCode
-            if (latest > version) {
-                MsgUtil.showMsg(if (debug_ver) "发现新的测试版！" else "发现新版本！")
-                context.startActivity(Intent(context, UpdateInfoActivity::class.java)
-                        .putExtra("versionName", version_name)
-                        .putExtra("versionCode", latest)
-                        .putExtra("updateLog", update_log)
-                        .putExtra("ctime", ctime)
-                        .putExtra("isRelease", is_release)
-                        .putExtra("canDownload", can_download))
-                return
-            } else if (need_toast && !(realIsDebug && !debug_ver)) {
-                MsgUtil.showMsg(if (debug_ver) "没有新的测试版了！" else "当前是最新版本！")
-            }
-            if (realIsDebug && !debug_ver) {
-                checkUpdate(context, need_toast, true)
-            }
-        } catch (e: IOException) {
-            MsgUtil.err("检查更新：", e)
-        } catch (e: JSONException) {
-            MsgUtil.err("检查更新：", e)
-        } catch (e: Exception) {
-            MsgUtil.showMsg(e.message)
-        }
-    }
-
-    @JvmStatic
-    fun checkUpdate(context: Context, need_toast: Boolean) {
-        checkUpdate(context, need_toast, false)
-    }
-
-    @Throws(Exception::class)
-    @JvmStatic
-    fun getDownloadUrl(versionCode: Int): String {
-        val url = "https://api.biliterminal.cn/terminal/version/get_download_url" + NetWorkUtil.FormData().setUrlParam(true)
-                .put("version_code", versionCode)
-        val result = NetWorkUtil.getJson(url, customHeaders)
-
-        if (result.getInt("code") != 0) throw Exception("错误：" + result.getString("msg"))
-
-        return result.optString("data")
     }
 
     @Throws(Exception::class)

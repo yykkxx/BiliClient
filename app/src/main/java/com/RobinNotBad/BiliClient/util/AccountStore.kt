@@ -234,13 +234,20 @@ object AccountStore {
         ensureMigrated()
         if (!isValidPort(port) || mid <= 0L) return false
         val portValue = normalizePort(port)
+        // F4：存在性检查必须与 snapshot/writeActiveSlots 在**同一账号锁内**做出最终裁决。
+        // 否则「读到目标存在 → 另一线程 logout 删掉它 → 本线程写入」会激活一个已删除的账号：
+        // 该账号的账号槽已被清空，激活槽位于是变成「有 mid、无凭据」，isPortLoggedIn 仍会判登录。
+        //
+        // 为什么要先做一次锁外的廉价预检：真正的判定在锁内（见下），但读列表键是 IO，
+        // 把它整段放进锁内会让「慢读偏好」阻塞所有其它账号操作。预检只用于提前退出，
+        // **不享受任何信任** —— 锁内重查才是唯一裁决点（TOCTOU 正是发生在两者之间）。
         if (!midsOf(portValue).contains(mid)) return false
-        synchronized(this) {
-            snapshotActiveSlots(portValue)
-            writeActiveSlots(portValue, mid)
+        val applied = synchronized(this) {
+            if (!midsOf(portValue).contains(mid)) return@synchronized false
+            snapshotActiveSlots(portValue); writeActiveSlots(portValue, mid); true
         }
-        if (portValue == PORT_WEB) NetWorkUtil.refreshHeaders()
-        return true
+        if (applied && portValue == PORT_WEB) NetWorkUtil.refreshHeaders()
+        return applied
     }
 
     /** 账号相关的「我是谁」：优先 mainPort 激活账号，其次 web 激活，再扫其它端口 */
@@ -368,21 +375,10 @@ object AccountStore {
     fun loginWeb(mid: Long, cookies: String, csrf: String, refreshToken: String, name: String?, face: String?) {
         ensureMigrated()
         if (mid <= 0L || cookies.isEmpty()) return
-        synchronized(this) {
-            // 先把「正在用的那个 web 账号」的最新凭据存回它自己的槽位，
-            // 否则同一个端口登录第二个号时，第一个号刷新过的 Cookie 会丢。
-            snapshotActiveSlots(PORT_WEB)
-            addToPortList(PORT_WEB, mid)
-            writeAccountSlot(PORT_WEB, mid, cookies, csrf, "", refreshToken,
-                    name ?: accountName(PORT_WEB, mid), face ?: accountFace(PORT_WEB, mid))
-            writeActiveSlots(PORT_WEB, mid)
-        }
+        // F3：整个登录写入（含 saveCurrent）必须在同一账号锁内完成 —— 否则
+        // 「账号槽已更新、credentialId 还是旧的」那段空窗会被并发续期用来覆盖登录前的旧凭据。
+        synchronized(this) { loginLocked(PORT_WEB, mid, cookies, csrf, "", refreshToken, name, face) }
         NetWorkUtil.refreshHeaders()
-        // v5.3.0：把这次登录的凭据**另存为一条独立凭据**（而不是覆盖该账号已有的那份）。
-        // 用户需求是「同一个账号可以并存多份凭据、随时切回」：如果登录直接覆盖账号槽，
-        // 那份旧的 SESSDATA 就再也拿不回来了。saveCurrent 读的是刚写好的账号槽，
-        // 所以这里顺序必须在 writeActiveSlots 之后。
-        AccountCredentialStore.saveCurrent(PORT_WEB, mid, "扫码登录 " + shortNow())
     }
 
     /**
@@ -403,16 +399,31 @@ object AccountStore {
         if (!isValidPort(port) || mid <= 0L || accessToken.isEmpty()) return
         val portValue = normalizePort(port)
         if (portValue == PORT_WEB) return
-        synchronized(this) {
-            // 同上：先快照该端口当前激活账号，再切到新号（同端口多账号互不覆盖）
-            snapshotActiveSlots(portValue)
-            addToPortList(portValue, mid)
-            writeAccountSlot(portValue, mid, cookies, "", accessToken, refreshToken,
-                    name ?: accountName(portValue, mid), face ?: accountFace(portValue, mid))
-            writeActiveSlots(portValue, mid)
-        }
-        // v5.3.0：同 loginWeb —— 新登录的 token 另存为一条凭据，旧的不被覆盖
-        AccountCredentialStore.saveCurrent(portValue, mid, "扫码登录 " + shortNow())
+        synchronized(this) { loginLocked(portValue, mid, cookies, "", accessToken, refreshToken, name, face) }
+    }
+
+    /**
+     * 四个端口共用的登录落地（调用方必须已持有账号锁）。
+     *
+     * 顺序不可调整：
+     * 1. 先把该端口**当前激活账号**的凭据快照回它自己的槽位（同端口多账号互不覆盖）；
+     * 2. 若本次登录的 mid 就是当前激活账号，再把它**上一份**凭据存成一条独立凭据 ——
+     *    否则覆盖账号槽后，`saveCurrent` 的惰性迁移会用「新内容」生成默认凭据，旧的那份永久丢失；
+     * 3. 整份替换四凭据字段（F2：空值也写，避免与上一份 refresh_token/cookies 混配）；
+     * 4. 写激活槽位，最后把新登录的这份存成一条凭据（此时 `saveCurrent` 读到的才是新内容）。
+     */
+    private fun loginLocked(
+        port: String, mid: Long, cookies: String, csrf: String,
+        accessToken: String, refreshToken: String, name: String?, face: String?
+    ) {
+        snapshotActiveSlots(port)
+        val sameAccount = activeMidValue(port) == mid
+        if (sameAccount) AccountCredentialStore.saveCurrent(port, mid, "登录前 " + shortNow())
+        addToPortList(port, mid)
+        writeAccountSlot(port, mid, cookies, csrf, accessToken, refreshToken,
+                name ?: accountName(port, mid), face ?: accountFace(port, mid), replaceMissing = true)
+        writeActiveSlots(port, mid)
+        AccountCredentialStore.saveCurrent(port, mid, "扫码登录 " + shortNow())
     }
 
     /** `MM-dd HH:mm` 形式的当前时刻（凭据默认名用，避免把具体实现散到 UI 层） */
@@ -427,8 +438,10 @@ object AccountStore {
         ensureMigrated()
         if (!isValidPort(port) || mid <= 0L) return
         val portValue = normalizePort(port)
-        if (!midsOf(portValue).contains(mid)) return
+        // F4 同类审查：membership 检查与写入必须在同一账号锁内，
+        // 否则「读到账号存在 → 另一线程 logout 删掉 → 本线程写回昵称/头像」会给已删除账号留下孤儿展示缓存。
         synchronized(this) {
+            if (!midsOf(portValue).contains(mid)) return
             if (!name.isNullOrEmpty()) SharedPreferencesUtil.putString(accountKey(portValue, mid, SUFFIX_NAME), name)
             if (!face.isNullOrEmpty()) SharedPreferencesUtil.putString(accountKey(portValue, mid, SUFFIX_FACE), face)
             if (activeMidValue(portValue) == mid) writeActiveDisplayCache(portValue, mid)
@@ -652,6 +665,18 @@ object AccountStore {
         return SharedPreferencesUtil.getString(accountKey(port, mid, SUFFIX_FACE), "") ?: ""
     }
 
+    /**
+     * 写账号槽。
+     *
+     * @param replaceMissing **登录专用**：true 表示四凭据字段整份替换（空值=清除）。
+     *   F2 的落地点。与默认的「空值不覆盖」语义必须区分开：
+     *   - 默认（false）服务于**资料更新 / 快照回写**：拿到的可能只是部分字段，
+     *     空值代表「这次没有新信息」，不能拿它清掉别的字段；
+     *   - 登录（true）拿到的是一份**全新的完整凭据**：回包里 `refresh_token`/`cookies` 为空，
+     *     恰恰表示「这个端口这份凭据没有它们」。沿用「空值不覆盖」会让新 access_token
+     *     与同一账号上一份的 refresh_token/cookies 混配，产生本机根本不存在的组合。
+     *   昵称/头像始终是展示缓存，缺省时保留旧值。
+     */
     private fun writeAccountSlot(
         port: String,
         mid: Long,
@@ -660,12 +685,13 @@ object AccountStore {
         accessToken: String,
         refreshToken: String,
         name: String,
-        face: String
+        face: String,
+        replaceMissing: Boolean = false
     ) {
-        if (cookies.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_COOKIES), cookies)
-        if (csrf.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_CSRF), csrf)
-        if (accessToken.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_ACCESS_TOKEN), accessToken)
-        if (refreshToken.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_REFRESH_TOKEN), refreshToken)
+        for ((suffix, value) in listOf(SUFFIX_COOKIES to cookies, SUFFIX_CSRF to csrf,
+                SUFFIX_ACCESS_TOKEN to accessToken, SUFFIX_REFRESH_TOKEN to refreshToken)) {
+            if (replaceMissing || value.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, suffix), value)
+        }
         if (name.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_NAME), name)
         if (face.isNotEmpty()) SharedPreferencesUtil.putString(accountKey(port, mid, SUFFIX_FACE), face)
     }
@@ -687,9 +713,9 @@ object AccountStore {
     /**
      * 把一份凭据写回该账号的**账号槽**（切号路径的落地动作）。
      *
-     * 语义与 [writeAccountSlot] 一致：**空值不覆盖**。这一点很关键 ——
-     * 切到一份「只有 cookies、没有 access_token」的 web 凭据时，
-     * 不能把该账号原来的 access_token 抹掉（那会让 APP 端口一起掉线）。
+     * 凭据字段完整替换，缺失值清除，昵称/头像仍允许保留。
+     * 四端槽位本来就独立，清 Web 的 token 不会影响 APP；
+     * 保留缺失字段反而会把上一份 refresh_token 与新 Cookie 混配。
      *
      * @param fields 键为 `cookies`/`csrf`/`access_token`/`refresh_token`/`name`/`face`，
      *   与 [credentialFields] 的返回键**同一套**
@@ -697,9 +723,17 @@ object AccountStore {
     @JvmStatic
     @JvmSuppressWildcards
     fun writeCredentialFields(port: String, mid: Long, fields: Map<String, String>) {
+        synchronized(this) { writeCredentialFieldsLocked(port, mid, fields) }
+    }
+
+    private fun writeCredentialFieldsLocked(port: String, mid: Long, fields: Map<String, String>) {
         if (mid <= 0L || fields.isEmpty()) return
         ensureMigrated()
         val portValue = normalizePort(port)
+        // 切换的是一整份凭据；缺失的 token 必须清除，不能与上一份凭据混用。
+        for (suffix in listOf(SUFFIX_COOKIES, SUFFIX_CSRF, SUFFIX_ACCESS_TOKEN, SUFFIX_REFRESH_TOKEN)) {
+            SharedPreferencesUtil.putString(accountKey(portValue, mid, suffix), fields[suffix] ?: "")
+        }
         writeAccountSlot(
             portValue, mid,
             fields["cookies"] ?: "",
@@ -771,6 +805,10 @@ object AccountStore {
         val cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
         if (cookies.isEmpty()) return
         addToPortList(PORT_WEB, active)
+        // 新 Cookie 对应的 token 可以为空（授权跨端修复不签发 Web token），必须完整镜像。
+        SharedPreferencesUtil.putString(accountKey(PORT_WEB, active, SUFFIX_REFRESH_TOKEN),
+            SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "") ?: "")
+        SharedPreferencesUtil.putString(accountKey(PORT_WEB, active, SUFFIX_ACCESS_TOKEN), "")
         writeAccountSlot(
             PORT_WEB, active, cookies,
             SharedPreferencesUtil.getString(SharedPreferencesUtil.csrf, "") ?: "",

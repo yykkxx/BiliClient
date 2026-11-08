@@ -193,15 +193,24 @@ object PlayerApi {
             } else {
                 dash.getVideoStream(playerData.qn)
             }
-            if (videoStream != null) {
-                playerData.videoUrl = videoStream.baseUrl
-            }
-
-            // 设置音频URL（选择最高质量的音频流）
             val audioStream = dash?.getBestAudioStream()
-            if (audioStream != null) {
-                playerData.audioUrl = audioStream.baseUrl
+            // 关键兜底：media3 只有硬解，按设备能力过滤 codecid 之后可能**一条都没剩下**
+            // （或音频轨缺失）。这时原来会把 videoUrl / audioUrl 留空传下去 →
+            // 播放器 setDataSource("") → 一直是「正在缓冲」、网速有数字但没有画面，
+            // 而换成 ijk 立刻能播（ijk 有 ffmpeg 软解，走 durl 单流）。
+            // 所以这里必须显式回落到 durl 单流，而不是把空地址交给播放器。
+            // 注意回退参数必须是 download=true：getVideo 的「!download → 走 DASH」分支
+            // 因此不会再次进入本函数，不存在递归。
+            if (videoStream == null || audioStream == null) {
+                Logu.w("player", "DASH 无可播流（video=" + (videoStream != null) +
+                        " audio=" + (audioStream != null) + "），回落 durl 单流")
+                playerData.dashData = null
+                getVideo(playerData, true)
+                return
             }
+            playerData.videoUrl = videoStream.baseUrl
+            // 设置音频URL（选择最高质量的音频流）
+            playerData.audioUrl = audioStream.baseUrl
         } else {
             getVideo(playerData, true)
             return

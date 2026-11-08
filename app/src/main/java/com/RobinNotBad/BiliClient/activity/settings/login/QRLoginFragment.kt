@@ -191,7 +191,7 @@ class QRLoginFragment : Fragment() {
 
                     val str = response.body!!.string()
                     val loginJson = JSONObject(str)
-                    Logu.v("login_state", str)
+                    // 回包可能包含完整 Web 凭据，禁止写入日志。
 
                     val code = loginJson.getJSONObject("data").getInt("code")
                     when (code) {
@@ -218,8 +218,7 @@ class QRLoginFragment : Fragment() {
 
                             SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.cookie_refresh, true)
 
-                            Log.d("debug-login-cookies", cookies ?: "")
-                            Log.e("debug-refresh-token", SharedPreferencesUtil.getString(SharedPreferencesUtil.refresh_token, "") ?: "")
+                            Logu.d("debug-login", "Web 登录凭据已保存（不输出内容）")
 
                             val instance = BiliTerminal.getInstanceActivityOnTop()
                             if (instance != null && !instance.isDestroyed()) instance.finish()

@@ -375,17 +375,14 @@
             android:exported="false"
             android:label="用户信息"
             android:screenOrientation="locked" />
-        <!-- v5.2.1 图片预览：主题必须是 Theme.BiliClient.NoSwipe（父 Theme.BiliClient）。
-             原来的 Theme.NoSwipe 父类是 android:Theme.Black，会丢掉全部 app 控件样式
-             （按钮/文字会变丑）；而 Theme.BiliClient 本身 windowSwipeToDismiss=true，
-             侧滑退出会吃掉双指缩放手势。NoSwipe 变体只关掉这一项、其余照旧。
-             注意 ImageViewerActivity.onCreate 里还会 setTheme 一次，两者要一致（同一主题）。 -->
+        <!-- 图片专属非全屏窗口：启动窗口和 Activity 主题一致，避免全屏闪烁。
+             继承应用样式、禁止侧滑退出，状态栏和导航栏常显。 -->
         <activity
             android:name=".activity.ImageViewerActivity"
             android:exported="true"
             android:label="图片查看"
             android:screenOrientation="locked"
-            android:theme="@style/Theme.BiliClient.NoSwipe" />
+            android:theme="@style/Theme.BiliClient.ImagePreview" />
         <activity
             android:name=".activity.DialogActivity"
             android:exported="false"

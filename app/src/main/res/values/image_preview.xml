@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 图片预览独有窗口配置；不改变其他页面的全屏/侧滑行为。 -->
+    <style name="Theme.BiliClient.ImagePreview" parent="Theme.BiliClient.NoSwipe">
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowSwipeToDismiss">false</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@color/bgblack</item>
+        <item name="android:navigationBarColor">@color/bgblack</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- 只覆盖窗口属性，供 Activity 在基类套用色调时重新应用；不覆盖所选强调色。 -->
+    <style name="ImagePreviewWindow" parent="">
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowSwipeToDismiss">false</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@color/bgblack</item>
+        <item name="android:navigationBarColor">@color/bgblack</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

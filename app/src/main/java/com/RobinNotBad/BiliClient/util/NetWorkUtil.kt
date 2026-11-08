@@ -407,6 +407,42 @@ object NetWorkUtil {
         return ""
     }
 
+    /**
+     * 把一条 `Set-Cookie` 规整成 `key=value`；不该保存时返回 null。
+     *
+     * 三条规则与原实现逐条对应（只是把两个 `continue` 变成一次「返回 null」）：
+     * 1. 带了 `Domain` 但不属于 bilibili.com → 丢弃；
+     * 2. 截掉第一个 `; ` 之后的属性段（Path/Expires/Secure…）；
+     * 3. 没有 `=` 的畸形值 → 丢弃。
+     *
+     * F6：**不打印任何 Cookie 值**。
+     */
+    private fun normalizeSetCookie(raw: String): String? {
+        val cookies = Cookies(raw)
+        // 用 ?. 链式取值替代 !!：`Domain` 存在但值为 null 时按「没有域限制」处理，
+        // 与原实现 `containsKey("Domain") && cookies["Domain"]!!.endsWith(...)` 的实际分支一致
+        // （原写法在该情形会抛 NPE，而不是保存这条 Cookie）。
+        val domain = cookies["Domain"]
+        if (domain != null && !domain.endsWith("bilibili.com")) return null
+        val semicolon = raw.indexOf("; ")
+        val trimmed = if (semicolon != -1) raw.substring(0, semicolon) else raw
+        if (trimmed.indexOf("=") <= 0) return null
+        return trimmed
+    }
+
+    /**
+     * 把一条 `key=value` 合并进旧 Cookie 列表：同 key 覆盖、否则追加。
+     *
+     * 同 key 判据沿用历史实现（前缀 `key=` 的 contains 匹配），行为未改。
+     */
+    private fun mergeCookie(oldCookies: ArrayList<String>, newCookie: String) {
+        val equals = newCookie.indexOf("=") + 1
+        if (equals == 0) return
+        val key = newCookie.substring(0, equals) //key=
+        val existing = oldCookies.indexOfFirst { it.contains(key) }
+        if (existing >= 0) oldCookies[existing] = newCookie else oldCookies.add(newCookie)
+    }
+
     private fun saveCookiesFromResponse(response: Response) {
         val newCookies = response.headers("Set-Cookie")
 
@@ -417,32 +453,10 @@ object NetWorkUtil {
             if (cookiesStr.isEmpty()) ArrayList() else ArrayList(listOf(*cookiesStr.split("; ".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray())) //转list
 
         for (newCookieIn in newCookies) { //对每一条新cookie遍历
-            var newCookie = newCookieIn
-
-            val cookies = Cookies(newCookie)
-            if (cookies.containsKey("Domain") && !cookies["Domain"]!!.endsWith("bilibili.com")) continue
-
-            var index = newCookie.indexOf("; ")
-            if (index != -1) newCookie = newCookie.substring(0, index) //如果没有分号不做处理
-
-            index = newCookie.indexOf("=") + 1
-            if (index == 0) continue //如果没有等号，跳过
-
-            val key = newCookie.substring(0, index) //key=
-            Logu.d("newCookie", newCookie)
-
-            var added = false
-            for (i in oldCookies.indices) { //查找旧cookie表有没有
-                val oldCookie = oldCookies[i]
-                if (oldCookie.contains(key)) {
-                    oldCookies[i] = newCookie //有的话直接换掉
-                    added = true
-                    break
-                }
-            }
-            if (!added) {
-                oldCookies.add(newCookie) //没有就加项
-            }
+            // 逐条判定与合并拆成两个纯函数：循环体里只剩一次「不该存就跳过」，
+            // 既避免一条循环里多个 break/continue，也让「域过滤 + 去属性」能单独读。
+            val newCookie = normalizeSetCookie(newCookieIn) ?: continue
+            mergeCookie(oldCookies, newCookie)
         }
 
         val setCookies = StringBuilder()
@@ -451,7 +465,9 @@ object NetWorkUtil {
         }
         //如果一次setCookies都没有，就不要存了， 因为是个空字符串
         if (setCookies.length >= 2) {
-            Logu.d("save-result", setCookies.substring(0, setCookies.length - 2))
+            // F6：这里原来打印合并后的**完整 Cookie 串**（含 SESSDATA/bili_jct）。
+            // 改成只记条数，排查「Cookie 有没有写进去」够用，且不泄露任何值。
+            Logu.d("save-result", "已保存 Cookie：" + oldCookies.size + " 项")
             SharedPreferencesUtil.putString(
                 SharedPreferencesUtil.cookies,
                 setCookies.substring(0, setCookies.length - 2)

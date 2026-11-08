@@ -1,0 +1,775 @@
+Compiled from "PhotoView.java"
+public class com.github.chrisbanes.photoview.PhotoView extends androidx.appcompat.widget.AppCompatImageView {
+  private com.github.chrisbanes.photoview.PhotoViewAttacher attacher;
+
+  private android.widget.ImageView$ScaleType pendingScaleType;
+
+  public com.github.chrisbanes.photoview.PhotoView(android.content.Context);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aconst_null
+       3: invokespecial #1                  // Method "<init>":(Landroid/content/Context;Landroid/util/AttributeSet;)V
+       6: return
+
+  public com.github.chrisbanes.photoview.PhotoView(android.content.Context, android.util.AttributeSet);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: iconst_0
+       4: invokespecial #2                  // Method "<init>":(Landroid/content/Context;Landroid/util/AttributeSet;I)V
+       7: return
+
+  public com.github.chrisbanes.photoview.PhotoView(android.content.Context, android.util.AttributeSet, int);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: iload_3
+       4: invokespecial #3                  // Method androidx/appcompat/widget/AppCompatImageView."<init>":(Landroid/content/Context;Landroid/util/AttributeSet;I)V
+       7: aload_0
+       8: invokespecial #4                  // Method init:()V
+      11: return
+
+  private void init();
+    Code:
+       0: aload_0
+       1: new           #5                  // class com/github/chrisbanes/photoview/PhotoViewAttacher
+       4: dup
+       5: aload_0
+       6: invokespecial #6                  // Method com/github/chrisbanes/photoview/PhotoViewAttacher."<init>":(Landroid/widget/ImageView;)V
+       9: putfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+      12: aload_0
+      13: getstatic     #8                  // Field android/widget/ImageView$ScaleType.MATRIX:Landroid/widget/ImageView$ScaleType;
+      16: invokespecial #9                  // Method androidx/appcompat/widget/AppCompatImageView.setScaleType:(Landroid/widget/ImageView$ScaleType;)V
+      19: aload_0
+      20: getfield      #10                 // Field pendingScaleType:Landroid/widget/ImageView$ScaleType;
+      23: ifnull        39
+      26: aload_0
+      27: aload_0
+      28: getfield      #10                 // Field pendingScaleType:Landroid/widget/ImageView$ScaleType;
+      31: invokevirtual #11                 // Method setScaleType:(Landroid/widget/ImageView$ScaleType;)V
+      34: aload_0
+      35: aconst_null
+      36: putfield      #10                 // Field pendingScaleType:Landroid/widget/ImageView$ScaleType;
+      39: return
+
+  public com.github.chrisbanes.photoview.PhotoViewAttacher getAttacher();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: areturn
+
+  public android.widget.ImageView$ScaleType getScaleType();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #12                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getScaleType:()Landroid/widget/ImageView$ScaleType;
+       7: areturn
+
+  public android.graphics.Matrix getImageMatrix();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #13                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getImageMatrix:()Landroid/graphics/Matrix;
+       7: areturn
+
+  public void setOnLongClickListener(android.view.View$OnLongClickListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #14                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnLongClickListener:(Landroid/view/View$OnLongClickListener;)V
+       8: return
+
+  public void setOnClickListener(android.view.View$OnClickListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #15                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnClickListener:(Landroid/view/View$OnClickListener;)V
+       8: return
+
+  public void setScaleType(android.widget.ImageView$ScaleType);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: ifnonnull     15
+       7: aload_0
+       8: aload_1
+       9: putfield      #10                 // Field pendingScaleType:Landroid/widget/ImageView$ScaleType;
+      12: goto          23
+      15: aload_0
+      16: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+      19: aload_1
+      20: invokevirtual #16                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setScaleType:(Landroid/widget/ImageView$ScaleType;)V
+      23: return
+
+  public void setImageDrawable(android.graphics.drawable.Drawable);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #17                 // Method androidx/appcompat/widget/AppCompatImageView.setImageDrawable:(Landroid/graphics/drawable/Drawable;)V
+       5: aload_0
+       6: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       9: ifnull        19
+      12: aload_0
+      13: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+      16: invokevirtual #18                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.update:()V
+      19: return
+
+  public void setImageResource(int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: invokespecial #19                 // Method androidx/appcompat/widget/AppCompatImageView.setImageResource:(I)V
+       5: aload_0
+       6: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       9: ifnull        19
+      12: aload_0
+      13: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+      16: invokevirtual #18                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.update:()V
+      19: return
+
+  public void setImageURI(android.net.Uri);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #20                 // Method androidx/appcompat/widget/AppCompatImageView.setImageURI:(Landroid/net/Uri;)V
+       5: aload_0
+       6: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       9: ifnull        19
+      12: aload_0
+      13: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+      16: invokevirtual #18                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.update:()V
+      19: return
+
+  protected boolean setFrame(int, int, int, int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: iload_2
+       3: iload_3
+       4: iload         4
+       6: invokespecial #21                 // Method androidx/appcompat/widget/AppCompatImageView.setFrame:(IIII)Z
+       9: istore        5
+      11: iload         5
+      13: ifeq          23
+      16: aload_0
+      17: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+      20: invokevirtual #18                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.update:()V
+      23: iload         5
+      25: ireturn
+
+  public void setRotationTo(float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: invokevirtual #22                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setRotationTo:(F)V
+       8: return
+
+  public void setRotationBy(float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: invokevirtual #23                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setRotationBy:(F)V
+       8: return
+
+  public boolean isZoomable();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #24                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.isZoomable:()Z
+       7: ireturn
+
+  public void setZoomable(boolean);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: iload_1
+       5: invokevirtual #25                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setZoomable:(Z)V
+       8: return
+
+  public android.graphics.RectF getDisplayRect();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #26                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getDisplayRect:()Landroid/graphics/RectF;
+       7: areturn
+
+  public void getDisplayMatrix(android.graphics.Matrix);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #27                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getDisplayMatrix:(Landroid/graphics/Matrix;)V
+       8: return
+
+  public boolean setDisplayMatrix(android.graphics.Matrix);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #28                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setDisplayMatrix:(Landroid/graphics/Matrix;)Z
+       8: ireturn
+
+  public void getSuppMatrix(android.graphics.Matrix);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #29                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getSuppMatrix:(Landroid/graphics/Matrix;)V
+       8: return
+
+  public boolean setSuppMatrix(android.graphics.Matrix);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #28                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setDisplayMatrix:(Landroid/graphics/Matrix;)Z
+       8: ireturn
+
+  public float getMinimumScale();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #30                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getMinimumScale:()F
+       7: freturn
+
+  public float getMediumScale();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #31                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getMediumScale:()F
+       7: freturn
+
+  public float getMaximumScale();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #32                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getMaximumScale:()F
+       7: freturn
+
+  public float getScale();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: invokevirtual #33                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.getScale:()F
+       7: freturn
+
+  public void setAllowParentInterceptOnEdge(boolean);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: iload_1
+       5: invokevirtual #34                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setAllowParentInterceptOnEdge:(Z)V
+       8: return
+
+  public void setMinimumScale(float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: invokevirtual #35                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setMinimumScale:(F)V
+       8: return
+
+  public void setMediumScale(float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: invokevirtual #36                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setMediumScale:(F)V
+       8: return
+
+  public void setMaximumScale(float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: invokevirtual #37                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setMaximumScale:(F)V
+       8: return
+
+  public void setScaleLevels(float, float, float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: fload_2
+       6: fload_3
+       7: invokevirtual #38                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setScaleLevels:(FFF)V
+      10: return
+
+  public void setOnMatrixChangeListener(com.github.chrisbanes.photoview.OnMatrixChangedListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #39                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnMatrixChangeListener:(Lcom/github/chrisbanes/photoview/OnMatrixChangedListener;)V
+       8: return
+
+  public void setOnPhotoTapListener(com.github.chrisbanes.photoview.OnPhotoTapListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #40                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnPhotoTapListener:(Lcom/github/chrisbanes/photoview/OnPhotoTapListener;)V
+       8: return
+
+  public void setOnOutsidePhotoTapListener(com.github.chrisbanes.photoview.OnOutsidePhotoTapListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #41                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnOutsidePhotoTapListener:(Lcom/github/chrisbanes/photoview/OnOutsidePhotoTapListener;)V
+       8: return
+
+  public void setOnViewTapListener(com.github.chrisbanes.photoview.OnViewTapListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #42                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnViewTapListener:(Lcom/github/chrisbanes/photoview/OnViewTapListener;)V
+       8: return
+
+  public void setOnViewDragListener(com.github.chrisbanes.photoview.OnViewDragListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #43                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnViewDragListener:(Lcom/github/chrisbanes/photoview/OnViewDragListener;)V
+       8: return
+
+  public void setScale(float);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: invokevirtual #44                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setScale:(F)V
+       8: return
+
+  public void setScale(float, boolean);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: iload_2
+       6: invokevirtual #45                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setScale:(FZ)V
+       9: return
+
+  public void setScale(float, float, float, boolean);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: fload_1
+       5: fload_2
+       6: fload_3
+       7: iload         4
+       9: invokevirtual #46                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setScale:(FFFZ)V
+      12: return
+
+  public void setZoomTransitionDuration(int);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: iload_1
+       5: invokevirtual #47                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setZoomTransitionDuration:(I)V
+       8: return
+
+  public void setOnDoubleTapListener(android.view.GestureDetector$OnDoubleTapListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #48                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnDoubleTapListener:(Landroid/view/GestureDetector$OnDoubleTapListener;)V
+       8: return
+
+  public void setOnScaleChangeListener(com.github.chrisbanes.photoview.OnScaleChangedListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #49                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnScaleChangeListener:(Lcom/github/chrisbanes/photoview/OnScaleChangedListener;)V
+       8: return
+
+  public void setOnSingleFlingListener(com.github.chrisbanes.photoview.OnSingleFlingListener);
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field attacher:Lcom/github/chrisbanes/photoview/PhotoViewAttacher;
+       4: aload_1
+       5: invokevirtual #50                 // Method com/github/chrisbanes/photoview/PhotoViewAttacher.setOnSingleFlingListener:(Lcom/github/chrisbanes/photoview/OnSingleFlingListener;)V
+       8: return
+}
+Compiled from "CustomGestureDetector.java"
+class com.github.chrisbanes.photoview.CustomGestureDetector {
+  private static final int INVALID_POINTER_ID;
+
+  private int mActivePointerId;
+
+  private int mActivePointerIndex;
+
+  private final android.view.ScaleGestureDetector mDetector;
+
+  private android.view.VelocityTracker mVelocityTracker;
+
+  private boolean mIsDragging;
+
+  private float mLastTouchX;
+
+  private float mLastTouchY;
+
+  private final float mTouchSlop;
+
+  private final float mMinimumVelocity;
+
+  private com.github.chrisbanes.photoview.OnGestureListener mListener;
+
+  com.github.chrisbanes.photoview.CustomGestureDetector(android.content.Context, com.github.chrisbanes.photoview.OnGestureListener);
+    Code:
+       0: aload_0
+       1: invokespecial #2                  // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: iconst_m1
+       6: putfield      #4                  // Field mActivePointerId:I
+       9: aload_0
+      10: iconst_0
+      11: putfield      #5                  // Field mActivePointerIndex:I
+      14: aload_1
+      15: invokestatic  #6                  // Method android/view/ViewConfiguration.get:(Landroid/content/Context;)Landroid/view/ViewConfiguration;
+      18: astore_3
+      19: aload_0
+      20: aload_3
+      21: invokevirtual #7                  // Method android/view/ViewConfiguration.getScaledMinimumFlingVelocity:()I
+      24: i2f
+      25: putfield      #8                  // Field mMinimumVelocity:F
+      28: aload_0
+      29: aload_3
+      30: invokevirtual #9                  // Method android/view/ViewConfiguration.getScaledTouchSlop:()I
+      33: i2f
+      34: putfield      #10                 // Field mTouchSlop:F
+      37: aload_0
+      38: aload_2
+      39: putfield      #1                  // Field mListener:Lcom/github/chrisbanes/photoview/OnGestureListener;
+      42: new           #11                 // class com/github/chrisbanes/photoview/CustomGestureDetector$1
+      45: dup
+      46: aload_0
+      47: invokespecial #12                 // Method com/github/chrisbanes/photoview/CustomGestureDetector$1."<init>":(Lcom/github/chrisbanes/photoview/CustomGestureDetector;)V
+      50: astore        4
+      52: aload_0
+      53: new           #13                 // class android/view/ScaleGestureDetector
+      56: dup
+      57: aload_1
+      58: aload         4
+      60: invokespecial #14                 // Method android/view/ScaleGestureDetector."<init>":(Landroid/content/Context;Landroid/view/ScaleGestureDetector$OnScaleGestureListener;)V
+      63: putfield      #15                 // Field mDetector:Landroid/view/ScaleGestureDetector;
+      66: return
+
+  private float getActiveX(android.view.MotionEvent);
+    Code:
+       0: aload_1
+       1: aload_0
+       2: getfield      #5                  // Field mActivePointerIndex:I
+       5: invokevirtual #16                 // Method android/view/MotionEvent.getX:(I)F
+       8: freturn
+       9: astore_2
+      10: aload_1
+      11: invokevirtual #18                 // Method android/view/MotionEvent.getX:()F
+      14: freturn
+    Exception table:
+       from    to  target type
+           0     8     9   Class java/lang/Exception
+
+  private float getActiveY(android.view.MotionEvent);
+    Code:
+       0: aload_1
+       1: aload_0
+       2: getfield      #5                  // Field mActivePointerIndex:I
+       5: invokevirtual #19                 // Method android/view/MotionEvent.getY:(I)F
+       8: freturn
+       9: astore_2
+      10: aload_1
+      11: invokevirtual #20                 // Method android/view/MotionEvent.getY:()F
+      14: freturn
+    Exception table:
+       from    to  target type
+           0     8     9   Class java/lang/Exception
+
+  public boolean isScaling();
+    Code:
+       0: aload_0
+       1: getfield      #15                 // Field mDetector:Landroid/view/ScaleGestureDetector;
+       4: invokevirtual #21                 // Method android/view/ScaleGestureDetector.isInProgress:()Z
+       7: ireturn
+
+  public boolean isDragging();
+    Code:
+       0: aload_0
+       1: getfield      #22                 // Field mIsDragging:Z
+       4: ireturn
+
+  public boolean onTouchEvent(android.view.MotionEvent);
+    Code:
+       0: aload_0
+       1: getfield      #15                 // Field mDetector:Landroid/view/ScaleGestureDetector;
+       4: aload_1
+       5: invokevirtual #23                 // Method android/view/ScaleGestureDetector.onTouchEvent:(Landroid/view/MotionEvent;)Z
+       8: pop
+       9: aload_0
+      10: aload_1
+      11: invokespecial #24                 // Method processTouchEvent:(Landroid/view/MotionEvent;)Z
+      14: ireturn
+      15: astore_2
+      16: iconst_1
+      17: ireturn
+    Exception table:
+       from    to  target type
+           0    14    15   Class java/lang/IllegalArgumentException
+
+  private boolean processTouchEvent(android.view.MotionEvent);
+    Code:
+       0: aload_1
+       1: invokevirtual #26                 // Method android/view/MotionEvent.getAction:()I
+       4: istore_2
+       5: iload_2
+       6: sipush        255
+       9: iand
+      10: tableswitch   { // 0 to 6
+                     0: 52
+                     1: 258
+                     2: 110
+                     3: 230
+                     4: 467
+                     5: 467
+                     6: 399
+               default: 467
+          }
+      52: aload_0
+      53: aload_1
+      54: iconst_0
+      55: invokevirtual #28                 // Method android/view/MotionEvent.getPointerId:(I)I
+      58: putfield      #4                  // Field mActivePointerId:I
+      61: aload_0
+      62: invokestatic  #29                 // Method android/view/VelocityTracker.obtain:()Landroid/view/VelocityTracker;
+      65: putfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+      68: aconst_null
+      69: aload_0
+      70: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+      73: if_acmpeq     84
+      76: aload_0
+      77: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+      80: aload_1
+      81: invokevirtual #31                 // Method android/view/VelocityTracker.addMovement:(Landroid/view/MotionEvent;)V
+      84: aload_0
+      85: aload_0
+      86: aload_1
+      87: invokespecial #32                 // Method getActiveX:(Landroid/view/MotionEvent;)F
+      90: putfield      #33                 // Field mLastTouchX:F
+      93: aload_0
+      94: aload_0
+      95: aload_1
+      96: invokespecial #34                 // Method getActiveY:(Landroid/view/MotionEvent;)F
+      99: putfield      #35                 // Field mLastTouchY:F
+     102: aload_0
+     103: iconst_0
+     104: putfield      #22                 // Field mIsDragging:Z
+     107: goto          467
+     110: aload_0
+     111: aload_1
+     112: invokespecial #32                 // Method getActiveX:(Landroid/view/MotionEvent;)F
+     115: fstore_3
+     116: aload_0
+     117: aload_1
+     118: invokespecial #34                 // Method getActiveY:(Landroid/view/MotionEvent;)F
+     121: fstore        4
+     123: fload_3
+     124: aload_0
+     125: getfield      #33                 // Field mLastTouchX:F
+     128: fsub
+     129: fstore        5
+     131: fload         4
+     133: aload_0
+     134: getfield      #35                 // Field mLastTouchY:F
+     137: fsub
+     138: fstore        6
+     140: aload_0
+     141: getfield      #22                 // Field mIsDragging:Z
+     144: ifne          180
+     147: aload_0
+     148: fload         5
+     150: fload         5
+     152: fmul
+     153: fload         6
+     155: fload         6
+     157: fmul
+     158: fadd
+     159: f2d
+     160: invokestatic  #36                 // Method java/lang/Math.sqrt:(D)D
+     163: aload_0
+     164: getfield      #10                 // Field mTouchSlop:F
+     167: f2d
+     168: dcmpl
+     169: iflt          176
+     172: iconst_1
+     173: goto          177
+     176: iconst_0
+     177: putfield      #22                 // Field mIsDragging:Z
+     180: aload_0
+     181: getfield      #22                 // Field mIsDragging:Z
+     184: ifeq          467
+     187: aload_0
+     188: getfield      #1                  // Field mListener:Lcom/github/chrisbanes/photoview/OnGestureListener;
+     191: fload         5
+     193: fload         6
+     195: invokeinterface #37,  3           // InterfaceMethod com/github/chrisbanes/photoview/OnGestureListener.onDrag:(FF)V
+     200: aload_0
+     201: fload_3
+     202: putfield      #33                 // Field mLastTouchX:F
+     205: aload_0
+     206: fload         4
+     208: putfield      #35                 // Field mLastTouchY:F
+     211: aconst_null
+     212: aload_0
+     213: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     216: if_acmpeq     467
+     219: aload_0
+     220: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     223: aload_1
+     224: invokevirtual #31                 // Method android/view/VelocityTracker.addMovement:(Landroid/view/MotionEvent;)V
+     227: goto          467
+     230: aload_0
+     231: iconst_m1
+     232: putfield      #4                  // Field mActivePointerId:I
+     235: aconst_null
+     236: aload_0
+     237: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     240: if_acmpeq     467
+     243: aload_0
+     244: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     247: invokevirtual #38                 // Method android/view/VelocityTracker.recycle:()V
+     250: aload_0
+     251: aconst_null
+     252: putfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     255: goto          467
+     258: aload_0
+     259: iconst_m1
+     260: putfield      #4                  // Field mActivePointerId:I
+     263: aload_0
+     264: getfield      #22                 // Field mIsDragging:Z
+     267: ifeq          376
+     270: aconst_null
+     271: aload_0
+     272: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     275: if_acmpeq     376
+     278: aload_0
+     279: aload_0
+     280: aload_1
+     281: invokespecial #32                 // Method getActiveX:(Landroid/view/MotionEvent;)F
+     284: putfield      #33                 // Field mLastTouchX:F
+     287: aload_0
+     288: aload_0
+     289: aload_1
+     290: invokespecial #34                 // Method getActiveY:(Landroid/view/MotionEvent;)F
+     293: putfield      #35                 // Field mLastTouchY:F
+     296: aload_0
+     297: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     300: aload_1
+     301: invokevirtual #31                 // Method android/view/VelocityTracker.addMovement:(Landroid/view/MotionEvent;)V
+     304: aload_0
+     305: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     308: sipush        1000
+     311: invokevirtual #39                 // Method android/view/VelocityTracker.computeCurrentVelocity:(I)V
+     314: aload_0
+     315: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     318: invokevirtual #40                 // Method android/view/VelocityTracker.getXVelocity:()F
+     321: fstore        7
+     323: aload_0
+     324: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     327: invokevirtual #41                 // Method android/view/VelocityTracker.getYVelocity:()F
+     330: fstore        8
+     332: fload         7
+     334: invokestatic  #42                 // Method java/lang/Math.abs:(F)F
+     337: fload         8
+     339: invokestatic  #42                 // Method java/lang/Math.abs:(F)F
+     342: invokestatic  #43                 // Method java/lang/Math.max:(FF)F
+     345: aload_0
+     346: getfield      #8                  // Field mMinimumVelocity:F
+     349: fcmpl
+     350: iflt          376
+     353: aload_0
+     354: getfield      #1                  // Field mListener:Lcom/github/chrisbanes/photoview/OnGestureListener;
+     357: aload_0
+     358: getfield      #33                 // Field mLastTouchX:F
+     361: aload_0
+     362: getfield      #35                 // Field mLastTouchY:F
+     365: fload         7
+     367: fneg
+     368: fload         8
+     370: fneg
+     371: invokeinterface #44,  5           // InterfaceMethod com/github/chrisbanes/photoview/OnGestureListener.onFling:(FFFF)V
+     376: aconst_null
+     377: aload_0
+     378: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     381: if_acmpeq     467
+     384: aload_0
+     385: getfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     388: invokevirtual #38                 // Method android/view/VelocityTracker.recycle:()V
+     391: aload_0
+     392: aconst_null
+     393: putfield      #30                 // Field mVelocityTracker:Landroid/view/VelocityTracker;
+     396: goto          467
+     399: aload_1
+     400: invokevirtual #26                 // Method android/view/MotionEvent.getAction:()I
+     403: invokestatic  #45                 // Method com/github/chrisbanes/photoview/Util.getPointerIndex:(I)I
+     406: istore        7
+     408: aload_1
+     409: iload         7
+     411: invokevirtual #28                 // Method android/view/MotionEvent.getPointerId:(I)I
+     414: istore        8
+     416: iload         8
+     418: aload_0
+     419: getfield      #4                  // Field mActivePointerId:I
+     422: if_icmpne     467
+     425: iload         7
+     427: ifne          434
+     430: iconst_1
+     431: goto          435
+     434: iconst_0
+     435: istore        9
+     437: aload_0
+     438: aload_1
+     439: iload         9
+     441: invokevirtual #28                 // Method android/view/MotionEvent.getPointerId:(I)I
+     444: putfield      #4                  // Field mActivePointerId:I
+     447: aload_0
+     448: aload_1
+     449: iload         9
+     451: invokevirtual #16                 // Method android/view/MotionEvent.getX:(I)F
+     454: putfield      #33                 // Field mLastTouchX:F
+     457: aload_0
+     458: aload_1
+     459: iload         9
+     461: invokevirtual #19                 // Method android/view/MotionEvent.getY:(I)F
+     464: putfield      #35                 // Field mLastTouchY:F
+     467: aload_0
+     468: aload_1
+     469: aload_0
+     470: getfield      #4                  // Field mActivePointerId:I
+     473: iconst_m1
+     474: if_icmpeq     484
+     477: aload_0
+     478: getfield      #4                  // Field mActivePointerId:I
+     481: goto          485
+     484: iconst_0
+     485: invokevirtual #46                 // Method android/view/MotionEvent.findPointerIndex:(I)I
+     488: putfield      #5                  // Field mActivePointerIndex:I
+     491: iconst_1
+     492: ireturn
+
+  static com.github.chrisbanes.photoview.OnGestureListener access$000(com.github.chrisbanes.photoview.CustomGestureDetector);
+    Code:
+       0: aload_0
+       1: getfield      #1                  // Field mListener:Lcom/github/chrisbanes/photoview/OnGestureListener;
+       4: areturn
+}

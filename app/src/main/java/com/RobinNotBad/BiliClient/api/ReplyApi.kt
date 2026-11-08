@@ -7,6 +7,7 @@ import android.util.Pair
 import androidx.annotation.NonNull
 
 import com.RobinNotBad.BiliClient.api.migration.ApiMigrationRules
+import com.RobinNotBad.BiliClient.activity.reply.ReplySortMode
 import com.RobinNotBad.BiliClient.model.ContentType
 import com.RobinNotBad.BiliClient.model.Reply
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
@@ -97,7 +98,7 @@ object ReplyApi {
      * @param rpid       指定要寻找的评论的rpid
      * @param pagination 页
      * @param type       评论区类型
-     * @param sort       排序方式
+     * @param sort       Web mode：2=时间，3=热度；APP pn/ps 分支在内部转换为 sort=0/2
      * @return 返回码（0=继续加载，1=到底了，-1=错误）与下一页的pagination
      */
     @JvmSuppressWildcards
@@ -106,7 +107,7 @@ object ReplyApi {
     @JvmStatic
     fun getRepliesLazy(oid: Long, rpid: Long, pagination: String, type: Int, sort: Int, replyArrayList: MutableList<Reply>): Pair<Int, String> {
 
-        // 全 API 迁移开启 + 当前 APP 身份已登录时，走 APP 的 pn/ps 分页端点。
+        //「账号管理 → 其它页面 API」选 APP 端口且当前身份已登录时，走 APP 的 pn/ps 分页端点。
         //
         // 为什么必须换端点：cursor 版 /x/v2/reply/wbi/main 在 APP 身份参数下实测 -352，
         // 而同族的 /x/v2/reply（pn/ps 版）实测 code=0，data 里有
@@ -174,7 +175,8 @@ object ReplyApi {
      * 返回值语义与 cursor 版保持一致：`0`=还能加载（第二个值是下一页页码）、`1`=到底了、`-1`=错误。
      *
      * 实测要点（notes 的 H.2）：
-     * - `sort` 必须 > 0，传 0 会返回空列表（page.num=0）→ 这里 `<=0` 一律兜底成 2；
+     * - Web mode=2/3 分别表示时间/热度；APP sort=0/2，不能原样传 Web mode；
+     *   旧匿名探针的空列表不是否定 sort=0 时间语义的依据，不得强制改为热度；
      * - `ps` 上限 20，30 → -400；
      * - `data.page = {num,size,count,acount}`，`num` 就是当前页码；
      * - 置顶评论在 `data.top.replies`（第一页才有）。
@@ -190,7 +192,7 @@ object ReplyApi {
                 .put("oid", oid)
                 .put("pn", page)
                 .put("ps", REPLY_PAGE_SIZE)
-                .put("sort", if (sort <= 0) 2 else sort)
+                .put("sort", ReplySortMode.appSort(sort))
         val url = "https://api.bilibili.com/x/v2/reply" + reqData
 
         val all = NetWorkUtil.getJson(url)
@@ -208,7 +210,7 @@ object ReplyApi {
         val count = pageObj.optInt("count", 0)
         // num<=0 / count<=0 说明服务端没给有效分页信息，按「到底了」收尾，避免无限拉取
         val noPagingInfo = num <= 0 || count <= 0 || size <= 0
-        if (noPagingInfo || num * size >= count) return Pair(1, "")
+        if (noPagingInfo || num.toLong() * size >= count) return Pair(1, "")
         return Pair(0, (num + 1).toString())
     }
 

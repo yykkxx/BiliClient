@@ -32,6 +32,8 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.MsgUtil
+import com.RobinNotBad.BiliClient.util.WebRenewalState
+import kotlinx.coroutines.Job
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.tabs.TabLayout
@@ -61,6 +63,7 @@ class SettingAccountActivity : BaseActivity() {
 
     /** 已经尝试过拉取昵称/头像的账号（避免每次刷新都重试；失败也不反复打网络） */
     private val profileRequests = HashSet<String>()
+    private var renewJob: Job? = null
 
     @SuppressLint("MissingInflatedId", "SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,6 +163,7 @@ class SettingAccountActivity : BaseActivity() {
         findViewById<MaterialButton>(R.id.accountStatsClear)?.setOnClickListener { confirmClearStats() }
         setupPhoneTvSignSwitch()
         setupWebFallbackSwitch()
+        setupCrossRepairSwitch()
     }
 
     /**
@@ -752,43 +756,85 @@ class SettingAccountActivity : BaseActivity() {
      */
     private fun onRenewWeb() {
         if (!AccountStore.isPortLoggedIn(AccountStore.PORT_WEB)) {
-            MsgUtil.showMsg(getString(R.string.acct_mgr_renew_not_needed))
+            MsgUtil.showMsg(getString(R.string.web_renew_not_logged_in))
             return
         }
+        startWebRenewal(CookieRefreshApi.isCrossPortRepairEnabled())
+    }
+
+    private fun startWebRenewal(
+        allowCrossPort: Boolean,
+        expected: WebRenewalState.Snapshot = WebRenewalState.capture()
+    ) {
+        if (renewJob?.isActive == true) return
         MsgUtil.showMsg(getString(R.string.acct_mgr_renew_checking))
-        CenterThreadPool.run(Runnable {
-            val result = try {
-                CredentialStore.renewWebDetailed(true)
-            } catch (e: Exception) {
-                MsgUtil.err("续期失败", e)
-                return@Runnable
+        val button = findViewById<MaterialButton>(R.id.accountRenewWeb)
+        button.isEnabled = false
+        renewJob = CoroutineScopes.launchUi {
+            try {
+                val result = CoroutineScopes.io { CookieRefreshApi.renewWeb(allowCrossPort, expected) }
+                if (isFinishing || isDestroyed) return@launchUi
+                showWebRenewResult(result)
+                if (!allowCrossPort && CookieRefreshApi.canOfferCrossPortRepair(result)) confirmCrossRepair()
+            } finally {
+                if (!isDestroyed) button.isEnabled = true
             }
-            CoroutineScopes.launchUi {
-                when (result) {
-                    is CookieRefreshApi.RenewResult.Success -> {
-                        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_success))
-                        refreshAll()
-                    }
-                    is CookieRefreshApi.RenewResult.NotNeeded -> {
-                        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_not_needed))
-                    }
-                    is CookieRefreshApi.RenewResult.NoRefreshToken -> {
-                        // 实测最常见的失败：服务端要求 refresh_token，而本机这个号没有
-                        MsgUtil.showMsgLong(getString(R.string.acct_mgr_renew_no_token))
-                    }
-                    is CookieRefreshApi.RenewResult.TokenExpired -> {
-                        MsgUtil.showMsgLong(getString(R.string.acct_mgr_renew_token_expired))
-                    }
-                    is CookieRefreshApi.RenewResult.NetworkError -> {
-                        // 网络问题：登录态没坏，明确告诉用户「稍后重试」而不是「重新登录」
-                        MsgUtil.showMsg(getString(R.string.acct_mgr_renew_network))
-                    }
-                    is CookieRefreshApi.RenewResult.ServerError -> {
-                        MsgUtil.showMsgLong(getString(R.string.acct_mgr_renew_server_rejected, result.code))
-                    }
-                }
+        }
+    }
+
+    private fun showWebRenewResult(result: CookieRefreshApi.RenewResult) {
+        val message = when (result) {
+            is CookieRefreshApi.RenewResult.Success -> getString(R.string.acct_mgr_renew_success)
+            is CookieRefreshApi.RenewResult.CrossPortSuccess ->
+                getString(R.string.web_renew_cross_success, AccountStore.portDisplayName(result.port))
+            is CookieRefreshApi.RenewResult.NotNeeded -> getString(R.string.web_renew_not_logged_in)
+            is CookieRefreshApi.RenewResult.NoRefreshToken -> getString(R.string.web_renew_no_token_hint)
+            is CookieRefreshApi.RenewResult.TokenExpired -> getString(R.string.acct_mgr_renew_token_expired)
+            is CookieRefreshApi.RenewResult.NetworkError -> getString(R.string.acct_mgr_renew_network)
+            is CookieRefreshApi.RenewResult.ServerError -> getString(R.string.acct_mgr_renew_server_rejected, result.code)
+            is CookieRefreshApi.RenewResult.Busy -> getString(R.string.web_renew_busy)
+            is CookieRefreshApi.RenewResult.AccountChanged -> getString(R.string.web_renew_account_changed)
+        }
+        MsgUtil.showMsgLong(message)
+        if (result.renewed()) refreshAll()
+    }
+
+    private fun confirmCrossRepair() {
+        val expected = WebRenewalState.capture()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.web_renew_cross_confirm_title)
+            .setMessage(R.string.web_renew_cross_confirm_desc)
+            .setNegativeButton(R.string.acct_mgr_cancel, null)
+            .setPositiveButton(R.string.web_renew_cross_once) { _, _ ->
+                if (!WebRenewalState.isCurrent(expected)) {
+                    MsgUtil.showMsg(getString(R.string.web_renew_account_changed))
+                } else startWebRenewal(true, expected)
+            }.show()
+    }
+
+    private fun setupCrossRepairSwitch() {
+        val switch = findViewById<SwitchMaterial>(R.id.accountCrossRepair)
+        switch.setOnCheckedChangeListener(null)
+        switch.isChecked = CookieRefreshApi.isCrossPortRepairEnabled()
+        switch.setOnCheckedChangeListener { _, checked ->
+            if (!checked) {
+                SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.WEB_CROSS_PORT_REPAIR, false)
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.web_renew_cross_confirm_title)
+                    .setMessage(R.string.web_renew_cross_switch_desc)
+                    .setNegativeButton(R.string.acct_mgr_cancel) { _, _ -> switch.isChecked = false }
+                    .setOnCancelListener { switch.isChecked = false }
+                    .setPositiveButton(R.string.web_renew_cross_enable) { _, _ ->
+                        SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.WEB_CROSS_PORT_REPAIR, true)
+                    }.show()
             }
-        })
+        }
+    }
+
+    override fun onDestroy() {
+        renewJob?.cancel()
+        super.onDestroy()
     }
 
     companion object {

@@ -11,7 +11,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.settings.login.SpecialLoginActivity
 import com.RobinNotBad.BiliClient.time.activity.TimeMainActivity
-import com.RobinNotBad.BiliClient.api.AppInfoApi
+import com.RobinNotBad.BiliClient.activity.update.UpdateInfoActivity
 import com.RobinNotBad.BiliClient.api.UserInfoApi
 import com.RobinNotBad.BiliClient.util.AccountManager
 import com.RobinNotBad.BiliClient.util.AccountStore
@@ -152,15 +152,8 @@ class SettingMainActivity : InstanceActivity() {
 
             //检查更新
             val checkUpdate = findViewById<MaterialCardView>(R.id.checkupdate)
-            checkUpdate.setOnClickListener { view ->
-                MsgUtil.showMsg("正在获取...")
-                CenterThreadPool.run(Runnable {
-                    try {
-                        AppInfoApi.checkUpdate(this, true)
-                    } catch (e: Exception) {
-                        runOnUiThread(Runnable { MsgUtil.showMsg("连接到哔哩终端接口时发生错误") })
-                    }
-                })
+            checkUpdate.setOnClickListener {
+                startActivity(Intent(this, UpdateInfoActivity::class.java))
             }
 
             //公告列表

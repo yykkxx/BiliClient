@@ -64,6 +64,9 @@ object SharedPreferencesUtil {
      */
     const val API_WEB_FALLBACK = "api_web_fallback"
 
+    // 与 API 请求回退互不联动；默认 false，仅用户确认后允许同账号跨端修复 Web。
+    const val WEB_CROSS_PORT_REPAIR = "web_cross_port_repair"
+
     // ==================== 三端独立登录（v5.0.0 重构） ====================
     // 每个身份（hd / tv / phone）各有一套独立 token，可同时登录、互不干扰；
     // 禁止跨端转移：web Cookie 不再能转换成任何端 token，三端之间也不共用。

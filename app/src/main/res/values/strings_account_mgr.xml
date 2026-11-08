@@ -77,7 +77,7 @@
     <string name="acct_mgr_renew_no_token">当前 Web 登录没有 refresh_token，无法自动续期，请重新扫码登录</string>
     <string name="acct_mgr_renew_token_expired">refresh_token 已过期，请重新扫码登录</string>
     <string name="acct_mgr_renew_network">网络异常，续期未完成，请稍后重试</string>
-    <string name="acct_mgr_renew_not_needed">Cookie 仍然有效，无需续期</string>
+    <string name="acct_mgr_renew_not_needed">Web 端未登录，没有可续期的凭据</string>
     <string name="acct_mgr_renew_success">Web 登录已续期</string>
     <string name="acct_mgr_renew_server_rejected">服务端拒绝了续期（code %1$d），可能需要重新扫码登录</string>
 
@@ -87,7 +87,7 @@
     <string name="acct_mgr_btn_export">导出全部四端凭据</string>
     <string name="acct_mgr_btn_export_readable">导出可读摘要</string>
     <string name="acct_mgr_btn_import">导入凭据</string>
-    <string name="acct_mgr_btn_renew">立即检查续期</string>
+    <string name="acct_mgr_btn_renew">立即续期 Web 登录</string>
     <string name="acct_mgr_btn_clear_all">清除全部凭据</string>
     <string name="acct_mgr_btn_copy">复制</string>
     <string name="acct_mgr_btn_close">收起</string>
@@ -99,7 +99,7 @@
     <string name="acct_mgr_import_failed">导入失败：%1$s</string>
     <string name="acct_mgr_export_copied">已复制到剪贴板</string>
     <string name="acct_mgr_export_empty">当前没有任何账号凭据可导出</string>
-    <string name="acct_mgr_renew_checking">正在检查续期…</string>
+    <string name="acct_mgr_renew_checking">正在直接续期 Web 登录…</string>
     <string name="acct_mgr_clear_title">清除全部凭据</string>
     <string name="acct_mgr_clear_message">将退出四个端口上的全部账号（共 %1$d 个），并清空本机保存的所有登录凭据。\n\n这不会删除收藏、历史、稍后再看等云端数据，但清空后需要重新登录才能使用需要账号的功能。此操作不可撤销。</string>
     <string name="acct_mgr_clear_confirm">确认清除</string>

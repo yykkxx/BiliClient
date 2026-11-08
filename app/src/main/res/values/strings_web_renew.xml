@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_renew_not_logged_in">Web 端口未登录，没有可续期的 Web 凭据</string>
+    <string name="web_renew_busy">已有续期正在进行，请稍候</string>
+    <string name="web_renew_account_changed">续期期间账号或凭据已切换，未覆盖当前登录；请重新操作</string>
+    <string name="web_renew_cross_success">经授权，已用同账号的 %1$s 端修复 Web 登录</string>
+    <string name="web_renew_cross_title">允许同账号跨端修复 Web（默认关闭）</string>
+    <string name="web_renew_cross_desc">Web 每次进入 APP 会直接尝试自身续期。自身 refresh_token 缺失或过期时，只有打开此独立开关才可自动借同账号已登录的 HD/TV 端获取新 Web Cookie；可能同时轮换借用端口的 token。与 API 请求回退开关互不联动。关闭时，手动修复必须每次弹窗确认。</string>
+    <string name="web_renew_cross_confirm_title">是否允许跨端修复 Web？</string>
+    <string name="web_renew_cross_confirm_desc">当前 Web 凭据无法自续。是否仅本次允许使用同一账号已登录的 HD/TV 端取得新 Web Cookie？这可能同时轮换借用端口的 token；不会借其它账号，不会修改 API 请求走向。取消则保留现有登录，也可以重新扫码登录 Web。</string>
+    <string name="web_renew_cross_switch_desc">开启后，每次进入 APP 或手动续期时，Web 自续失败可自动借同账号已登录的 HD/TV 端修复，不再逐次弹窗。借用端口的 token 可能同时轮换。默认关闭；可随时关闭，不会改变 API 请求回退开关和请求走向。</string>
+    <string name="web_renew_cross_once">仅本次允许</string>
+    <string name="web_renew_cross_enable">允许并开启</string>
+    <string name="web_renew_no_token_hint">本机这份 Web 登录没有 refresh_token（B 站只在登录成功时下发），请重新扫码登录一次，之后即可自动续期</string>
+</resources>

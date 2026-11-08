@@ -126,7 +126,20 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      * 每个页面生命周期只兜一次：换 ijk 后还错说明视频本身有问题，
      * 反复切回去只会让用户看到播放器无限抖动。
      */
+    @Volatile
     private var media3FallbackTried = false
+
+    /** Media3 网络类错误的「原地重建」次数（每条流重置；用尽才允许换内核） */
+    private var media3NetworkRetryCount = 0
+
+
+    /** 已回退后本页始终使用 Ijk；请求代际阻止旧切流/回退响应覆盖新选择。 */
+    private var playbackRequestGeneration = 0L
+    private var pendingRestorePlaying: Boolean? = null
+
+    private fun createSessionPlayer(): IMediaPlayer =
+        if (media3FallbackTried || preferIjkForThisVideo()) PlayerFactory.createIjkFallback()
+        else PlayerFactory.create(this)
 
     /** DASH 音频轨地址（可空：本地文件/直播/单流都没有，为空时行为与改动前一致） */
     private var audioUrl: String? = null
@@ -1040,38 +1053,34 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             btn_menu!!.performClick()
     }
 
-    private fun setDisplay() {
-        Logu.v("创建播放器")
-        Logu.v("url", video_url ?: "")
-
-        runOnUiThread { loading_text0!!.text = "初始化播放" }
-
+    private fun configurePlayer(player: IMediaPlayer) {
         if (isAudioOnlyMode) {
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vn", 1L) // 禁用视频
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 48L) // 跳过所有视频帧
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vn", 1L) // 禁用视频
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 48L) // 跳过所有视频帧
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
         } else {
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec",
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec",
                     (if (SharedPreferencesUtil.getBoolean("player_codec", true)) 1L else 0L))
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
         }
 
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "opensles", // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "opensles", // quality-allow 回退保留的旧播放器代码，调用点前已有判空
                 (if (SharedPreferencesUtil.getBoolean("player_audio", false)) 1L else 0L))
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 4L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_clear", 1L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 4L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared",
+            if (pendingRestorePlaying == false) 0L else 1L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "soundtouch", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_clear", 1L)
 
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "flush_packets")
         // 断线自动重连：网络抖动时由 FFmpeg 层自行重连，而不是直接报错停播
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_at_eof", 0L)
-        ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 5L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_streamed", 1L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_at_eof", 0L)
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 5L)
 
         // 这个坑死我！请允许我为解决此问题而大大地兴奋一下ohhhhhhhhhhhhhhhhhhhhhhhhhhhh
         // ijkplayer是自带一个useragent的，要把默认的改掉才能用！
@@ -1079,27 +1088,34 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             // 拉流策略（#11）：脉冲式=快速拉满缓冲→停→消耗到下限再拉；
             // 慢速持续=原行为（边播边平滑缓冲）
             if (StreamPolicyManager.isPulse()) {
-                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+                player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
                 // 大缓冲：一次多拉一些，随后解析线程停住，期间没有网络请求
-                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 40L * 1024 * 1024) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+                player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 40L * 1024 * 1024) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
                 // 缓冲的帧数下限：消耗到这个量之前不再读网络
-                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 600L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+                player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 600L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
                 // 触底后立刻高速回填
-                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+                player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect_delay_max", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
             } else {
-                ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+                player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
             }
             // 缓冲区依据设备内存自适应：缓冲越足，网络抖动时越不容易卡住。
             // 但缓冲过大反而增加内存压力与耗电，所以按档位区分。
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size",
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size",
                     (if (SharedPreferencesUtil.getBoolean("player_low_latency", false))
                         5L * 1024 * 1024 // 低延迟优先，弱网更易卡
                     else
                         20L * 1024 * 1024)) // 默认：足以跨越数秒的网络抖动
-            ijkPlayer!!.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT_WEB)
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT_WEB)
             Logu.v("设置ua")
         }
 
+    }
+
+    private fun setDisplay() {
+        if (destroyed) return
+        val player = ijkPlayer ?: return
+        configurePlayer(player)
+        loading_text0?.text = "初始化播放"
         Logu.v("准备设置显示")
         if (SharedPreferencesUtil.getBoolean("player_display", Build.VERSION.SDK_INT < 26)) { // Texture
             Logu.v("使用texture模式")
@@ -1205,36 +1221,126 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      * 5. **提示**：Toast「已切换到兼容内核」，让用户理解发生了什么（而不是以为播放器抽风）。
      */
     private fun tryFallbackToIjk(current: IMediaPlayer?): Boolean {
-        if (media3FallbackTried) return false
-        if (current !is Media3Player) return false
+        val player = media3ToFallBack(current) ?: return false
         media3FallbackTried = true
-        Logu.w("player", "media3 播放失败，切换 ijk 兼容内核重试")
-        return try {
-            val old = ijkPlayer
-            val newPlayer = PlayerFactory.createIjkFallback()
-            // 把画面搬过去（顺序重要：先挂画面再 prepare，否则会黑一下）。
-            // 复用本页已有的两种画面模式判断，**不重新发明**：
-            // - TextureView 模式：`mSurfaceTexture` 是页面上真正在用的那条纹理；
-            // - SurfaceView 模式：`surfaceView` 的 holder。
-            val texture = mSurfaceTexture
-            val sv = surfaceView
-            if (texture != null) {
-                newPlayer.setSurface(Surface(texture))
-            } else if (sv != null) {
-                newPlayer.setDisplay(sv.holder)
+        val generation = ++playbackRequestGeneration
+        val resumePosition = try { player.currentPosition } catch (ignored: Exception) { 0L }
+        val restorePlaying = pendingRestorePlaying ?: (!isPrepared || isPlaying)
+        val sourceUrl = video_url
+        if (needsMuxedFallbackUrl()) {
+            requestMuxedFallbackUrl(player, generation, resumePosition, restorePlaying)
+            return true
+        }
+        return completeIjkFallback(player, sourceUrl, resumePosition, restorePlaying)
+    }
+
+    /**
+     * 播放错误的统一入口（从 [MPPrepare] 里抽出来，原函数已经顶到方法长度门禁）。
+     *
+     * 分流规则见 [isNetworkLikePlaybackError]：网络/IO 类先原地重建，其余才换内核。
+     */
+    private fun handlePlaybackError(player: IMediaPlayer, what: Int, extra: Int): Boolean {
+        val report = "播放器可能遇到错误！\n错误码：$what\n附加：$extra"
+        Logu.e("player-err", report + " engine=" + player.javaClass.simpleName)
+        // v5.3.2（真机报障）：「本来能播，放着放着卡一下就直接换成老播放器」。
+        // 根因是网络类错误（连接失败/超时/HTTP 状态异常）被当成「内核解不了」，
+        // 立刻走了换内核的兜底。而这类错误换内核毫无帮助 —— ijk 一样要重新读网，
+        // 用户却白丢一次播放状态（从当前位置黑一下重来）。
+        // 正确做法：网络/IO 类错误先**原地重建数据源重试**（引擎不变），
+        // 只有解码/解封装类错误、或重试用尽之后才换内核。
+        if (isNetworkLikePlaybackError(player, extra) && media3NetworkRetryCount < MAX_NETWORK_RETRY) {
+            media3NetworkRetryCount++
+            Logu.w("player-err", "网络类错误，原地重建数据源重试（第 " + media3NetworkRetryCount + " 次）")
+            // 新增代码门禁禁止 runOnUiThread：这里本来就在主线程（onError 已回主线程分发），
+            // launchUi 语义等价且符合新代码规范。
+            CoroutineScopes.launchUi {
+                if (!destroyed) MsgUtil.showMsg("网络波动，正在重新连接…")
             }
-            ijkPlayer = newPlayer
-            // 不再单独 bind 监听：下面 [MPPrepare] 会把这个新实例的全部监听器重新挂一遍
-            // （prepared / completion / error / buffering / info），在这里重复绑只会挂两套。
-            // 旧实例释放放在赋值之后：万一 release 抛异常，页面仍在可用状态
+            recoverPlayback()
+            return true
+        }
+        return tryFallbackToIjk(player)
+    }
+
+    /**
+     * 这次 onError 是否属于「网络/IO 类」（换内核解决不了，应该原地重连）。
+     *
+     * ## 为什么要区分（真机报障：本来能播、放一会儿卡一下就切老播放器）
+     * 两个引擎的错误码在 app 里被压成 `what=MEDIA_ERROR_UNKNOWN, extra=引擎原始码`。
+     * media3 的原始码是 `PlaybackException.errorCode`（javap 核对 1.4.1 的常量值）：
+     * - 2000~2008 = Input/output 网络类（连接失败/超时/HTTP 状态/内容类型/权限等）；
+     * - 1003 = 超时；
+     * - 3001~3004 = 解封装/清单不支持（换内核**有**意义）；
+     * - 4001~4006 = 解码器初始化/能力不足（换内核**有**意义）。
+     * 所以只有网络类才走「原地重建数据源」，其余继续走原来的换内核兜底。
+     *
+     * ijk 的错误码是另一套语义（-1004 等），这里只对 Media3 实例做这个判断：
+     * ijk 已经是软解兜底，它报网络错时本来也不该换引擎（调用方会直接 return false）。
+     */
+    private fun isNetworkLikePlaybackError(player: IMediaPlayer, extra: Int): Boolean {
+        if (player !is Media3Player) return false
+        return extra in MEDIA3_ERROR_NETWORK_RANGE || extra == MEDIA3_ERROR_TIMEOUT
+    }
+
+    /** 兜底前置条件：本页未销毁 + 没兜过 + 当前实例确实是本页的 Media3（拆出来是为了过复杂度门禁）。 */
+    private fun media3ToFallBack(current: IMediaPlayer?): IMediaPlayer? {
+        if (destroyed || media3FallbackTried) return null
+        if (current !== ijkPlayer) return null
+        return current as? Media3Player
+    }
+
+    /** DASH 音视频分离时不能直接把视频单轨喂给 Ijk。 */
+    private fun needsMuxedFallbackUrl(): Boolean = isOnlineVideo && !audioUrl.isNullOrEmpty()
+
+    /** DASH 兜底：后台重新请求已有 fnval=1 的合流 durl 路径，回到主线程再换内核。 */
+    private fun requestMuxedFallbackUrl(
+        current: IMediaPlayer, generation: Long, resumePosition: Long, restorePlaying: Boolean
+    ) {
+        // 只读已有合流路径，不触碰原播放地址；请求失败也必须给出可执行的下一步提示。
+        val data = PlayerData().apply {
+            aid = this@PlayerActivity.aid
+            cid = this@PlayerActivity.cid
+            qn = getTargetQuality()
+        }
+        CenterThreadPool.run(Runnable {
             try {
-                old?.release()
-            } catch (ignored: Exception) {
-                // release 失败不影响新实例播放
+                PlayerApi.getVideo(data, true)
+                val muxedUrl = data.videoUrl?.takeIf { it.isNotBlank() }
+                    ?: throw IOException("合流播放地址为空")
+                mainHandler?.post {
+                    if (!destroyed && generation == playbackRequestGeneration && current === ijkPlayer) {
+                        completeIjkFallback(current, muxedUrl, resumePosition, restorePlaying)
+                    }
+                }
+            } catch (e: Exception) {
+                Logu.e("player", "获取兼容合流失败：" + e.javaClass.simpleName)
+                mainHandler?.post {
+                    if (!destroyed && generation == playbackRequestGeneration && current === ijkPlayer) {
+                        MsgUtil.showMsg("兼容线路获取失败，请重试或切换清晰度")
+                    }
+                }
             }
+        })
+    }
+
+    private fun completeIjkFallback(
+        current: IMediaPlayer, url: String?, resumePosition: Long, restorePlaying: Boolean
+    ): Boolean {
+        if (destroyed || current !== ijkPlayer || url.isNullOrBlank()) return false
+        return try {
+            val replacement = PlayerFactory.createIjkFallback()
+            ijkPlayer = replacement
+            try { current.release() } catch (ignored: Exception) { }
+            video_url = url
+            audioUrl = null
+            isPrepared = false
+            isPlaying = false
+            pendingRecoverySeek = resumePosition.coerceAtLeast(0L)
+            pendingRestorePlaying = restorePlaying
+            playbackWatchdog?.setPrepared(false)
+            // 走完整 options + 正确显示模式 + 全部监听器，不绕过正常 Ijk 初始化。
+            setDisplay()
             MsgUtil.showMsg("已切换到兼容内核")
-            // 从头 prepare（媒体源已变，seek 到旧进度由下面的 seekTo 在 prepared 后补）
-            MPPrepare(video_url)
             true
         } catch (e: Exception) {
             Logu.e("player", "切换 ijk 失败：" + e.javaClass.simpleName)
@@ -1286,7 +1392,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (destroyed) // 设置数据源期间可能已经退出
             return
 
-        ijkPlayer!!.setOnCompletionListener {
+        ijkPlayer?.setOnCompletionListener { mp ->
+            if (destroyed || mp !== ijkPlayer) return@setOnCompletionListener
             finishWatching = true
 
             if (destroyed) return@setOnCompletionListener
@@ -1343,17 +1450,15 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         // ijk 已经是软解兜底（`ijkPlayer` 本身能播 media3 播不了的东西）；
         // 它再失败通常是网络/CDN 问题，换引擎没有意义。
         ijkPlayer?.setOnErrorListener { iMediaPlayer, what, extra ->
-            val EReport = "播放器可能遇到错误！\n错误码：$what\n附加：$extra"
-            Logu.e("player-err", EReport + " engine=" + iMediaPlayer.javaClass.simpleName)
-            if (tryFallbackToIjk(iMediaPlayer)) return@setOnErrorListener true
-            false
+            handlePlaybackError(iMediaPlayer, what, extra)
         }
 
         // 视频尺寸监听（v5.3.0 恢复，v5.1.0 回退时丢失）：
         // 硬解/换源常在 onPrepared 之后才上报真实宽高，而画面框的初始值是 1px×1px。
         // 没有这个监听，就只能靠 onPrepared 那一刻的采样碰运气 —— 采样到 0 就
         // 一路停在 1 像素（用户看到的是"画面不动"）。有监听则"尺寸一变就重算"。
-        ijkPlayer?.setOnVideoSizeChangedListener { _, width, height, _, _ ->
+        ijkPlayer?.setOnVideoSizeChangedListener { mp, width, height, _, _ ->
+            if (destroyed || mp !== ijkPlayer) return@setOnVideoSizeChangedListener
             Logu.v("视频尺寸", "尺寸变化回调：${width}x${height}")
             videoSizeRetry = 0
             changeVideoSize()
@@ -1361,7 +1466,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         // 每条新流从零开始计重试次数：上一个视频的重试计数不该影响这一个
         videoSizeRetry = 0
 
-        ijkPlayer!!.setOnBufferingUpdateListener { mp, percent ->
+        ijkPlayer?.setOnBufferingUpdateListener { mp, percent ->
+            if (destroyed || mp !== ijkPlayer) return@setOnBufferingUpdateListener
             // #1：percent 变化顺带校准总时长——部分流 prepare 完时 getDuration 仍是 0
             if (video_all <= 0 && percent > 0 && ijkPlayer != null) {
                 val dur = try {
@@ -1379,7 +1485,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
 
         if (isOnlineVideo || isLiveMode)
-            ijkPlayer!!.setOnInfoListener { mp, what, extra ->
+            ijkPlayer?.setOnInfoListener { mp, what, extra ->
+                if (destroyed || mp !== ijkPlayer) return@setOnInfoListener false
                 if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_START) {
                     if (playbackWatchdog != null)
                         playbackWatchdog!!.onBufferingStart()
@@ -1438,14 +1545,21 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             return
         }
 
+        if (mediaPlayer !== ijkPlayer) return
+        // v5.3.2：网络类错误的「原地重连」额度按**成功准备好**复位。
+        // 否则同一页里断两次网就把额度用完，之后每次网络抖动都会直接切内核
+        // （正是用户报的「放着放着卡一下就被换成老播放器」）。
+        media3NetworkRetryCount = 0
+        val shouldPlay = pendingRestorePlaying ?: true
+        pendingRestorePlaying = null
         isPrepared = true
-        video_all = ijkPlayer!!.getDuration().toInt()
+        video_all = mediaPlayer.duration.toInt()
         // #1：DASH 流刚 prepare 完 getDuration 可能返回 0/负值，
         // 会把进度条 max 设成 0（进度显示全乱、总时长 00:00 不动）。
         // 晚些再取一次；仍取不到就等缓冲回调里补设。
         if (video_all <= 0) {
             mainHandler!!.postDelayed({
-                if (!destroyed && isPrepared && ijkPlayer != null) {
+                if (!destroyed && isPrepared && mediaPlayer === ijkPlayer) {
                     val dur = try {
                         ijkPlayer!!.getDuration().toInt()
                     } catch (ignored: Exception) {
@@ -1464,7 +1578,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (isOnlineVideo || isLiveMode) {
             ensurePlaybackWatchdog()
             playbackWatchdog!!.setPrepared(true)
-            playbackWatchdog!!.setUserWantsPlay(true)
+            playbackWatchdog?.setUserWantsPlay(shouldPlay)
         }
 
         changeVideoSize()
@@ -1571,8 +1685,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
         loading_info!!.visibility = View.GONE
         anim_loading!!.stop()
-        isPlaying = true
-        btn_control!!.setImageResource(R.drawable.btn_player_pause)
+        isPlaying = shouldPlay
+        btn_control?.setImageResource(if (shouldPlay) R.drawable.btn_player_pause else R.drawable.btn_player_play)
 
         text_speed!!.visibility = layout_top!!.getVisibility()
         if (isLiveMode)
@@ -1593,7 +1707,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         progressChange()
         onlineChange()
 
-        ijkPlayer!!.start()
+        if (shouldPlay) mediaPlayer.start() else {
+            mediaPlayer.pause()
+            danmakuController?.pause()
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
             updateMediaSessionMetadata()
@@ -1622,7 +1739,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     private fun applyStartSeek() {
         if (isLiveMode) return
         val recovery = pendingRecoverySeek
-        if (recovery > 0L) {
+        if (recovery >= 0L) {
             pendingRecoverySeek = -1L
             seekPlayerAndDanmaku(recovery)
             Logu.d("恢复播放", "已跳回 " + recovery + "ms")
@@ -2312,6 +2429,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (destroyed || ijkPlayer == null)
             return
 
+        val recoveringPlayer = ijkPlayer ?: return
+        val generation = playbackRequestGeneration
         val resumePosition: Long
         val wasPlaying = isPlaying
         try {
@@ -2325,24 +2444,25 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 return@Runnable
             try {
                 runOnUiThread {
-                    if (destroyed)
+                    if (destroyed || generation != playbackRequestGeneration || recoveringPlayer !== ijkPlayer)
                         return@runOnUiThread
                     try {
-                        ijkPlayer!!.stop()
+                        recoveringPlayer.stop()
                     } catch (ignored: Exception) {
                     }
                     try {
                         ijkPlayer!!.release()
                     } catch (ignored: Exception) {
                     }
-                    ijkPlayer = PlayerFactory.create(this)
+                    ijkPlayer = createSessionPlayer()
 
                     // 复位状态，让 setDisplay 重新走一遍 prepare 流程
                     isPrepared = false
                     isPlaying = false
                     progress_history = if (resumePosition > 0) resumePosition else progress_history
                     // 恢复播放必须回到原进度，不受“从历史位置播放”这一偏好的影响
-                    pendingRecoverySeek = if (resumePosition > 0) resumePosition else -1L
+                    pendingRecoverySeek = resumePosition.coerceAtLeast(0L)
+                    pendingRestorePlaying = wasPlaying
 
                     if (playbackWatchdog != null) {
                         playbackWatchdog!!.setPrepared(false)
@@ -3482,7 +3602,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     runOnUiThread {
                         if (destroyed)
                             return@runOnUiThread
-                        ijkPlayer = PlayerFactory.create(this)
+                        ijkPlayer = createSessionPlayer()
                         progress_history = currentPosition
 
                         setDisplay()
@@ -3648,6 +3768,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (pageIndex == currentPageIndex)
             return
 
+        val generation = ++playbackRequestGeneration
         currentPageIndex = pageIndex
         val newCid = cids!![pageIndex]
         val newTitle = pagenames!![pageIndex]
@@ -3667,14 +3788,14 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 playerData.currentPageIndex = currentPageIndex
 
                 if (isOnlineVideo) {
-                    PlayerApi.getVideo(playerData, false)
+                    PlayerApi.getVideo(playerData, media3FallbackTried)
                 } else {
                     runOnUiThread { MsgUtil.showMsg("本地视频暂不支持切换分P") }
                     return@Runnable
                 }
 
                 runOnUiThread {
-                    if (destroyed)
+                    if (destroyed || generation != playbackRequestGeneration)
                         return@runOnUiThread
 
                     if (ijkPlayer != null) {
@@ -3688,6 +3809,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
                     cid = newCid
                     video_url = playerData.videoUrl
+                    audioUrl = playerData.audioUrl
                     danmaku_url = playerData.danmakuUrl
                     text_title!!.text = newTitle
                     videoTitle = newTitle
@@ -3705,6 +3827,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     isPlaying = false
                     finishWatching = false
                     progress_history = 0
+                    pendingRecoverySeek = -1L
+                    pendingRestorePlaying = null
+                    playbackWatchdog?.reset()
+                    playbackWatchdog?.setPrepared(false)
                     clearSubtitleState()
                     viewPoints = null
                     viewPointAdapter = null
@@ -3721,7 +3847,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         interactionChoiceLayout!!.removeAllViews()
                     }
 
-                    ijkPlayer = PlayerFactory.create(this)
+                    ijkPlayer = createSessionPlayer()
                     mDanmakuView = findViewById<View>(R.id.sv_danmaku) as IDanmakuView
 
                     setDisplay()
@@ -3822,6 +3948,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             return
         }
 
+        val generation = ++playbackRequestGeneration
+        val requestCid = cid
         MsgUtil.showMsg("正在切换清晰度...")
 
         CenterThreadPool.run(Runnable {
@@ -3832,14 +3960,15 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                 playerData.title = text_title!!.getText().toString()
                 playerData.mid = mid
                 playerData.qn = newQuality
+                playerData.cid = requestCid
                 playerData.pagenames = pagenames
                 playerData.cids = cids
                 playerData.currentPageIndex = currentPageIndex
 
-                PlayerApi.getVideo(playerData, false)
+                PlayerApi.getVideo(playerData, media3FallbackTried)
 
                 runOnUiThread {
-                    if (destroyed)
+                    if (destroyed || generation != playbackRequestGeneration)
                         return@runOnUiThread
 
                     val currentPosition = if (ijkPlayer != null) ijkPlayer!!.getCurrentPosition() else 0
@@ -3854,6 +3983,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     }
 
                     video_url = playerData.videoUrl
+                    audioUrl = playerData.audioUrl
                     currentQuality = newQuality
 
                     if (playerData.qnStrList != null && playerData.qnValueList != null) {
@@ -3867,8 +3997,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     isPrepared = false
                     isPlaying = false
 
-                    ijkPlayer = PlayerFactory.create(this)
+                    ijkPlayer = createSessionPlayer()
                     progress_history = currentPosition
+                    pendingRecoverySeek = currentPosition.toLong().coerceAtLeast(0L)
+                    pendingRestorePlaying = wasPlaying
 
                     setDisplay()
                 }
@@ -4209,6 +4341,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     private fun jumpToInteractionPage(targetCid: Long, newData: InteractionVideoData) {
+        val generation = ++playbackRequestGeneration
         CenterThreadPool.run(Runnable {
             try {
                 val playerData = PlayerData()
@@ -4228,10 +4361,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     }
                 }
 
-                PlayerApi.getVideo(playerData, false)
+                PlayerApi.getVideo(playerData, media3FallbackTried)
 
                 runOnUiThread {
-                    if (destroyed)
+                    if (destroyed || generation != playbackRequestGeneration)
                         return@runOnUiThread
 
                     if (ijkPlayer != null) {
@@ -4242,6 +4375,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
                     cid = targetCid
                     video_url = playerData.videoUrl
+                    audioUrl = playerData.audioUrl
                     danmaku_url = playerData.danmakuUrl
                     text_title!!.text = newData.title
                     videoTitle = newData.title
@@ -4260,6 +4394,10 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     isPlaying = false
                     finishWatching = false
                     progress_history = 0
+                    pendingRecoverySeek = -1L
+                    pendingRestorePlaying = null
+                    playbackWatchdog?.reset()
+                    playbackWatchdog?.setPrepared(false)
                     clearSubtitleState()
                     viewPoints = null
                     viewPointAdapter = null
@@ -4275,7 +4413,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         interactionChoiceLayout!!.removeAllViews()
                     }
 
-                    ijkPlayer = PlayerFactory.create(this)
+                    ijkPlayer = createSessionPlayer()
                     mDanmakuView = findViewById<View>(R.id.sv_danmaku) as IDanmakuView
 
                     setDisplay()
@@ -4503,6 +4641,15 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
     }
 
     private companion object {
+        /** media3 `PlaybackException` 的 IO/网络类错误码区间（javap 核实 1.4.1：2000~2008） */
+        val MEDIA3_ERROR_NETWORK_RANGE = 2000..2008
+
+        /** media3 `ERROR_CODE_TIMEOUT`（1003）同样属于「还能再试一次」的暂时性错误 */
+        const val MEDIA3_ERROR_TIMEOUT = 1003
+
+        /** 同一条流最多原地重连几次（超过就认为链路真的坏了，交给换内核/提示） */
+        const val MAX_NETWORK_RETRY = 2
+
         /**
          * 圆屏下需要**收窄到圆内**的居中卡片 id。
          *

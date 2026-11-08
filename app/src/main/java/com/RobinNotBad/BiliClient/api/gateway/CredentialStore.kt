@@ -406,8 +406,9 @@ object CredentialStore {
      * v5.3.1 把全部逻辑收进 [CookieRefreshApi.renewWeb]，这里只保留节流语义与结果适配。
      *
      * # 保留 `force` 的语义
-     * - `force = true`：用户手动点「立即续期」，忽略 30 分钟节流（但仍要先问服务端）；
-     * - `force = false`：`cookie_refresh` 标志为 false 时直接跳过（省一次请求）。
+     * - `force = true`：直接续期，忽略本地节流及服务端 refresh 标志；
+     * - `force = false`：仅按本地 30 分钟间隔节流，网络失败不清号。
+     * 跨端修复仅在用户明确开启独立开关时允许。
      *
      * @return 是否真的刷新成功（调用方要区分失败原因请直接用 [CookieRefreshApi.renewWeb]）
      */
@@ -424,17 +425,8 @@ object CredentialStore {
      */
     @JvmStatic
     fun renewWebDetailed(force: Boolean): CookieRefreshApi.RenewResult {
-        if (!AccountStore.isPortLoggedIn(AccountStore.PORT_WEB)) {
-            // web 未登录时没有可续期的凭据。这**不是**错误 ——
-            // 用户可能只登了 APP 端口，此时 web 就是没有登录
-            Logu.d(TAG, "web 未登录，跳过主动续期")
-            return CookieRefreshApi.RenewResult.NotNeeded
-        }
-        if (!force && !SharedPreferencesUtil.getBoolean(SharedPreferencesUtil.cookie_refresh, false)) {
-            return CookieRefreshApi.RenewResult.NotNeeded
-        }
-        // 唯一入口：内部已含「缺 token 提前判定 + 成功回写账号槽」
-        return CookieRefreshApi.renewWeb()
+        // force=true 直接续期；非强制调用仅按本地间隔节流，绝不等 Cookie 到期。
+        return CookieRefreshApi.renewIfNeededOnForeground(force)
     }
 
     // ==================== 兼容：AccountStore 的账号列表投影 ====================

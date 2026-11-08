@@ -1,233 +1,303 @@
 package com.RobinNotBad.BiliClient.activity.update
 
-import android.annotation.SuppressLint
+import android.app.DownloadManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.text.TextUtils
+import android.provider.MediaStore
 import android.view.View
+import android.widget.ProgressBar
 import android.widget.TextView
-
-import androidx.activity.result.ActivityResult
-import androidx.activity.result.ActivityResultCallback
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.Nullable
-
+import com.RobinNotBad.BiliClient.BuildConfig
 import com.RobinNotBad.BiliClient.R
-import com.RobinNotBad.BiliClient.activity.DownloadActivity
 import com.RobinNotBad.BiliClient.activity.base.BaseActivity
-import com.RobinNotBad.BiliClient.api.AppInfoApi
-import com.RobinNotBad.BiliClient.util.CenterThreadPool
-import com.RobinNotBad.BiliClient.util.FileUtil
-import com.RobinNotBad.BiliClient.util.Logu
-import com.RobinNotBad.BiliClient.util.MsgUtil
-import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.api.GiteeReleaseApi
+import com.RobinNotBad.BiliClient.model.update.GiteeRelease
+import com.RobinNotBad.BiliClient.model.update.GiteeReleasePolicy
+import com.RobinNotBad.BiliClient.model.update.UpdateVersion
 import com.google.android.material.button.MaterialButton
-
-import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
+/** Settings opens this page immediately; old upstream Intent extras are deliberately ignored. */
 class UpdateInfoActivity : BaseActivity() {
+    private val pageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val api = GiteeReleaseApi()
+    private var release: GiteeRelease? = null
+    private var loading = false
+    private var downloading = false
+    private var savedUri: Uri? = null
+    private var savedTag: String? = null
+    private var interrupted = false
+    private lateinit var status: TextView
+    private lateinit var version: TextView
+    private lateinit var releaseDetails: TextView
+    private lateinit var notes: TextView
+    private lateinit var fileStatus: TextView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var detailsCard: View
+    private lateinit var retryButton: MaterialButton
+    private lateinit var downloadButton: MaterialButton
+    private lateinit var downloadsButton: MaterialButton
 
-    var versionNameTv: TextView? = null
-    var versionCodeTv: TextView? = null
-    var isReleaseTv: TextView? = null
-    var pubTimeTv: TextView? = null
-    var updateLogTv: TextView? = null
-    var downloadBtn: MaterialButton? = null
-
-    var apkFile: File? = null
-
-    val launcher: ActivityResultLauncher<Intent> = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-        ActivityResultCallback { o: ActivityResult? ->
-            Logu.d("下载回调", "onActivityResult")
-            if (apkFile != null && apkFile!!.exists()) {
-                downloadComplete()
-            }
-        }
-    )
-
-    @SuppressLint("InflateParams")
-    override fun onCreate(@Nullable savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_update_info)
+        bindViews()
+        setPageName(getString(R.string.update_gitee_title))
+        savedUri = savedInstanceState?.getString(STATE_URI)?.let(Uri::parse)
+        savedTag = savedInstanceState?.getString(STATE_TAG)
+        interrupted = savedInstanceState?.getBoolean(STATE_DOWNLOADING, false) == true
+        loadRelease()
+    }
 
-        val intent = getIntent()
-        val versionName = intent.getStringExtra("versionName")
-        val versionCode = intent.getIntExtra("versionCode", -1)
-        val isRelease = intent.getIntExtra("isRelease", 0)
-        val ctime = intent.getLongExtra("ctime", -1)
-        val updateLog = intent.getStringExtra("updateLog")
-        val canDownload = intent.getIntExtra("canDownload", 0)
+    private fun bindViews() {
+        status = findViewById(R.id.updateStatus)
+        version = findViewById(R.id.updateVersion)
+        releaseDetails = findViewById(R.id.updateReleaseDetails)
+        notes = findViewById(R.id.updateNotes)
+        fileStatus = findViewById(R.id.updateFileStatus)
+        progressBar = findViewById(R.id.updateProgress)
+        detailsCard = findViewById(R.id.updateDetailsCard)
+        retryButton = findViewById(R.id.updateRetry)
+        downloadButton = findViewById(R.id.updateDownload)
+        downloadsButton = findViewById(R.id.updateOpenDownloads)
+        findViewById<View>(R.id.top).setOnClickListener { finish() }
+        retryButton.setOnClickListener { loadRelease() }
+        downloadButton.setOnClickListener { downloadRelease() }
+        downloadsButton.setOnClickListener { openDownloads() }
+        findViewById<MaterialButton>(R.id.updateOpenGitee).setOnClickListener { openReleases() }
+        findViewById<TextView>(R.id.updateInstalledVersion).text =
+            getString(R.string.update_gitee_installed, BuildConfig.VERSION_NAME)
+    }
 
-        asyncInflate(R.layout.activity_update_info) { layoutView, resId ->
-
-            versionNameTv = findViewById(R.id.versionName)
-            versionCodeTv = findViewById(R.id.versionCode)
-            isReleaseTv = findViewById(R.id.isRelease)
-            pubTimeTv = findViewById(R.id.pubTime)
-            updateLogTv = findViewById(R.id.updateLog)
-            downloadBtn = findViewById(R.id.download)
-
-            if (versionName == null || versionCode == -1) {
-                finish()
-                return@asyncInflate
-            }
-
-            versionNameTv!!.text = String.format("版本名: %s", versionName)
-            versionCodeTv!!.text = String.format(Locale.getDefault(), "版本号: %d", versionCode)
-            isReleaseTv!!.text = String.format("是否为正式版: %s", if (isRelease == 1) "是" else "否")
-            pubTimeTv!!.text = String.format("发布时间: %s", if (ctime == -1L) "未知" else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(if (ctime.toString().length == 13) ctime else ctime * 1000)))
-            updateLogTv!!.text = if (TextUtils.isEmpty(updateLog)) "暂无更新日志" else updateLog
-
-            if (canDownload != 1) downloadBtn!!.visibility = View.GONE
-            downloadBtn!!.setOnClickListener { view1 ->
-                if (!FileUtil.checkStoragePermission()) {
-                    MsgUtil.showMsg("请授权存储空间权限")
-                    FileUtil.requestStoragePermission(this)
-                    return@setOnClickListener
+    private fun loadRelease() {
+        if (loading || downloading) return
+        loading = true
+        release = null
+        status.setText(R.string.update_gitee_loading)
+        detailsCard.visibility = View.GONE
+        fileStatus.visibility = View.GONE
+        progressBar.visibility = View.VISIBLE
+        progressBar.isIndeterminate = true
+        updateButtons()
+        pageScope.launch {
+            try {
+                val latest = api.fetchLatest()
+                val existing = withContext(Dispatchers.IO) { savedDownloadExists(latest) }
+                if (!existing) savedUri = null
+                release = latest
+                showRelease(latest)
+                pageScope.launch { showResolvedSize(latest) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (exception: Exception) {
+                status.text = getString(R.string.update_gitee_load_error, exception.message.orEmpty().take(160))
+            } finally {
+                loading = false
+                if (!isDestroyed()) {
+                    progressBar.visibility = View.GONE
+                    updateButtons()
                 }
-
-                CenterThreadPool.run(Runnable {
-                    try {
-                        runOnUiThread { MsgUtil.showMsg("获取下载地址……") }
-                        val url = AppInfoApi.getDownloadUrl(versionCode)
-
-                        apkFile = File(FileUtil.getDownloadPath(), FileUtil.getFileNameFromLink(url))
-                        if (apkFile!!.exists()) {
-                            MsgUtil.showMsg("已有本地安装包！")
-                            downloadComplete()
-                            return@Runnable
-                        }
-
-                        val downloadIntent = Intent(this, DownloadActivity::class.java)
-                                .putExtra("link", url)
-                                .putExtra("path", FileUtil.getDownloadPath().absolutePath)
-                                .putExtra("terminal", true)
-                                .putExtra("type", 0)
-                        launcher.launch(downloadIntent)
-                    } catch (e: Throwable) {
-                        MsgUtil.err("下载更新", e)
-                    }
-                })
-
-
-
-                /*
-                CenterThreadPool.run(() -> {
-                    try {
-                        runOnUiThread(() -> MsgUtil.showMsg("开始获取下载地址"));
-                        String url = AppInfoApi.getDownloadUrl(versionCode);
-                        if (TextUtils.isEmpty(url)) {
-                            runOnUiThread(() -> MsgUtil.showMsg("没有该版本的下载地址"));
-                        } else {
-                            Request request = new Request.Builder()
-                                    .get()
-                                    .url(url)
-                                    .build();
-
-                            NetWorkUtil.getOkHttpInstance().newCall(request).enqueue(new Callback() {
-                                @Override
-                                public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                                    runOnUiThread(() -> {
-                                        MsgUtil.showMsg("下载失败: " + e.getMessage());
-                                        downloadBtn.setText("下载");
-                                    });
-                                }
-
-                                @Override
-                                public void onResponse(@NonNull Call call, @NonNull Response response) {
-                                    if (!response.isSuccessful()) {
-                                        runOnUiThread(() -> MsgUtil.showMsg("下载失败！"));
-                                    } else {
-                                        try {
-                                            downloading = true;
-                                            stopDownload = false;
-                                            ResponseBody responseBody = response.body();
-                                            if (responseBody != null) {
-                                                long fileSize = responseBody.contentLength();
-                                                File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "BiliTerminal_" + versionCode + ".apk");
-                                                if (file.exists() && !file.delete()) {
-                                                    int num = 1;
-                                                    while (file.exists()) {
-                                                        if (file.delete()) break;
-                                                        file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "BiliTerminal_" + versionCode + "(" + num++ + ").apk");
-                                                    }
-                                                }
-                                                FileOutputStream fos = new FileOutputStream(file);
-                                                int bytesRead;
-                                                byte[] data = new byte[1024];
-                                                long totalBytesRead = 0;
-                                                while ((bytesRead = responseBody.byteStream().read(data)) != -1) {
-                                                    if (stopDownload) break;
-                                                    fos.write(data, 0, bytesRead);
-                                                    totalBytesRead += bytesRead;
-                                                    int progress = (int) ((totalBytesRead * 100) / fileSize);
-                                                    runOnUiThread(()->downloadBtn.setText(String.format(Locale.getDefault(), "下载(%d%%)", progress)));
-                                                }
-                                                fos.flush();
-                                                fos.close();
-                                                if (!stopDownload) {
-                                                    startActivity(new Intent(UpdateInfoActivity.this, UpdateDownloadResultActivity.class)
-                                                            .putExtra("path", file.getAbsolutePath()));
-                                                } else {
-                                                    if (file.delete()) {
-                                                        runOnUiThread(() -> MsgUtil.showMsg("已中止下载并删除文件"));
-                                                    } else {
-                                                        runOnUiThread(() -> MsgUtil.showMsg("已中止下载，删除文件失败"));
-                                                    }
-                                                }
-                                                stopDownload = false;
-                                                downloading = false;
-                                            }
-                                        } catch (Throwable th) {
-                                            MsgUtil.err("下载出错：",th);
-                                            downloading = false;
-                                        }
-                                    }
-                                    downloadBtn.setText("下载");
-                                }
-                            });
-                        }
-                    } catch (IOException e) {
-                        runOnUiThread(() -> MsgUtil.showMsg("网络异常"));
-                    } catch (Throwable th) {
-                        runOnUiThread(() -> MsgUtil.showMsg("错误: " + th.getMessage()));
-                    }
-                });
-                 */
             }
         }
     }
 
-    private fun downloadComplete() {
-        runOnUiThread {
-            val apk = apkFile ?: return@runOnUiThread
-            SharedPreferencesUtil.putString("terminal_update_pkg", apk.absolutePath)
-            downloadBtn!!.visibility = View.GONE
-            val installBtn = findViewById<MaterialButton>(R.id.install)
-            val deleteBtn = findViewById<MaterialButton>(R.id.delete)
-            installBtn.visibility = View.VISIBLE
-            deleteBtn.visibility = View.VISIBLE
+    private fun savedDownloadExists(latest: GiteeRelease): Boolean {
+        val uri = savedUri ?: return false
+        if (savedTag != latest.tagName) return false
+        return try {
+            contentResolver.query(uri, arrayOf(MediaStore.Downloads.SIZE), null, null, null)?.use { cursor ->
+                cursor.moveToFirst() && cursor.getLong(0) > 0
+            } == true
+        } catch (ignored: Exception) {
+            false // A removed/revoked file must never be advertised as an existing successful download.
+        }
+    }
 
-            installBtn.setOnClickListener { v -> startActivity(Intent(this, UpdateInstallActivity::class.java)
-                    .putExtra("path", apk.absolutePath)) }
+    private fun showRelease(latest: GiteeRelease) {
+        detailsCard.visibility = View.VISIBLE
+        status.setText(comparisonStatus(latest))
+        version.text = getString(R.string.update_gitee_latest, latest.tagName)
+        releaseDetails.text = getString(
+            R.string.update_gitee_release_details, latest.title, stageLabel(latest.prerelease),
+            formatPublishedAt(latest.publishedAt)
+        )
+        notes.text = latest.notes.ifBlank { getString(R.string.update_gitee_no_notes) }
+        showFileStatus(latest, interrupted)
+        interrupted = false
+    }
 
-            deleteBtn.setOnClickListener { v ->
-                CenterThreadPool.run(Runnable {
-                    if (apk.delete()) MsgUtil.showMsg("删除成功")
-                    else MsgUtil.showMsg("删除失败")
-                    SharedPreferencesUtil.putString("terminal_update_pkg", "")
-                    finish()
-                    startActivity(getIntent())
-                })
+    private fun showFileStatus(latest: GiteeRelease, wasInterrupted: Boolean) {
+        fileStatus.visibility = View.VISIBLE
+        fileStatus.text = when {
+            savedUri != null -> getString(R.string.update_gitee_saved, latest.mainApk?.name.orEmpty())
+            wasInterrupted -> getString(R.string.update_gitee_interrupted)
+            latest.mainApk == null -> getString(R.string.update_gitee_no_apk)
+            !isMainPackageBuild() -> getString(R.string.update_gitee_channel_build)
+            else -> getString(R.string.update_gitee_target, latest.mainApk.name, describeSize(latest.mainApk.declaredSize))
+        }
+    }
+
+    /** Gitee omits asset sizes, so a HEAD probe fills them in without downloading the APK. */
+    private suspend fun showResolvedSize(latest: GiteeRelease) {
+        val asset = latest.mainApk ?: return
+        if (asset.declaredSize != null) return
+        val resolved = api.probeAssetSize(asset) ?: return
+        if (isDestroyed() || release?.tagName != latest.tagName) return
+        if (downloading || savedUri != null) return
+        val sized = asset.copy(declaredSize = resolved)
+        release = latest.copy(mainApk = sized)
+        showFileStatus(latest.copy(mainApk = sized), wasInterrupted = false)
+    }
+
+    /** Null comparison means the tag format is unknown: never claim "already up to date". */
+    private fun comparisonStatus(latest: GiteeRelease): Int {
+        val comparison = UpdateVersion.compare(latest.tagName, BuildConfig.VERSION_NAME)
+            ?: return R.string.update_gitee_version_unknown
+        return when {
+            comparison > 0 -> R.string.update_gitee_new_version
+            comparison == 0 -> R.string.update_gitee_current
+            else -> R.string.update_gitee_local_newer
+        }
+    }
+
+    private fun stageLabel(prerelease: Boolean): String =
+        getString(if (prerelease) R.string.update_gitee_prerelease else R.string.update_gitee_release)
+
+    /** Gitee returns `created_at` with an offset; show it as local time and never crash on odd input. */
+    private fun formatPublishedAt(raw: String): String {
+        if (raw.isBlank()) return getString(R.string.update_gitee_unknown_time)
+        return try {
+            val parsed = ISO_FORMATS.firstNotNullOfOrNull { format ->
+                runCatching { format.parse(raw) }.getOrNull()
+            } ?: return raw
+            LOCAL_FORMAT.format(parsed)
+        } catch (ignored: Exception) {
+            raw
+        }
+    }
+
+    private fun describeSize(bytes: Long?): String {
+        if (bytes == null || bytes <= 0L) return getString(R.string.update_gitee_size_unknown)
+        val mib = bytes / (1024.0 * 1024.0)
+        return getString(R.string.update_gitee_size_mib, mib)
+    }
+
+    private fun downloadRelease() {
+        val latest = release ?: return
+        val asset = latest.mainApk ?: return
+        if (loading || downloading || savedUri != null) return
+        // Defence in depth: a channel build must never pull the main-package APK even by tap spam.
+        if (!isMainPackageBuild()) {
+            fileStatus.visibility = View.VISIBLE
+            fileStatus.setText(R.string.update_gitee_channel_build)
+            return
+        }
+        downloading = true
+        fileStatus.visibility = View.VISIBLE
+        fileStatus.setText(R.string.update_gitee_download_start)
+        progressBar.visibility = View.VISIBLE
+        progressBar.isIndeterminate = true
+        updateButtons()
+        pageScope.launch {
+            try {
+                val uri = GiteeApkDownload(applicationContext, api).download(latest) { actual, total ->
+                    withContext(Dispatchers.Main.immediate) { showProgress(actual, total) }
+                }
+                savedUri = uri
+                savedTag = latest.tagName
+                fileStatus.text = getString(R.string.update_gitee_saved, asset.name)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (exception: Exception) {
+                fileStatus.text = getString(R.string.update_gitee_download_error, exception.message.orEmpty().take(160))
+            } finally {
+                downloading = false
+                if (!isDestroyed()) {
+                    progressBar.visibility = View.GONE
+                    updateButtons()
+                }
             }
         }
+    }
+
+    private fun showProgress(actual: Long, total: Long) {
+        if (isDestroyed()) return
+        if (total > 0) {
+            val percent = (actual * 100 / total).coerceIn(0, 100).toInt()
+            progressBar.isIndeterminate = false
+            progressBar.progress = percent
+            fileStatus.text = if (percent == 100) getString(R.string.update_gitee_verifying)
+            else getString(R.string.update_gitee_progress, percent)
+        } else {
+            fileStatus.text = getString(R.string.update_gitee_progress_unknown, actual / 1024)
+        }
+    }
+
+    /** A channel build (e.g. qqmusic) shares this code but must not download the main APK. */
+    private fun isMainPackageBuild(): Boolean = applicationContext.packageName == GiteeApkDownload.MAIN_PACKAGE
+
+    private fun updateButtons() {
+        val buttonReleased = !loading && !downloading
+        retryButton.isEnabled = buttonReleased
+        retryButton.setText(if (release == null) R.string.update_gitee_retry else R.string.update_gitee_refresh)
+        downloadButton.isEnabled = buttonReleased && release?.mainApk != null &&
+            savedUri == null && isMainPackageBuild()
+        downloadButton.setText(if (downloading) R.string.update_gitee_downloading else R.string.update_gitee_download)
+        downloadsButton.visibility = if (savedUri != null) View.VISIBLE else View.GONE
+    }
+
+    private fun openDownloads() {
+        try {
+            startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+        } catch (ignored: ActivityNotFoundException) {
+            fileStatus.visibility = View.VISIBLE
+            fileStatus.setText(R.string.update_gitee_open_downloads_failed)
+        }
+    }
+
+    private fun openReleases() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GiteeReleasePolicy.RELEASES_URL)))
+        } catch (ignored: ActivityNotFoundException) {
+            fileStatus.visibility = View.VISIBLE
+            fileStatus.setText(R.string.update_gitee_open_browser_failed)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_URI, savedUri?.toString())
+        outState.putString(STATE_TAG, savedTag)
+        outState.putBoolean(STATE_DOWNLOADING, downloading)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
+        // Cancels blocked OkHttp reads too; pending rows/private files are removed by helper finally.
+        api.cancel()
+        pageScope.cancel()
         super.onDestroy()
+    }
+
+    companion object {
+        private const val STATE_URI = "gitee_update_saved_uri"
+        private const val STATE_TAG = "gitee_update_saved_tag"
+        private const val STATE_DOWNLOADING = "gitee_update_downloading"
+        private val ISO_FORMATS = listOf(
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US),
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US),
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        )
+        private val LOCAL_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     }
 }

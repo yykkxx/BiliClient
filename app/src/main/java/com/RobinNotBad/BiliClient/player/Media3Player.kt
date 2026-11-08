@@ -77,6 +77,12 @@ class Media3Player(context: Context) : IMediaPlayer {
     @Volatile
     private var released = false
 
+    /** 动作队列与 prepare/reset 使用同一代际，旧 seek/start/回调不能作用到下一条流。 */
+    private val commandGeneration = AtomicLong(0L)
+    private var desiredSpeed = 1f
+    private var desiredVolume = 1f
+    private var desiredLooping = false
+
     /** 拉流档位指纹：DefaultLoadControl 是 ExoPlayer 构造参数，option 变化时须重建实例 */
     private var bufferFingerprint: String? = null
 
@@ -182,6 +188,14 @@ class Media3Player(context: Context) : IMediaPlayer {
     @Volatile
     private var tcpSpeedBytesPerSec = 0L
 
+    /**
+     * 上一次「确实测到吞吐」的时刻（v5.3.2，对应症状 B 的网速横跳）。
+     *
+     * 只由主线程 ticker 写。用途见 [updateSpeedSample]：短时无字节时保持显示上一个有效值，
+     * 而不是立刻归零（即"界面从有数字变成空白"的那一下）。0 表示还没有过有效值。
+     */
+    private var lastNonZeroSpeedAtMs = 0L
+
     /** 挂到 HTTP DataSource.Factory 上；file:// 本地播放不计（不是网络流量） */
     private val transferListener = object : TransferListener {
         override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {
@@ -209,6 +223,16 @@ class Media3Player(context: Context) : IMediaPlayer {
 
     private var preparedNotified = false
     private var completionNotified = false
+
+    /**
+     * 上一次的播放状态（v5.3.2 起加 `@Volatile`）。
+     *
+     * 加 volatile 的原因：冻结/首帧两条判据要拿它当「当前不在 READY 就一律不判」的
+     * **实时硬前置**，而这两条判据的调用方（看门狗 tick、播放页 probe）虽然也在主线程，
+     * 但判据本身被文档承诺为「任意线程安全」，所以按线程安全口径声明，避免以后有人
+     * 从 Timer/弹幕线程调用时读到撕裂值或陈旧值。
+     */
+    @Volatile
     private var lastPlaybackState = Player.STATE_IDLE
 
     // ---- 画面冻结观测（v5.3.0）--------------------------------------------
@@ -332,6 +356,12 @@ class Media3Player(context: Context) : IMediaPlayer {
         val last = lastRenderedFrameAtMs
         // 2)~4)：没出过首帧 / 当前不该出帧 / 画面没挂着 —— 三者都不是「冻住」
         if (first <= 0L || last <= 0L) return false
+        // ⚠ v5.3.2（对应真机症状 A「放着放着就卡，然后切到老播放器」）：
+        // **缓冲态绝不能参与冻结判定**。BUFFERING 期间媒体时间轴不前进 → 帧计数必然不涨、
+        // 位置也未必涨；而 `lastSampleAllowed` 是 ticker **每 500ms** 才刷新的，
+        // 判据在两个 tick 之间被问到的那一瞬间可能还读着「上一拍 READY+在播」的旧值 ——
+        // 于是「刚进缓冲」的那一拍会被算成「画面冻住」。这里直接读实时状态，堵死这个窗口。
+        if (lastPlaybackState != Player.STATE_READY) return false
         if (!lastSampleAllowed || !videoSurfaceAttached) return false
         val now = SystemClock.elapsedRealtime()
         // 5) seek 宽限：跳转后解码器重建/等关键帧，这段时间不判
@@ -371,6 +401,10 @@ class Media3Player(context: Context) : IMediaPlayer {
     fun isFirstFrameOverdue(): Boolean {
         if (!renderStallMonitorEnabled || released || !pageVisibleForRender) return false
         if (firstFrameAtMs > 0L) return false
+        // 同上（v5.3.2）：缓冲/回缓冲期间"还没出首帧"是**必然**的，不是黑屏故障。
+        // 弱网下 READY → 缓冲 → READY 反复切换是常态，如果缓冲期也计入 20 秒超时，
+        // 那「一直在缓冲、始终没凑够起播条件」的正常弱网就会被判成黑屏并切内核。
+        if (lastPlaybackState != Player.STATE_READY) return false
         val readyAt = readyAtMs
         if (readyAt <= 0L || !videoSurfaceAttached) return false
         val now = SystemClock.elapsedRealtime()
@@ -509,7 +543,13 @@ class Media3Player(context: Context) : IMediaPlayer {
     override fun getDataSource(): String? = dataSourceUrl
 
     override fun prepareAsync() {
-        runOnMain { prepareOnMain() }
+        if (released) return
+        // 参数在这里同步快照 + 分配代际：主线程执行时若已被 reset/新 prepare 超过，那条旧流必须作废。
+        val generation = commandGeneration.incrementAndGet()
+        val url = dataSourceUrl ?: return
+        val audio = dataSourceAudioUrl
+        val headers = dataSourceHeaders?.toMap()
+        runOnMain { prepareOnMain(url, audio, headers, generation) }
     }
 
     override fun start() {
@@ -578,25 +618,38 @@ class Media3Player(context: Context) : IMediaPlayer {
     }
 
     override fun reset() {
-        // story 连续切换复用实例：stop + 清列表，保留实例（media3 复用时 Surface 保留上一帧，
-        // 与 story 注释里 ijk 的复用行为一致）
+        if (released) return
+        commandGeneration.incrementAndGet()
+        // 先同步清参数，不能让排队的 reset 把随后 setDataSource 的新参数擦掉。
+        dataSourceUrl = null
+        dataSourceAudioUrl = null
+        dataSourceHeaders = null
+        clearPlaybackMirror()
         runOnMain {
-            // 速率状态先清：即使实例已不在（player==null 的早退路径），也不能留上一段的旧值
             resetSpeedSample()
-            // 冻结观测同理必须清：上一段的首帧时刻若留着，复用实例起新流后会误判
-            // 「已经出过首帧但现在不涨帧」→ 把正常起播当成冻结
             resetRenderStallSample()
-            val p = player ?: return@runOnMain
-            p.stop()
-            p.clearMediaItems()
-            preparedNotified = false
-            completionNotified = false
-            lastPlaybackState = Player.STATE_IDLE
-            videoWidthPx = 0
-            videoHeightPx = 0
-            mirrorPositionMs = 0L
-            mirrorDurationMs = 0L
+            discardPlayer()
         }
+    }
+
+    private fun clearPlaybackMirror() {
+        mirrorPlaying = false
+        mirrorPositionMs = 0L
+        mirrorDurationMs = 0L
+        mirrorPositionAtRealtimeMs = SystemClock.elapsedRealtime()
+        videoWidthPx = 0
+        videoHeightPx = 0
+    }
+
+    private fun discardPlayer() {
+        val old = player
+        // release 会产生事件，必须先撤销身份再释放。
+        player = null
+        mainHandler.removeCallbacks(ticker)
+        old?.release()
+        preparedNotified = false
+        completionNotified = false
+        lastPlaybackState = Player.STATE_IDLE
     }
 
     /** 清空冻结观测状态（reset/release/新一段媒体开始前调用） */
@@ -615,24 +668,30 @@ class Media3Player(context: Context) : IMediaPlayer {
     }
 
     override fun release() {
+        if (released) return
         released = true
-        // 先清速率再停 ticker：release 后 Timer 线程仍在读 getTcpSpeed()，不能留旧值
+        commandGeneration.incrementAndGet()
+        clearPlaybackMirror()
         tcpSpeedBytesPerSec = 0L
+        videoSurfaceAttached = false
+        pendingHolder = null
+        pendingSurface = null
         runOnMain {
-            mainHandler.removeCallbacks(ticker)
             resetSpeedSample()
-            player?.release()
-            player = null
+            resetRenderStallSample()
+            discardPlayer()
         }
     }
 
     override fun setSpeed(speed: Float) {
         // Sonic 变速：0.5~3.0 保音调（ijk 的 soundtouch/2x 上限问题在 media3 侧不存在）
+        desiredSpeed = speed
         runOnMain { if (!released) player?.playbackParameters = PlaybackParameters(speed) }
     }
 
     override fun setVolume(leftVolume: Float, rightVolume: Float) {
         // app 实际从不调用（只用系统音量），保接口即可
+        desiredVolume = leftVolume
         runOnMain { if (!released) player?.volume = leftVolume }
     }
 
@@ -663,6 +722,7 @@ class Media3Player(context: Context) : IMediaPlayer {
     }
 
     override fun setLooping(looping: Boolean) {
+        desiredLooping = looping
         runOnMain {
             if (!released) player?.repeatMode =
                 if (looping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
@@ -793,9 +853,19 @@ class Media3Player(context: Context) : IMediaPlayer {
     // 内部：主线程执行
     // ------------------------------------------------------------------
 
-    private fun prepareOnMain() {
-        if (released) return
-        val url = dataSourceUrl ?: return
+    /**
+     * 主线程执行真正的 prepare。
+     *
+     * 参数在 [prepareAsync] 里**同步快照**后传进来（而不是在这里再读字段）：
+     * 队列里排着的 prepare 与随后到来的 setDataSource/reset 有竞争，
+     * 读字段会拿到后来那一轮的地址；只有快照才能保证「prepareAsync 那一刻的参数」
+     * 就是这次真正加载的参数。
+     *
+     * [generation] 是本条流的代际：主线程执行前若已过期（被 reset/release/新 prepare 超过），
+     * 直接丢弃，避免旧流覆盖新流。
+     */
+    private fun prepareOnMain(url: String, audio: String?, headers: Map<String, String>?, generation: Long) {
+        if (released || generation != commandGeneration.get()) return
         val p = obtainPlayer()
 
         // 每次开始一条新流都重新起算冻结观测：首帧时刻必须由本条流自己的
@@ -828,7 +898,7 @@ class Media3Player(context: Context) : IMediaPlayer {
         httpDataSourceFactory.setReadTimeoutMs(timeoutMs)
         // B 站 CDN 常见 http<->https 302：DefaultHttpDataSource 默认拒绝跨协议重定向，必须打开
         httpDataSourceFactory.setAllowCrossProtocolRedirects(true)
-        httpDataSourceFactory.setDefaultRequestProperties(dataSourceHeaders ?: emptyMap())
+        httpDataSourceFactory.setDefaultRequestProperties(headers ?: emptyMap())
         // 真实下载字节来源：TransferListener 在每次网络 read 时回调（见字段注释）。
         // 走官方 DataSource.Factory 的 listener 通道，不包一层 DataSource，续传/重试的字节
         // 也会原样计入（它们是真实流量）。
@@ -836,6 +906,11 @@ class Media3Player(context: Context) : IMediaPlayer {
 
         // ---- 起播行为：start-on-prepared（ijk 缺省 1=自动播；story 显式传 0 再手动 start）----
         p.playWhenReady = optionLong("start-on-prepared", 1L) == 1L
+        // 重建实例（档位变化）时把调用方设置过的倍速/音量/循环补回去，
+        // 否则重建一次就静默回到 1.0x —— 用户只会觉得"切个清晰度倍速就没了"。
+        p.playbackParameters = PlaybackParameters(desiredSpeed)
+        p.volume = desiredVolume
+        p.repeatMode = if (desiredLooping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
 
         // ---- 听视频模式：vn=1 直接禁视频轨（不解码不渲染）----
         val disableVideo = optionLong("vn", 0L) == 1L
@@ -843,7 +918,7 @@ class Media3Player(context: Context) : IMediaPlayer {
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, disableVideo)
             .build()
 
-        p.setMediaSource(buildMediaSource(url, dataSourceAudioUrl))
+        p.setMediaSource(buildMediaSource(url, audio))
         p.prepare()
     }
 
@@ -1002,9 +1077,63 @@ class Media3Player(context: Context) : IMediaPlayer {
     // 事件翻译（media3 → ijk 语义）
     // ------------------------------------------------------------------
 
+    /**
+     * 这次 STATE_ENDED 是否真的「播到末尾」。
+     *
+     * 判据：
+     * 1. **未见首帧时，只有「本来就不该出帧」的场景才放行**（v5.3.2 修正）：
+     *    听视频模式（`vn=1` 禁视频轨）与纯音频文件**永远不会有视频帧**，
+     *    `firstFrameAtMs` 恒为 0。原判据无条件要求 `firstFrameAtMs > 0`，
+     *    于是这两类流的 ENDED **永远不会上报完成** —— 表现为「放完了不停、
+     *    不切下一P、循环失效」。修法是：观测开关关闭（`renderStallMonitorEnabled == false`，
+     *    上层正是用它标记"本次不该观测画面"）时，跳过首帧这一条，
+     *    仍然要求「时长已知 + 位置推进到末尾」，这才防得住原来要防的
+     *    「起点接在末尾/来源被截断就立刻 ENDED」；
+     * 2. 时长已知且大于 0；
+     * 3. 播放位置已推进到末尾附近（留 1% 或 2 秒的容差 —— DASH 音频轨通常比视频轨短
+     *    几百毫秒，硬等精确相等会让**真播完**的流永远不上报完成）。
+     *
+     * 位置门槛是防误报的真正主力：无论有没有出过帧，「position 还没推到末尾」
+     * 都说明不是播完，所以首帧这一条只作为**附加**约束（新鲜路径下更严格）。
+     */
+    private fun reachedEndOfStream(): Boolean {
+        // 未见首帧时仅在「本次不该观测画面」时才放行（听视频/纯音频/直播）
+        if (firstFrameAtMs <= 0L && renderStallMonitorEnabled) return false
+        val duration = try {
+            player?.duration ?: 0L
+        } catch (ignored: Exception) {
+            0L
+        }
+        if (duration <= 0L) return false
+        val position = try {
+            player?.currentPosition ?: 0L
+        } catch (ignored: Exception) {
+            0L
+        }
+        if (position <= 0L) return false
+        val tolerance = maxOf(END_TOLERANCE_MIN_MS, duration / 100L)
+        return position >= duration - tolerance
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (released) return
+            // v5.3.2（症状 A 的落地点）：**进入/离开缓冲态都要把冻结观测的锚点重起算**。
+            //
+            // 为什么不能只靠 ticker 的 `wasSampling` 分支：ticker 每 500ms 才跑一拍，
+            // 而「缓冲结束 → 恢复播放」的判定可能在两次 tick 之间被读走；
+            // 更关键的是**进入缓冲**这一侧：位置在缓冲期间自然不动，
+            // `positionChangedAtMs` 会一路老化到 3 秒以上，如果缓冲持续 12 秒以上，
+            // 缓冲刚结束的那一拍就同时满足「12 秒没新帧」+「位置刚恢复推进」→ 立刻判冻结。
+            // 真机上就是「卡了一下（短暂缓冲）→ 被判冻结 → 切到老播放器」。
+            if (playbackState == Player.STATE_BUFFERING || lastPlaybackState == Player.STATE_BUFFERING) {
+                val now = SystemClock.elapsedRealtime()
+                lastRenderedFrameAtMs = now
+                positionChangedAtMs = now
+                seekAnchorAtMs = now
+                lastSampledPositionMs = -1L
+                wasSampling = false
+            }
             if (playbackState == Player.STATE_BUFFERING) {
                 notifyInfo(IMediaPlayer.MEDIA_INFO_BUFFERING_START, 0)
             } else if (lastPlaybackState == Player.STATE_BUFFERING) {
@@ -1025,9 +1154,16 @@ class Media3Player(context: Context) : IMediaPlayer {
                     }
                 }
                 Player.STATE_ENDED -> {
-                    if (!completionNotified) {
+                    // STATE_ENDED 不一定代表「真的播完了」：起点接在末尾、来源被截断、
+                    // 或者复用实例时 position 还留在上一段末尾，都会在**没播过内容**的情况下
+                    // 立刻进入 ENDED。上层收到 onCompletion 会当成「播完」，
+                    // 于是「打开视频就自动切到另一个视频/下一P」—— 必须加一道时长门槛：
+                    // 只有本次确实渲染过帧、且播放位置真的推进到接近末尾时才上报完成。
+                    if (!completionNotified && reachedEndOfStream()) {
                         completionNotified = true
                         runOnMain { completionListener?.onCompletion(this@Media3Player) }
+                    } else if (!completionNotified) {
+                        Logu.w("media3", "忽略过早的 ENDED（未真正播到末尾），不触发完成回调")
                     }
                 }
                 else -> Unit
@@ -1281,6 +1417,8 @@ class Media3Player(context: Context) : IMediaPlayer {
         speedSampleBytes = 0L
         speedSampleAtMs = 0L
         tcpSpeedBytesPerSec = 0L
+        // v5.3.2：保持窗口也要清 —— 换流后不能拿上一段的"最后一次有吞吐"续着显示
+        lastNonZeroSpeedAtMs = 0L
     }
 
     /**
@@ -1297,7 +1435,15 @@ class Media3Player(context: Context) : IMediaPlayer {
         val buffering = p.playbackState == Player.STATE_BUFFERING
         val active = p.isLoading && (p.playWhenReady || buffering)
         if (!active) {
-            tcpSpeedBytesPerSec = 0L
+            // v5.3.2（症状 B「网速指示不断从有数字到空白横跳」）：
+            // media3 的 `isLoading` 在「读满一个分片 → 停读 → 再读」之间会**非常频繁地开合**
+            // （尤其是修好起播缓冲后，一次分片读完就会停一拍）。旧实现只要 `!active` 就立刻把
+            // 对外值打成 0，界面（`formatLoadingSpeed` 里 `<= 0` → "-- KB/s"）于是每两次
+            // 采样就横跳一次，用户看起来像"网速一直在闪"。
+            // 真实含义是"这一拍没有新字节"，不等于"网速为 0"，所以给一个短暂的保持窗口：
+            // 只要距上一次有吞吐不到 [SPEED_HOLD_MS] 就继续显示上一个有效值；
+            // 超过窗口才归零（那时确实停读了，显示 0 是对的）。
+            if (now - lastNonZeroSpeedAtMs >= SPEED_HOLD_MS) tcpSpeedBytesPerSec = 0L
             speedSampleAtMs = 0L
             speedSampleBytes = total
             return
@@ -1314,8 +1460,14 @@ class Media3Player(context: Context) : IMediaPlayer {
         val delta = total - speedSampleBytes
         speedSampleAtMs = now
         speedSampleBytes = total
-        // 一个窗口内没有新字节（解析/等首包/弱网停顿）：归零，别显示上一拍的旧值
-        tcpSpeedBytesPerSec = if (delta <= 0L) 0L else delta * 1000L / elapsed
+        // 一个窗口内没有新字节（解析/等首包/弱网停顿）：同样走保持窗口，而不是直接归零，
+        // 否则弱网下每个空窗口都会把数字抹掉一次（横跳的第二个来源）。
+        if (delta <= 0L) {
+            if (now - lastNonZeroSpeedAtMs >= SPEED_HOLD_MS) tcpSpeedBytesPerSec = 0L
+            return
+        }
+        tcpSpeedBytesPerSec = delta * 1000L / elapsed
+        lastNonZeroSpeedAtMs = now
     }
 
     private class NoRetryLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy() {
@@ -1328,6 +1480,15 @@ class Media3Player(context: Context) : IMediaPlayer {
     private companion object {
         const val TAG = "Media3Player"
 
+        /**
+         * 判定「播到末尾」的最小容差：时长 1%（下限 2 秒）。
+         *
+         * 为什么不能要求 position == duration：DASH 音频轨通常比视频轨短几百毫秒，
+         * 尾帧解码也会吞掉一点时长，硬等精确相等会让**真播完**的流永远不上报完成，
+         * 表现就是「放完了不停、也不切下一P」。
+         */
+        const val END_TOLERANCE_MIN_MS = 2_000L
+
         /** 轮询间隔：与 PlayerActivity 的进度刷新节奏匹配 */
         const val POLL_INTERVAL_MS = 500L
 
@@ -1337,20 +1498,62 @@ class Media3Player(context: Context) : IMediaPlayer {
          */
         const val MIN_SPEED_WINDOW_MS = 200L
 
+        /**
+         * 网速显示的在「无新字节」期间的保持窗口（v5.3.2，对应症状 B 的横跳）。
+         *
+         * media3 的 `isLoading` 与 TransferListener 的字节增量都是**分片级**脉动的：
+         * 一个分片读完后会短暂停读，下一分片才开始。ticker 是 500ms 一拍，
+         * 于是「读到 / 没读到」会交替出现。旧实现在「没读到」这一拍直接把对外值写成 0，
+         * 界面就 `-- KB/s` ↔ `123 KB/s` 来回闪。
+         *
+         * 取 2 秒：足够跨过「分片边界 + 一次短重试退避」的空窗，又不会让真正的停播
+         * （暂停/缓冲完成停读）显示一个假的旧速率太久 —— 真停读 2 秒后仍会归零。
+         */
+        const val SPEED_HOLD_MS = 2_000L
+
         /** max-buffer-size 缺省值：与 PlayerActivity 默认档一致（20MB） */
         const val DEFAULT_MAX_BUFFER_BYTES = 20L * 1024L * 1024L
 
-        /** 脉冲档 minBuffer：一次拉足（≈90s）再停读，触底续读（近似 ijk 的 packet-buffering=0） */
-        const val MIN_BUFFER_PULSE_MS = 90_000
-        const val MAX_BUFFER_PULSE_MS = 120_000
+        /**
+         * 脉冲档 minBuffer（v5.3.2 从 90s 降到 30s）：一次拉足再停读，触底续读
+         * （近似 ijk 的 `packet-buffering=0` + 40MB `max-buffer-size`）。
+         *
+         * 为什么不再用 90s：`minBufferMs` 在 DefaultLoadControl 的语义是「低于它就一直读网」，
+         * 90s 等于**要攒满 90 秒才肯停读**。手表上带宽本来就窄，这个窗口内读网几乎不停，
+         * 用户看到的就是网速指示一直跳；而一旦某一拍读不动，`buffered` 又掉不到
+         * `bufferForPlaybackMs` 之上，就永远在「读→缓冲→再读」之间循环（症状 B）。
+         * 30s 足够覆盖一次网络抖动，又不会被 20MB 的 `targetBufferBytes` 上限直接截断
+         * （B 站 DASH 视频轨码率约 0.3~1.5Mbps，20MB ≈ 110~500s，取 30s 不会被字节上限反噬）。
+         */
+        const val MIN_BUFFER_PULSE_MS = 30_000
+        const val MAX_BUFFER_PULSE_MS = 60_000
 
         /** 持续档 minBuffer：边播边平滑缓冲（≈20s，对应 PlayerActivity 默认 20MB） */
         const val MIN_BUFFER_CONTINUOUS_MS = 20_000
         const val MAX_BUFFER_CONTINUOUS_MS = 60_000
 
-        /** 起播/卡顿恢复缓冲（秒级起播优先；对齐 ijk 的快速起播体验） */
-        const val BUFFER_FOR_PLAYBACK_MS = 500
-        const val BUFFER_FOR_REBUFFER_MS = 1_000
+        /**
+         * 起播/卡顿恢复缓冲（v5.3.2：0.5s / 1s → 3s / 5s）。
+         *
+         * ## 为什么必须加长（对应真机症状 A/B）
+         * 旧值只要求「缓冲到 500ms 就开始播」「欠载后缓冲到 1s 就恢复」，这是
+         * **桌面/局域网网络的取值**。手表弱网下 500ms 的缓冲量在一次码率抖动或
+         * TCP 重传里几帧就吃光 → 立刻 underrun → 进 BUFFERING → 读网 → 攒 1s →
+         * 又恢复播放 …… 用户看到的就是
+         * - 「网速指示不断从有数字到空白横跳」（`isLoading` 反复开合，见 updateSpeedSample）；
+         * - 「一直加载不出视频」（起播那 500ms 永远凑不稳，反复回退到缓冲态）。
+         * 而 ijk 侧是 `packet-buffering=1` + 20MB 缓冲先攒够再放，所以一进去就能播。
+         *
+         * 取 3s/5s：3 秒是弱网下能扛住一次 RTT 抖动 + 一次 IDR 等待的最小量；
+         * 5 秒给「卡了一下之后」的恢复留出更多余量（宁愿多等两秒也不要反复卡）。
+         * ⚠ 约束（`DefaultLoadControl` 构造里的 `assertGreaterOrEqual`，**违反会直接抛
+         * IllegalArgumentException 崩掉**）：
+         *   bufferForPlaybackMs <= minBufferMs 且 bufferForRebufferMs <= minBufferMs；
+         *   且 maxBufferMs >= minBufferMs。当前取值 3s/5s vs min 20s（持续）/30s（脉冲）
+         *   全部满足，改这几个常量时必须重算这三条不等式。
+         */
+        const val BUFFER_FOR_PLAYBACK_MS = 3_000
+        const val BUFFER_FOR_REBUFFER_MS = 5_000
 
         /** HTTP 超时缺省（微秒）：与 story 的 timeout option 一致（15s） */
         const val DEFAULT_TIMEOUT_US = 15_000_000L

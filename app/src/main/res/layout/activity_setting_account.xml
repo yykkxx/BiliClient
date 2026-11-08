@@ -463,6 +463,20 @@
                         android:text="导入四端凭据（合并，不覆盖现有账号）"
                         android:textSize="12sp" />
 
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/accountCrossRepair"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/web_renew_cross_title"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/web_renew_cross_desc"
+                        android:textSize="11sp" />
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/accountRenewWeb"
                         android:layout_width="match_parent"

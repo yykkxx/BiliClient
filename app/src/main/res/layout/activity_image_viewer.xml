@@ -4,8 +4,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:theme="@style/Theme.BiliClient.NoSwipe"
     tools:context=".activity.ImageViewerActivity">
+
+    <!-- 图片区域尺寸不随工具浮层显隐变化，避免 PhotoView 布局变化重置缩放。 -->
+    <com.RobinNotBad.BiliClient.ui.widget.PhotoViewpager
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <RelativeLayout
         android:id="@+id/top"
@@ -42,12 +47,6 @@
             android:layout_alignParentEnd="true" />
 
     </RelativeLayout>
-
-    <com.RobinNotBad.BiliClient.ui.widget.PhotoViewpager
-        android:id="@+id/viewPager"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/top" />
 
     <ImageButton
         android:id="@+id/btn_download"

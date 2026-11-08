@@ -162,6 +162,28 @@ object AccountCredentialStore {
     }
 
     /**
+     * 当前激活凭据是否**天生没有** `refresh_token`（而不是「曾经有过但被轮换掉」）。
+     *
+     * 为什么要单独判断：B 站只在**登录成功**的回包里下发 web `refresh_token`，
+     * 它是 Web 自续期的唯一前提。缺它有两种成因，处置完全不同：
+     * - 这份凭据登录时就没拿到（老版本未保存 / 扫码回包没带）→ 只能重新扫码；
+     *   用户重扫一次之后就永久具备自动续期能力；
+     * - 曾经有过、后来被轮换/清空（`updateActiveFromAccount` 会整份镜像账号槽）→
+     *   token 已失效，同样只能重新登录。
+     *
+     * 两者在**本机**看起来都是「空串」，所以这里不假装能区分成因，只如实回答
+     * 「当前这份凭据有没有 token」，并把「为什么没有」的决定权交给调用方：
+     * 空串即是「本机这份凭据没有 token）——这正是 [AccountStore.loginWeb] 整份替换语义
+     * （F2）保护的状态：不会因为上一份凭据有 token 就伪造出一份混配的凭据。
+     */
+    @JvmStatic
+    fun activeHasRefreshToken(port: String, mid: Long): Boolean {
+        val cid = activeId(port, mid)
+        if (cid.isEmpty()) return false
+        return !fieldsOf(port, mid, cid)[F_REFRESH_TOKEN].isNullOrBlank()
+    }
+
+    /**
      * 某条凭据的原始字段（**含完整凭据，调用方绝不允许打印**）。
      *
      * 返回的键就是 [ALL_FIELDS] 里的名字，与 [AccountStore.credentialFields] 的
@@ -199,6 +221,10 @@ object AccountCredentialStore {
      */
     @JvmStatic
     fun saveCurrent(port: String, mid: Long, label: String): String? {
+        return synchronized(AccountStore) { saveCurrentLocked(port, mid, label) }
+    }
+
+    private fun saveCurrentLocked(port: String, mid: Long, label: String): String? {
         if (mid <= 0L) return null
         val snapshot = AccountStore.credentialFields(port, mid)
         // 一条凭据都没有（既没 cookie 也没 token）就不该入库：那只会造出空条目
@@ -270,6 +296,10 @@ object AccountCredentialStore {
      */
     @JvmStatic
     fun setActive(port: String, mid: Long, cid: String): Boolean {
+        return synchronized(AccountStore) { setActiveLocked(port, mid, cid) }
+    }
+
+    private fun setActiveLocked(port: String, mid: Long, cid: String): Boolean {
         if (mid <= 0L || cid.isEmpty()) return false
         ensureMigrated(port, mid)
         if (!idsOf(port, mid).contains(cid)) return false
@@ -305,6 +335,10 @@ object AccountCredentialStore {
      */
     @JvmStatic
     fun delete(port: String, mid: Long, cid: String): Boolean {
+        return synchronized(AccountStore) { deleteLocked(port, mid, cid) }
+    }
+
+    private fun deleteLocked(port: String, mid: Long, cid: String): Boolean {
         if (mid <= 0L || cid.isEmpty()) return false
         ensureMigrated(port, mid)
         val ids = idsOf(port, mid)
@@ -359,6 +393,21 @@ object AccountCredentialStore {
         )
         appendId(port, mid, cid)
         return cid
+    }
+
+    /** 续期轮换当前凭据，不增加失效快照；调用者与切号共用 AccountStore 锁。 */
+    fun updateActiveFromAccount(port: String, mid: Long) {
+        synchronized(AccountStore) {
+            ensureMigrated(port, mid)
+            val cid = activeIdOf(port, mid)
+            if (cid.isEmpty()) return
+            val fields = AccountStore.credentialFields(port, mid)
+            for (field in ALL_FIELDS) {
+                SharedPreferencesUtil.putString(fieldKey(port, mid, cid, field), fields[field] ?: "")
+            }
+            SharedPreferencesUtil.putLong(baseKey(port, mid) + cid + "_" + SUFFIX_SAVED_AT,
+                System.currentTimeMillis())
+        }
     }
 
     // ==================== 惰性迁移 ====================

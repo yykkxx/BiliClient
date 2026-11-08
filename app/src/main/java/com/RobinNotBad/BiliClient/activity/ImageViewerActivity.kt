@@ -6,6 +6,10 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.viewpager.widget.ViewPager
@@ -38,8 +42,8 @@ import com.github.chrisbanes.photoview.PhotoView
  * `Theme.BiliClient` 的 `windowSwipeToDismiss=true` 又生效了。
  *
  * 所以这里做两件事：
- * - `setTheme(R.style.Theme_BiliClient_NoSwipe)`：`NoSwipe` 是 `Theme.BiliClient` 的子类，
- *   **只**覆盖 `windowSwipeToDismiss=false`，其余控件样式全部保留
+ * - `Theme.BiliClient.ImagePreview` 继承 `NoSwipe`，再关闭全屏；
+ *   运行时恢复系统栏，防止基类色调覆盖层重新开启全屏，其余控件样式保留
  *   （不能用 `Theme.NoSwipe`，它父类是 `android:Theme.Black`，按钮/文字会变丑）；
  * - `setSystemGestureExclusionRects`（API 29+）：把左右边缘的系统返回手势区也屏蔽掉，
  *   否则「从屏幕最左边往右滑」会被系统抢走当成返回，用户正在放大图片时尤其恼火。
@@ -59,10 +63,9 @@ import com.github.chrisbanes.photoview.PhotoView
  * 单双击的时序判断由它自己做，我们只管"单击要干什么"，双击缩放完好无损。
  *
  * # 双指缩放（"优化图片操作的逻辑"）
- * - 1x ~ 8x，中档 2.5x：捏合到中档附近会自然吸附，避免只有两端档位时"要么太小要么糊"；
- * - 双击放大到中档、再双击回 1x（PhotoView 内置行为，**不要动**）；
- * - 放大后可拖动看图，拖到边缘才翻页（`setAllowParentInterceptOnEdge(true)`）；
- * - 缩放/拖动中绝不翻页（见 [PhotoViewpager] 的拦截逻辑）。
+ * - 1x ~ 8x，中档 2.5x；双击沿用 PhotoView 内置的最小/中档/最大档循环；
+ * - 放大后可拖动看图，拖到横向边缘且继续向外横滑才翻页；
+ * - 垂直拖动、多指缩放及抬指后剩余单指都不翻页（见 [PhotoViewpager]）。
  */
 class ImageViewerActivity : BaseActivity() {
 
@@ -71,12 +74,18 @@ class ImageViewerActivity : BaseActivity() {
     /** 顶部与底部浮层是否可见（单击图片切换）。默认可见，与用户"打开就能看到页码"的预期一致。 */
     private var overlayVisible = true
 
+    override fun setTheme(resid: Int) {
+        super.setTheme(resid)
+        // 基类套色调时保留强调色，只重申本页的非全屏/禁侧滑窗口属性。
+        theme.applyStyle(R.style.ImagePreviewWindow, true)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 必须在创建窗口前选图片专属主题，同时保留 NoSwipe 与应用控件样式。
+        setTheme(R.style.Theme_BiliClient_ImagePreview)
         super.onCreate(savedInstanceState)
-        // ⚠️ 必须用 Theme_BiliClient_NoSwipe，不能用 Theme_BiliClient（会重新打开侧滑退出），
-        // 也不能用 Theme_NoSwipe（父类是 android:Theme.Black，会丢掉全部 app 控件样式）。
-        // 与 AndroidManifest 上给本 Activity 配的主题**保持一致**（两处同一个 style）。
-        setTheme(R.style.Theme_BiliClient_NoSwipe)
+        // setTheme 的专属窗口覆盖层保留基类色调；再清除历史系统 UI 标志。
+        showSystemBars()
         setContentView(R.layout.activity_image_viewer)
 
         val imageList = intent.getStringArrayListExtra("imageList")
@@ -152,6 +161,30 @@ class ImageViewerActivity : BaseActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) showSystemBars()
+    }
+
+    /** 保留系统栏及其布局空间；工具浮层显隐绝不进入沉浸模式。 */
+    @Suppress("DEPRECATION")
+    private fun showSystemBars() {
+        window.clearFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS or
+                WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION
+        )
+        val decor = window.decorView
+        val hiddenFlags = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LOW_PROFILE
+        decor.systemUiVisibility = decor.systemUiVisibility and hiddenFlags.inv()
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowInsetsControllerCompat(window, decor).show(WindowInsetsCompat.Type.systemBars())
+    }
+
     /**
      * 创建一页图片的 PhotoView（含缩放档位与单击切浮层）。
      *
@@ -159,7 +192,7 @@ class ImageViewerActivity : BaseActivity() {
      */
     private fun createPhotoView(url: String): PhotoView {
         val photoView = PhotoView(this)
-        // 三档倍率：1x（原图适配）/ 2.5x（细节档，捏合会吸附到这里）/ 8x（上限）
+        // 三档倍率：1x（图片适配）/ 2.5x（双击细节档）/ 8x（上限）；捏合连续缩放。
         photoView.setScaleLevels(MIN_SCALE, MEDIUM_SCALE, MAX_SCALE)
         // 放大后左右可以拖动看图；拖到边缘把翻页权还给 ViewPager（配合 PhotoViewpager 的拦截逻辑）
         photoView.setAllowParentInterceptOnEdge(true)
@@ -200,11 +233,11 @@ class ImageViewerActivity : BaseActivity() {
      *
      * 为什么退化成"隐藏顶栏"不是问题：顶栏是**唯一**的退出入口（用户要求），
      * 所以隐藏后再单击一次就能恢复 —— 两次单击的成本，换来看图时不被 UI 遮挡。
-     * 隐藏时同时把状态栏也藏起来，才是真正的"全屏看图"。
+     * 只切换应用内工具，状态栏与导航栏始终保留；INVISIBLE 不触发布局尺寸变化。
      */
     private fun toggleOverlay() {
         overlayVisible = !overlayVisible
-        val visibility = if (overlayVisible) View.VISIBLE else View.GONE
+        val visibility = if (overlayVisible) View.VISIBLE else View.INVISIBLE
         findViewById<View>(R.id.top)?.visibility = visibility
         findViewById<View>(R.id.btn_download)?.visibility = visibility
         findViewById<View>(R.id.text_page)?.visibility = visibility
@@ -218,11 +251,9 @@ class ImageViewerActivity : BaseActivity() {
     /**
      * API 29+：把左右两条窄边的"系统返回手势区"排除掉。
      *
-     * 为什么只排左右两条窄边而不是整屏：`setSystemGestureExclusionRects` 有**面积上限**
-     * （系统只接受每屏约 200dp 高度的排除区），整屏会被静默忽略。左右各一条
-     * [GESTURE_EDGE_WIDTH_PX] 宽、高度取屏幕高的矩形，正好覆盖"从边缘往中间滑"的那条路径，
-     * 又不会超出限制 —— 因为这两个矩形加起来宽度很小，实际面积由高度决定，
-     * 这里用 `GESTURE_EDGE_MAX_HEIGHT_DP` 限高就是为了稳妥。
+     * 系统对每条侧边排除区的有效高度有约 200dp 的预算，不是按矩形面积计算。
+     * 仅覆盖图片两侧居中的常用拖动区；预算外的系统返回手势仍由 Android 决定，
+     * 不能宣称全屏边缘返回都已屏蔽。顶部退出及底部系统导航区不受此设置影响。
      *
      * 低版本（<29）没有这套系统手势，直接跳过；`Build.VERSION` 判断放在调用处更清楚。
      */
@@ -234,11 +265,12 @@ class ImageViewerActivity : BaseActivity() {
             val width = root.width
             val height = root.height
             if (width <= 0 || height <= 0) return@post
-            val edge = GESTURE_EDGE_WIDTH_PX
+            val edge = minOf(width / 2, dpToPx(GESTURE_EDGE_WIDTH_DP))
             val safeHeight = minOf(height, dpToPx(GESTURE_EDGE_MAX_HEIGHT_DP))
+            val top = (height - safeHeight) / 2
             val rects = ArrayList<Rect>(2)
-            rects.add(Rect(0, 0, edge, safeHeight))
-            rects.add(Rect(width - edge, 0, width, safeHeight))
+            rects.add(Rect(0, top, edge, top + safeHeight))
+            rects.add(Rect(width - edge, top, width, top + safeHeight))
             root.systemGestureExclusionRects = rects
         }
     }
@@ -249,7 +281,7 @@ class ImageViewerActivity : BaseActivity() {
         /** 最小倍率：1x（图片适配屏幕） */
         const val MIN_SCALE = 1f
 
-        /** 中档：捏合吸附点，也是双击放大后的倍率 */
+        /** 中档：双击缩放的细节倍率 */
         const val MEDIUM_SCALE = 2.5f
 
         /** 最大倍率：8x（再大就纯粹是糊了） */
@@ -261,10 +293,10 @@ class ImageViewerActivity : BaseActivity() {
         /** 下载按钮"再点一次"的判定窗口（毫秒） */
         const val DOUBLE_CLICK_WINDOW_MS = 3000L
 
-        /** 系统返回手势区的排除宽度（px）：约 20dp，覆盖"从边缘起滑"的路径即可 */
-        const val GESTURE_EDGE_WIDTH_PX = 60
+        /** 系统返回手势区的排除宽度（dp）：覆盖"从边缘起滑"的常用路径。 */
+        const val GESTURE_EDGE_WIDTH_DP = 20
 
-        /** 排除区最大高度（dp）：系统对单屏排除面积有上限，限高避免被静默忽略 */
+        /** 排除区最大高度（dp）：系统对每条侧边的排除高度有预算限制。 */
         const val GESTURE_EDGE_MAX_HEIGHT_DP = 200
     }
 }

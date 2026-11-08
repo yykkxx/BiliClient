@@ -36,14 +36,18 @@ android {
         // 自动深色模式等）。代码内未查询第三方包，故包可见性无兼容问题。
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
-        // 5.3.1：versionCode 按「构建当天日期」规则 = 20261108（见 agent.md 版本号约定）。
-        // 修补号：本轮三项都是**修复既有能力的缺陷**，没有扩展存储模型/新增页面，
-        // 按语义版本从 5.3.0 → 5.3.1。
-        //   ① media3 播几秒误回退 ijk（冻结判据误判）
-        //   ② 「APP 通道失败回退 web」做成开关（能力本身是恢复，不是新模型）
-        //   ③ web 续期修复（借 APP 端口 oauth2 的 refresh_token 换新 web Cookie，实测可行）
-        versionCode 20261108
-        versionName "5.3.1"
+        // 5.3.2：versionCode 按「构建当天日期」规则，但 2026-11-08 当天已经发过 5.3.1（20261108），
+        // 同日第二个正式版必须严格大于旧值，否则老用户装不上（Android 拒绝降级/同码覆盖）。
+        // 故本轮取 20261109 —— 规则本意是「单调递增 + 贴近构建日期」，不是死守自然日。
+        //   ① web 续期：默认只自续，跨端借用必须用户显式确认（并补 refresh_token 全链路）
+        //   ② 进 APP 即续期 / 按钮直连续期，不再等 Cookie 过期
+        //   ③ 登录信息页与入口统一为四端
+        //   ④ 检查更新改为 Gitee 更新介绍 + APK 下载到 Download
+        //   ⑤ 评论热度/时间排序真正生效
+        //   ⑥ 图片预览改非全屏，并修复「放大后无法滑到下一张」
+        //   ⑦ media3 播放稳定性（prepare 代际化 / 状态补回 / 冻结判据复核）
+        versionCode 20261109
+        versionName "5.3.2"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

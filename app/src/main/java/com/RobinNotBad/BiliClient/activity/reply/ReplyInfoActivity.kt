@@ -39,7 +39,17 @@ class ReplyInfoActivity : BaseActivity() {
     private var oid: Long = 0
     private var rpid: Long = 0
     private var up_mid: Long = 0
-    private var sort = 0
+
+    /**
+     * 楼中楼列表的排序参数（`/x/v2/reply/reply` 的 `sort`）：0=时间，1=点赞，2=回复数。
+     *
+     * **详情页不提供排序切换，也不该提供。** 服务端对这个端点的 `sort=0/1/2` 实测返回
+     * 完全相同的结果（三条楼中楼顺序一致），切换只是一个「点了没反应」的按钮 ——
+     * 用户报障点的正是这个假按钮。所以这里固定 0（时间），并把头部排序按钮藏掉
+     * （见 ReplyAdapter 的 `isDetail` 分支）。要真正按热度看楼中楼，得换 cursor 端点
+     * `/x/v2/reply/wbi/main?root=<rpid>&mode=3`，那是另一条数据通道，不属于本页修复范围。
+     */
+    private val sort = 0
     private var isManager = false
     private var type: ContentType? = null
     private var recyclerView: RecyclerView? = null
@@ -94,7 +104,6 @@ class ReplyInfoActivity : BaseActivity() {
                         replyAdapter = ReplyAdapter(this, replyList, oid, rpid, type!!.getTypeCode(), sort, up_mid)
                         replyAdapter!!.isManager = isManager
                         replyAdapter!!.isDetail = true
-                        setOnSortSwitch()
                         recyclerView!!.layoutManager = CustomLinearManager(this)
                         recyclerView!!.adapter = replyAdapter
                         recyclerView!!.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -176,7 +185,6 @@ class ReplyInfoActivity : BaseActivity() {
                             if (replyAdapter == null) {
                                 replyAdapter = ReplyAdapter(this, replyList, oid, rpid, type!!.getTypeCode(), sort, up_mid)
                                 replyAdapter!!.isDetail = true
-                                setOnSortSwitch()
                                 recyclerView!!.adapter = replyAdapter
                             } else {
                                 replyAdapter!!.notifyDataSetChanged()
@@ -194,13 +202,6 @@ class ReplyInfoActivity : BaseActivity() {
             }.onFailure { error ->
                 onPullDataFailed(Exception(error))
             }
-        }
-    }
-
-    private fun setOnSortSwitch() {
-        replyAdapter!!.setOnSortSwitchListener { position ->
-            sort = if (sort == 0) 1 else 0
-            refresh()
         }
     }
 

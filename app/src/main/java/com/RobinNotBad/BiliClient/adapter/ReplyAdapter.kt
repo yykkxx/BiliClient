@@ -24,6 +24,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.ImageViewerActivity
 import com.RobinNotBad.BiliClient.activity.reply.ReplyInfoActivity
+import com.RobinNotBad.BiliClient.activity.reply.ReplySortMode
 import com.RobinNotBad.BiliClient.activity.reply.WriteReplyActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.ReplyApi
@@ -106,18 +107,19 @@ class ReplyAdapter(
                 intent.putExtra("replyType", replyType)
                 context.startActivity(intent)
             }
-            val sorts = arrayOf("未知排序", "未知排序", "时间排序", "热度排序")
             if (isDetail) {
-                writeReply.sort.setVisibility(View.GONE)
-                writeReply.count_label.setVisibility(View.GONE)
+                writeReply.sort.visibility = View.GONE
+                writeReply.sort.setOnClickListener(null)
+                writeReply.count_label.visibility = View.GONE
             } else {
-                writeReply.sort.setText(sorts[sort])
-                writeReply.sort.setOnClickListener { view ->
-                    if (this.listener != null)
-                        listener!!.onItemClick(0)
-                    writeReply.sort.setText(sorts[sort])
+                writeReply.sort.visibility = View.VISIBLE
+                writeReply.count_label.visibility = View.VISIBLE
+                writeReply.sort.text = ReplySortMode.label(sort)
+                writeReply.sort.setOnClickListener {
+                    listener?.onItemClick(0)
+                    writeReply.sort.text = ReplySortMode.label(sort)
                 }
-                writeReply.count_label.setText("共" + count + "条评论")
+                writeReply.count_label.text = "共" + count + "条评论"
             }
         }
         if (holder is ReplyHolder) {
