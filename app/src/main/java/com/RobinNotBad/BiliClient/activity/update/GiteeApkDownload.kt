@@ -3,6 +3,7 @@ package com.RobinNotBad.BiliClient.activity.update
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Environment
@@ -28,12 +29,25 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import kotlin.coroutines.CoroutineContext
 
-/** Validate privately first; publish a pending MediaStore Downloads row only after complete IO. */
-class GiteeApkDownload(context: Context, private val api: GiteeReleaseApi) {
+/**
+ * Validate privately first; publish a pending MediaStore Downloads row only after complete IO.
+ *
+ * [target] 说明当前运行的是哪一种安装包（主包 / 渠道显示版 / 渠道隐藏版）：只有它自己那一份
+ * APK 才会被接受——包名、版本判据与资产文件名三者必须同时对上，否则一律 invalidApk()。
+ */
+class GiteeApkDownload(
+    context: Context,
+    private val api: GiteeReleaseApi,
+    private val target: GiteeReleasePolicy.UpdateTarget
+) {
     private val appContext = context.applicationContext
 
-    suspend fun download(release: GiteeRelease, progress: suspend (Long, Long) -> Unit): Uri = withContext(Dispatchers.IO) {
-        val asset = release.mainApk ?: throw IOException(appContext.getString(R.string.update_gitee_no_apk))
+    suspend fun download(
+        release: GiteeRelease,
+        progress: suspend (Long, Long) -> Unit
+    ): Uri = withContext(Dispatchers.IO) {
+        val asset = release.apkFor(target) ?: throw IOException(appContext.getString(R.string.update_gitee_no_apk))
+        if (!GiteeReleasePolicy.assetMatchesTarget(target, asset.name)) invalidApk()
         if (!GiteeReleasePolicy.isSafeAsset(release.tagName, asset)) invalidApk()
         if ((asset.declaredSize ?: 0L) > MAX_APK_BYTES) invalidApk()
         val coroutine = currentCoroutineContext()
@@ -169,13 +183,32 @@ class GiteeApkDownload(context: Context, private val api: GiteeReleaseApi) {
     private fun verifyPackage(file: File, release: GiteeRelease) {
         val manager = appContext.packageManager
         val archive = manager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES) ?: invalidApk()
-        if (archive.packageName != MAIN_PACKAGE) invalidApk()
-        if (UpdateVersion.compare(archive.versionName.orEmpty(), release.tagName) != 0) invalidApk()
+        // 期望包名就是「当前这个应用自己的包名」：主包校验主包、渠道包校验渠道包，
+        // 不需要（也不应该）在代码里各写一份包名常量。
+        if (archive.packageName != target.packageName) invalidApk()
+        if (archive.packageName != appContext.packageName) invalidApk()
+        verifyVersionName(archive, release)
         val installed = manager.getPackageInfo(appContext.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
         val expectedSigners = installed.signingInfo?.apkContentsSigners?.toSet().orEmpty()
         val actualSigners = archive.signingInfo?.apkContentsSigners?.toSet().orEmpty()
         // The updater must never offer a renamed channel APK or an incompatible signing key.
         if (expectedSigners.isEmpty() || actualSigners != expectedSigners) invalidApk()
+    }
+
+    /**
+     * 主包：APK 的 versionName 必须等于 tag 的语义版本（v5.3.2 → 5.3.2）。
+     * 渠道包：versionName 是「QQ音乐」、versionCode 固定 20260606，**不存在**可与 tag 比较的
+     * 语义版本——`UpdateVersion.compare("QQ音乐", "v5.3.2")` 返回 null，照主包那样比会直接把
+     * 每个合法的渠道包判成 invalidApk。因此渠道包跳过 versionName 校验，改由三重身份判据兜底：
+     * ① 资产文件名必须是本目标那一份（download() 里的 assetMatchesTarget）；② APK 包名必须是
+     * com.tencent.qqmusicwatchs 且与本机一致（verifyPackage）；③ 签名与已安装一致（verifyPackage）。
+     * 版本新鲜度由「选中的是哪个 Release tag 的附件」保证，UI 上如实显示该 tag。
+     */
+    private fun verifyVersionName(archive: PackageInfo, release: GiteeRelease) {
+        if (!target.checksVersionName) return
+        // 主包保持 v5.3.2 的既有判据原样（语义版本相等），不趁机收紧成字符串相等，
+        // 否则 `5.3.2+build1` / `V005.003.002` 这类等价写法会被误杀。
+        if (UpdateVersion.compare(archive.versionName.orEmpty(), release.tagName) != 0) invalidApk()
     }
 
     private fun publish(file: File, name: String, coroutine: CoroutineContext): Uri {
@@ -239,8 +272,6 @@ class GiteeApkDownload(context: Context, private val api: GiteeReleaseApi) {
     private fun invalidApk(): Nothing = throw IOException(appContext.getString(R.string.update_gitee_invalid_apk))
 
     companion object {
-        /** Only this package is ever updated; channel builds must never pull the main APK. */
-        const val MAIN_PACKAGE = "com.RobinNotBad.BiliClient"
         private const val MAX_APK_BYTES = 256L * 1024L * 1024L
         private const val MAX_EXPANDED_BYTES = 512L * 1024L * 1024L
         private const val PROGRESS_INTERVAL_MS = 250L

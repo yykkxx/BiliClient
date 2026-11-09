@@ -5,7 +5,7 @@
     <string name="update_gitee_loading">正在从 Gitee 获取最新版本与更新介绍…</string>
     <string name="update_gitee_load_error">获取失败：%1$s\n请重试或打开 Gitee 发布页。</string>
     <string name="update_gitee_version_unknown">版本格式无法比较，请查看更新介绍</string>
-    <string name="update_gitee_new_version">发现新版本，可下载 APK 到 Download</string>
+    <string name="update_gitee_new_version">发现新版本，可下载 APK 到 Download 后点「安装」</string>
     <string name="update_gitee_current">当前已是最新版本，仍可重新下载 APK</string>
     <string name="update_gitee_local_newer">本地版本比 Gitee 最新版本更新</string>
     <string name="update_gitee_latest">最新版本：%1$s</string>
@@ -14,9 +14,10 @@
     <string name="update_gitee_release_details">%1$s\n%2$s · 发布于 %3$s</string>
     <string name="update_gitee_unknown_time">未知时间</string>
     <string name="update_gitee_no_notes">发布者未填写更新介绍</string>
-    <string name="update_gitee_channel_build">当前安装的是渠道包（包名与主包不同），本页只提供主包更新，因此不提供下载。请到 Gitee 发布页获取对应的渠道包。</string>
-    <string name="update_gitee_no_apk">此版本暂无可识别的主 APK 附件，请稍后刷新。不会下载渠道包或源码冒充更新。</string>
-    <string name="update_gitee_target">安装包：%1$s（%2$s）\n下载到公共 Download 目录，不自动安装。</string>
+    <string name="update_gitee_no_apk">此版本暂无可识别的 APK 附件，请稍后刷新。不会下载源码或别的包冒充更新。</string>
+    <string name="update_gitee_no_target_apk">此版本没有属于「%1$s」的 APK 附件，不会用别的包冒充更新。</string>
+    <string name="update_gitee_unsupported_build">当前安装包（%1$s）既不是主包 %2$s，也不是渠道包 %3$s，本页不提供下载。</string>
+    <string name="update_gitee_target">安装包：%1$s（%2$s）\n下载到公共 Download 目录；下载完成后点下方「安装」走系统安装器。</string>
     <string name="update_gitee_size_mib">%.1f MB</string>
     <string name="update_gitee_size_unknown">大小未知，以下载时的实际长度为准</string>
     <string name="update_gitee_saved">已保存到 Download：%1$s</string>
@@ -36,4 +37,17 @@
     <string name="update_gitee_open_browser_failed">未找到可用浏览器，请手动打开 Gitee 发布页</string>
     <string name="update_gitee_save_failed">无法写入公共 Download 目录</string>
     <string name="update_gitee_invalid_apk">安装包不完整、版本/包名不符或签名与已安装版本不兼容</string>
+    <string name="update_gitee_notes_title">更新说明</string>
+    <string name="update_gitee_notes_expand">展开更新说明</string>
+    <string name="update_gitee_notes_collapse">收起更新说明</string>
+    <string name="update_gitee_installed_channel">当前渠道包：%1$s（版本码 %2$d）</string>
+    <string name="update_gitee_channel_newer">发现比已安装渠道包更新的版本（渠道包版本号固定，按发布时间判断），可下载覆盖安装</string>
+    <string name="update_gitee_channel_current">已安装的渠道包不早于该版本；仍可下载同版本重新安装</string>
+    <string name="update_gitee_channel_unknown">渠道包版本号固定，无法判断新旧，请以发布页 tag 为准</string>
+    <string name="update_gitee_install">安装此更新</string>
+    <string name="update_gitee_install_start">已打开系统安装器，请按系统提示完成安装</string>
+    <string name="update_gitee_install_no_handler">没有可用的系统安装器，请到 Download 目录手动安装</string>
+    <string name="update_gitee_install_permission">需要「安装未知应用」权限，已为你打开系统设置，授权后请再点一次「安装」</string>
+    <string name="update_gitee_install_missing">安装包已不存在（可能被清理或移走），请重新下载</string>
+    <string name="update_gitee_install_failed">无法准备安装包，请到 Download 目录手动打开安装</string>
 </resources>

@@ -9,6 +9,14 @@ fun main() = runBlocking {
         val latest = api.fetchLatest()
         println("PUBLIC_LATEST parsed tag=${latest.tagName} prerelease=${latest.prerelease} created=${latest.publishedAt}")
         println("PUBLIC_LATEST title=${latest.title.take(60)} notesChars=${latest.notes.length}")
+        println("PUBLIC_CANDIDATES count=${latest.apkAssets.size} names=${latest.apkAssets.map { it.name }}")
+        // Each install flavour must resolve to exactly its own attachment, from the same parsed release.
+        GiteeReleasePolicy.UpdateTarget.values().forEach { target ->
+            val picked = latest.apkFor(target)?.name ?: "NONE"
+            println("PUBLIC_TARGET ${target.name} -> $picked")
+        }
+        val mainTargetCount = GiteeReleasePolicy.UpdateTarget.values().count { latest.apkFor(it) != null }
+        println("PUBLIC_TARGETS resolved=$mainTargetCount/4 (expect 3: main + visible + hidden)")
         val asset = latest.mainApk
         if (asset == null) {
             println("PUBLIC_APK NOT_TESTED: metadata contained no uniquely safe exact main APK")

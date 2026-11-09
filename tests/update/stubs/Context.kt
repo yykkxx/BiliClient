@@ -13,9 +13,14 @@ class ContentValues {
     fun put(key: String, value: String) { entries[key] = value }
     fun put(key: String, value: Int) { entries[key] = value }
 }
-open class Context(val cacheDir: File, val contentResolver: ContentResolver, val packageManager: PackageManager) {
+open class Context(
+    val cacheDir: File,
+    val contentResolver: ContentResolver,
+    val packageManager: PackageManager,
+    // Channel builds run the same code with a different applicationId; fixtures set it explicitly.
+    val packageName: String = "com.RobinNotBad.BiliClient"
+) {
     val applicationContext: Context get() = this
-    val packageName = "com.RobinNotBad.BiliClient"
     fun getString(id: Int): String = "test-error-$id"
 }
 class ContentResolver {
@@ -25,6 +30,8 @@ class ContentResolver {
     var updateCount = 1
     var updateThrows = false
     var deleteThrows = false
+    var sourceBytes: ByteArray? = null
+    var openedInputs = 0
     var inserts = 0
     var deletes = 0
     var pending: Int? = null
@@ -59,6 +66,11 @@ class ContentResolver {
         if (updateThrows) throw IOException("fixture publish failure")
         if (updateCount == 1) pending = values.entries["is_pending"] as Int
         return updateCount
+    }
+    fun openInputStream(uri: Uri): java.io.InputStream? {
+        openedInputs++
+        val bytes = sourceBytes ?: return null
+        return java.io.ByteArrayInputStream(bytes)
     }
     fun delete(uri: Uri, selection: String?, args: Array<String>?): Int {
         deletes++

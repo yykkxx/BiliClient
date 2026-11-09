@@ -216,6 +216,94 @@ fun main() {
         checkCurrentUnchanged(old)
         check(Suite.requests.none { it.url.encodedPath.endsWith("confirm/refresh") })
     }
+
+    // ==================== v5.3.3：cookie/refresh 错误码语义 + 自续能力 + #1-value 回填 ====================
+    //
+    // 这三组的依据都是本轮**真实凭据实测**（notes/web_renew_v533.md §4/§3）：
+    // 只有 refresh_token 这一项不可接受时服务端才回 -400/-500，因此它们必须给出
+    // 可执行结论（TokenExpired = 「这份 token 用不了了」），而不是笼统的 ServerError。
+    for (code in listOf(-400, -500)) Suite.test("refresh_${code}_means_token_unusable_not_generic_error") {
+        loginWeb(); handshake(); val normal = Suite.responder
+        Suite.responder = { if (it.url.encodedPath.endsWith("cookie/refresh")) Suite.response(it, "{\"code\":$code}") else normal(it) }
+        val result = CookieRefreshApi.renewWeb(false)
+        check(result is CookieRefreshApi.RenewResult.TokenExpired)
+        // 必须被判定为「可以提议跨端修复」——否则用户拿到的提示无法指向下一步动作。
+        check(CookieRefreshApi.canOfferCrossPortRepair(result))
+    }
+    Suite.test("cookie_info_rejection_stays_generic_server_error") {
+        // 同是 -400，但发生在 cookie/info（没有任何 token 参与）时必须**不**被解释成 token 失效，
+        // 否则会把「这次请求本身有问题」误报成「请重新登录」，白白丢掉有效登录。
+        loginWeb(); Suite.responder = { Suite.response(it, "{\"code\":-400}") }
+        val result = CookieRefreshApi.renewWeb(false)
+        check(result is CookieRefreshApi.RenewResult.ServerError)
+        check(CookieRefreshApi.canOfferCrossPortRepair(result) == false)
+    }
+    Suite.test("missing_refresh_csrf_reports_local_code_not_token_failure") {
+        // correspond 页取不到 #1-name 时不能继续提交（否则服务端回 -400 会被误读成 token 失效）。
+        loginWeb(); val old = State.capture()
+        Suite.responder = { request ->
+            when {
+                request.url.encodedPath.endsWith("cookie/info") -> Suite.response(request, "{\"code\":0,\"data\":{\"refresh\":true,\"timestamp\":1794130000000}}")
+                request.url.encodedPath.startsWith("/correspond/") -> Suite.response(request, "<html><body><div id=\"1-value\"></div></body></html>")
+                else -> error("取不到 refresh_csrf 时不允许再发 cookie/refresh")
+            }
+        }
+        val result = CookieRefreshApi.renewWeb(false)
+        check(result is CookieRefreshApi.RenewResult.ServerError)
+        check(result.code == -1)
+        check(Suite.requests.none { it.url.encodedPath.endsWith("cookie/refresh") })
+        checkCurrentUnchanged(old)
+    }
+    Suite.test("correspond_1_value_backfills_missing_web_token") {
+        // #1-value 是 B 站官方把 web refresh_token 传给主站的 DOM 通道（token-iframe chunk 895）。
+        // 本机实测它是空的，所以这是机会性自愈：一旦有值且本地槽为空，就该补进去。
+        loginWeb(token = "")
+        check(value(Prefs.refresh_token).isEmpty())
+        Suite.responder = { request ->
+            when {
+                request.url.encodedPath.endsWith("cookie/info") -> Suite.response(request, "{\"code\":0,\"data\":{\"refresh\":true,\"timestamp\":1794130000000}}")
+                request.url.encodedPath.startsWith("/correspond/") ->
+                    Suite.response(request, "<div id=\"1-name\">fixture-refresh-csrf</div><div id=\"1-value\">fixture-adopted-token</div>")
+                request.url.encodedPath.endsWith("cookie/refresh") -> Suite.response(request, "{\"code\":-400}")
+                else -> Suite.response(request, "{\"code\":0}")
+            }
+        }
+        // 直接驱动 doRenewWeb（refreshWeb 会在缺 token 时提前返回 NoRefreshToken，走不到 correspond）。
+        val doRenew = CookieRefreshApi.javaClass.getDeclaredMethod("doRenewWeb", State.Snapshot::class.java)
+            .apply { isAccessible = true }
+        doRenew.invoke(CookieRefreshApi, State.capture())
+        check(value(Prefs.refresh_token) == "fixture-adopted-token")
+        check(fields(AccountStore.PORT_WEB)["refresh_token"] == "fixture-adopted-token")
+        check(AccountCredentialStore.credentialCount(AccountStore.PORT_WEB, 1L) == 1)
+    }
+    Suite.test("correspond_1_value_never_overwrites_existing_token") {
+        // 已有 token 比页面里的更可信；页面里的可能是给别的会话签发的。
+        loginWeb(token = "fixture-web-old")
+        Suite.responder = { request ->
+            when {
+                request.url.encodedPath.endsWith("cookie/info") -> Suite.response(request, "{\"code\":0,\"data\":{\"refresh\":true,\"timestamp\":1794130000000}}")
+                request.url.encodedPath.startsWith("/correspond/") ->
+                    Suite.response(request, "<div id=\"1-name\">fixture-refresh-csrf</div><div id=\"1-value\">fixture-should-not-win</div>")
+                else -> Suite.response(request, "{\"code\":-400}")
+            }
+        }
+        CookieRefreshApi.renewWeb(false)
+        check(value(Prefs.refresh_token) == "fixture-web-old")
+    }
+    Suite.test("self_renewal_capability_distinguishes_missing_token_from_ready") {
+        check(State.selfRenewalCapability() == State.SelfRenewalCapability.NotLoggedIn)
+        loginWeb(token = "")
+        check(State.selfRenewalCapability() == State.SelfRenewalCapability.MissingToken)
+        check(State.refreshTokenLength() == 0)
+        loginWeb(token = "0123456789abcdef0123456789abcdef")
+        check(State.selfRenewalCapability() == State.SelfRenewalCapability.Ready)
+        check(State.refreshTokenLength() == 32)
+    }
+    Suite.test("adopt_token_ignored_when_not_logged_in") {
+        // 没有登录态时不能凭空写出 token，否则账号槽进入「有 token 没 Cookie」的半死状态。
+        check(!State.adoptRefreshTokenIfMissing("fixture-orphan-token"))
+        check(value(Prefs.refresh_token).isEmpty())
+    }
     Suite.test("response_after_account_switch_does_not_touch_new_account_or_confirm") {
         loginWeb(2L); loginWeb(1L)
         handshake(beforeRefresh = { AccountStore.setActive(AccountStore.PORT_WEB, 2L) })

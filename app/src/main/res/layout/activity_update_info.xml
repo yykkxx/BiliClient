@@ -51,10 +51,30 @@
                     <TextView android:id="@+id/updateReleaseDetails"
                         android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="4dp" android:textSize="11sp" />
+                    <!-- 更新说明的折叠标题。整行可点（点击区域比单个箭头大，圆屏/手表更好按），
+                         箭头图标只表达「展开 / 收起」两态，状态由 UpdateInfoActivity 控制。 -->
+                    <LinearLayout android:id="@+id/updateNotesHeader"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingVertical="4dp">
+                        <TextView android:id="@+id/updateNotesTitle"
+                            android:layout_width="0dp" android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/update_gitee_notes_title"
+                            android:textSize="13sp" android:textStyle="bold" />
+                        <ImageView android:id="@+id/updateNotesArrow"
+                            android:layout_width="16dp" android:layout_height="16dp"
+                            android:contentDescription="@string/update_gitee_notes_expand"
+                            android:src="@drawable/arrow_down" />
+                    </LinearLayout>
                     <TextView android:id="@+id/updateNotes"
                         android:layout_width="match_parent" android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp" android:textIsSelectable="true"
-                        android:lineSpacingExtra="2dp" android:textSize="12sp" />
+                        android:layout_marginTop="4dp" android:textIsSelectable="true"
+                        android:lineSpacingExtra="2dp" android:textSize="12sp"
+                        android:visibility="gone" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
             <TextView android:id="@+id/updateFileStatus"
@@ -63,6 +83,12 @@
             <com.google.android.material.button.MaterialButton android:id="@+id/updateDownload"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:text="@string/update_gitee_download" android:textSize="12sp" android:enabled="false" />
+            <!-- 下载与安装是两个独立按钮：未下载只显示「下载」，已下载才显示「安装」，
+                 两者互斥，不会同时可点（状态机见 UpdateInfoActivity.updateButtons()）。 -->
+            <com.google.android.material.button.MaterialButton android:id="@+id/updateInstall"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/update_gitee_install" android:textSize="12sp"
+                android:enabled="false" android:visibility="gone" />
             <com.google.android.material.button.MaterialButton android:id="@+id/updateOpenDownloads"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:text="@string/update_gitee_open_downloads" android:textSize="12sp" android:visibility="gone" />

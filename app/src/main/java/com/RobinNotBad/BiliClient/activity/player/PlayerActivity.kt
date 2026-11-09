@@ -1111,7 +1111,33 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
 
     }
 
+    /**
+     * 绑定 Surface 并触发 prepare。
+     *
+     * **必须在主线程执行**（v5.3.3 修的真实崩溃）。
+     *
+     * 函数体里混了大量**直接的 View 操作**，不经过任何 `runOnUiThread`：
+     * `loading_text0?.text = …`（TextView.setText → requestLayout）、
+     * `surfaceView!!.getHolder()` / `surfaceHolder.addCallback(...)`、
+     * `layout_video!!.setX/setY` 等等。只要调用发生在 IO 线程上，就会抛
+     * `CalledFromWrongThreadException: Only the original thread that created a view hierarchy
+     * can touch its views.`（v5.3.2 线上栈：
+     * `CenterThreadPool.run` → `setDisplay` → `TextView.setText` → `requestLayout`）。
+     *
+     * 出事的两处调用点是 `onCreate` 里那个 `CenterThreadPool.run` 后台块（等待界面加载完成后
+     * 再起播，**直播**与**普通视频**各一条）；其余调用点（卡死恢复、切分P、切清晰度、听视频、
+     * 互动视频、切兼容内核）本来就在 `runOnUiThread` 里。
+     *
+     * 为什么在这里统一兜一层而不是只改那两个调用点：这个函数天然只能在主线程跑，
+     * 与其要求每个调用方都记得包一层（以后新增调用点必再踩同一个坑），不如让函数自己
+     * 保证线程正确性。从后台调用时它会把自己重新投递到主线程，语义等价（异步化一点点，
+     * 而这条路径当前也没有需要在同一栈帧里依赖 setDisplay 的即时副作用）。
+     */
     private fun setDisplay() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            CoroutineScopes.launchUi { if (!destroyed) setDisplay() }
+            return
+        }
         if (destroyed) return
         val player = ijkPlayer ?: return
         configurePlayer(player)

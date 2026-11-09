@@ -31,6 +31,36 @@ object CookieRefreshApi {
     private const val PASSPORT = "https://passport.bilibili.com/x/passport-login/web/"
     private const val RENEW_INTERVAL_MS = 30L * 60L * 1000L
     private const val CODE_REFRESH_TOKEN_EXPIRED = 86032
+
+    /**
+     * `cookie/refresh` 回 `-400` 的语义（v5.3.3 实测确定，**不是**「通用参数错」）。
+     *
+     * 穷举 10 组 `refresh_token` 取值后的错误码分布（见 notes/web_renew_v533.md §4）：
+     * - 缺该键 / 空串 → **-400**
+     * - 格式合法的 32 位 hex 假值 → `86032 refreshToken已过期`
+     * - `bili_ticket` / `buvid3` / `buvid4`（长度或字符集不是 32hex）→ `-500`
+     * - `sid` / `b_lsid` / `DedeUserID` → `-400`
+     *
+     * 也就是说：**只有「token 这一项不可接受」时才回 -400/-500，其它参数（csrf / refresh_csrf /
+     * source）错会是别的码**。`refresh_csrf` 与 csrf 的有效性可以单独确认 —— 本机实测同一次调用里
+     * `refresh_csrf` 是服务端签发的真值，换成格式合法的假 token 立刻从 -400 变成 86032，
+     * 说明请求构造被判为合法、只是走到了「查这个 token」这一步。
+     *
+     * 所以 -400 与「缺 token」是**同一个可执行结论**：本机没有可用的 web refresh_token。
+     */
+    private const val CODE_REFRESH_PARAM_REJECTED = -400
+
+    /** `-500` 同 -400：token 值不合法（字符集/长度都不像 token）。 */
+    private const val CODE_REFRESH_TOKEN_MALFORMED = -500
+
+    /**
+     * 本地合成码：`correspond/1/<path>` 取不到 `refresh_csrf`（**不是**服务端返回值）。
+     *
+     * 用 `-1` 而不是 `-400`：-400 现在被明确解释成「token 不可用」，
+     * 而这一层失败与凭据**无关**（换网络通常就好），两者绝不能在 UI 上显示成同一句话。
+     */
+    private const val CODE_CORRESPOND_UNREACHABLE = -1
+
     private val inFlight = AtomicBoolean(false)
     private val lastCheckElapsed = AtomicLong(0L)
 
@@ -150,10 +180,28 @@ object CookieRefreshApi {
         val path = getCorrespondPath(timestamp)
         if (path.isEmpty()) return RenewResult.NetworkError("RSA 加密失败")
         val csrf = refreshCsrf(path, snapshot.cookies)
-        if (csrf.isBlank()) return RenewResult.ServerError(-1, "无法取得 Web refresh_csrf")
+        // 取不到 refresh_csrf 时**不能**继续提交：实测缺这一项服务端回 -400，
+        // 而那个 -400 会被上层解释成「token 失效」，把真正的成因（correspond 页取不到值）掩盖掉。
+        // 这里单独报出，提示文案指向「换网络/升级」而不是「重新登录」。
+        if (csrf.isBlank()) return RenewResult.ServerError(CODE_CORRESPOND_UNREACHABLE, "无法取得 Web refresh_csrf")
         return submitRefresh(snapshot, csrf)
     }
 
+    /**
+     * 提交 `cookie/refresh`。
+     *
+     * # `csrf` 必须传（v5.3.3 实测推翻过一个想当然的改动）
+     * B 站官方 `token-iframe` 的 `data` 里看起来只有 `refresh_csrf` / `source` / `refresh_token`
+     * 三个字段，很容易误以为不用 `csrf`。**但那是假象**：官方的 `reqwest` 包装
+     * `client.with(new Raw()).request(...)` 会由拦截器统一补 `csrf`。
+     *
+     * 本轮用真实凭据实测过：去掉 `csrf` 后，`cookie/info` → `correspond` → `refresh_csrf`
+     * 全链仍然正常，但 `cookie/refresh` 从 `-400` 变成 **`-111`**，
+     * 也就是说参数校验挂在 `csrf` 上、根本没走到查 token 那一步。
+     * 加回去立刻恢复 `-400`（= 走到查 token 了）。所以这里**必须**保留 `csrf`。
+     *
+     * 这与 v5.3.2 的行为一致，只是现在有了实测依据，注释不再需要猜。
+     */
     private fun submitRefresh(snapshot: WebRenewalState.Snapshot, refreshCsrf: String): RenewResult {
         val body = FormBody.Builder()
             .add("csrf", cookieValue(snapshot.cookies, "bili_jct"))
@@ -165,7 +213,7 @@ object CookieRefreshApi {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return RenewResult.ServerError(response.code, "Web 续期 HTTP 错误")
             val root = JSONObject(response.body?.string() ?: throw IOException("续期响应为空"))
-            if (root.optInt("code", -1) != 0) return rejection(root)
+            if (root.optInt("code", -1) != 0) return refreshRejection(root)
             val token = root.optJSONObject("data")?.optString("refresh_token", "") ?: ""
             val newCookies = Cookie.parseAll(response.request.url, response.headers)
                 .filter { it.matches(response.request.url) }
@@ -187,10 +235,39 @@ object CookieRefreshApi {
         }
     }
 
+    /** `cookie/info` 的拒绝：这一层没有任何 token 参与，-400 只能是请求本身有问题。 */
     private fun rejection(root: JSONObject): RenewResult {
         val code = root.optInt("code", -1)
         return if (code == CODE_REFRESH_TOKEN_EXPIRED) RenewResult.TokenExpired
         else RenewResult.ServerError(code, "Web 服务端拒绝续期")
+    }
+
+    /**
+     * 把 `cookie/refresh` 的业务码翻译成**可执行**的结果（v5.3.3 修正）。
+     *
+     * 关键修正：`-400` / `-500` 映射成 [RenewResult.TokenExpired]（= 「这份 refresh_token 用不了」），
+     * **不再**落到 [RenewResult.ServerError]（= 「服务端拒绝，原因未知」）。
+     *
+     * 实测依据（notes/web_renew_v533.md §4，10 组取值穷举）：在 `csrf` / `refresh_csrf` / `source`
+     * 全部正确的前提下，只有 `refresh_token` 这一项不可接受时服务端才回 -400/-500；
+     * 把 token 换成格式合法的 32 位 hex 假值，错误码立刻从 `-400` 变成 `86032`。
+     * 也就是说 -400/-500 的确切含义是「本机这个 web refresh_token 服务端不认」。
+     *
+     * 为什么必须收敛到 TokenExpired 而不是新增状态：
+     * 1. 两者的**下一步动作完全相同**（重新登录 / 跨端修复 / 保留现状），UI 分支没必要分叉；
+     * 2. `SettingAccountActivity` 对 `RenewResult` 有**穷尽 when**，它是本轮写域外的文件，
+     *    新增 sealed 分支会直接编译失败 —— 不越界的前提下，把语义并进已有状态是唯一正解；
+     * 3. v5.3.2 显示「服务端拒绝(码 -400)」，用户既不知道原因也不知道该做什么；
+     *    显示「refresh_token 已失效，请重新登录或开启跨端修复」才是可执行的。
+     */
+    private fun refreshRejection(root: JSONObject): RenewResult {
+        val code = root.optInt("code", -1)
+        return when (code) {
+            CODE_REFRESH_TOKEN_EXPIRED -> RenewResult.TokenExpired
+            CODE_REFRESH_PARAM_REJECTED -> RenewResult.TokenExpired
+            CODE_REFRESH_TOKEN_MALFORMED -> RenewResult.TokenExpired
+            else -> RenewResult.ServerError(code, "Web 服务端拒绝续期")
+        }
     }
 
     private fun requestJson(url: String, cookies: String): JSONObject {
@@ -207,12 +284,46 @@ object CookieRefreshApi {
             .header("Referer", "https://www.bilibili.com/")
     }
 
+    /**
+     * 从 `correspond/1/<path>` 页面取 `refresh_csrf`。
+     *
+     * 选择器 `#1-name` 逐字对齐 B 站官方 `token-iframe` 实现（chunk 895：
+     * `n = function(){ var e = q("1-name"); e && (r.value = e) }`），本轮实测该页
+     * HTTP 200 且 `#1-name` 有 32 字符（notes/web_renew_v533.md §3）。
+     *
+     * **为什么同时读 `#1-value`**：官方把 token 放在两个位置 ——
+     * `#1-value`（DOM 通道，登录页经 iframe 注入）与 `localStorage["ac_time_value"]`（已登录浏览器）。
+     * 我们这一侧既没有 iframe 也没有 localStorage，`#1-value` 是唯一可能拿到
+     * 「服务端顺手塞进来的 token」的通道。实测本机它是空的（`len=0`），所以这只是**机会性兜底**：
+     * 非空时顺手写回凭据槽，等于多一条自愈路径；空则完全不影响原有行为。
+     *
+     * 注意：`#1-value` 里的值属于凭据，**不得**进任何日志。
+     */
     private fun refreshCsrf(path: String, cookies: String): String {
         val request = webRequest("https://www.bilibili.com/correspond/1/" + path, cookies).get().build()
         return client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("correspond HTTP " + response.code)
             val html = response.body?.string() ?: throw IOException("correspond 响应为空")
-            Jsoup.parse(html).select("#1-name").first()?.text() ?: ""
+            val doc = Jsoup.parse(html)
+            adoptCorrespondValue(doc.select("#1-value").first()?.text() ?: "")
+            doc.select("#1-name").first()?.text() ?: ""
+        }
+    }
+
+    /**
+     * `correspond` 页若带了 `#1-value`（= 服务端下发的 web refresh_token），把它补进凭据槽。
+     *
+     * 只写「当前 Web 账号槽 + 激活槽」的 refresh_token，且**只在该槽为空时**写 ——
+     * 已有的 token 比页面里的更可信（页面里的可能是给别的会话用的）。
+     * 失败一律吞掉：这是锦上添花的通道，绝不能因为它让主流程续期失败。
+     */
+    private fun adoptCorrespondValue(value: String) {
+        val token = value.trim()
+        if (token.isEmpty()) return
+        try {
+            WebRenewalState.adoptRefreshTokenIfMissing(token)
+        } catch (e: RuntimeException) {
+            Logu.w(TAG, "correspond #1-value 回填失败：" + e.javaClass.simpleName)
         }
     }
 

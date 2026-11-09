@@ -24,10 +24,12 @@ import com.RobinNotBad.BiliClient.api.CookiesApi
 import com.RobinNotBad.BiliClient.api.LoginApi
 import com.RobinNotBad.BiliClient.util.AccountStore
 import com.RobinNotBad.BiliClient.util.CenterThreadPool
+import com.RobinNotBad.BiliClient.util.CoroutineScopes
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
+import com.RobinNotBad.BiliClient.util.WebRenewalState
 import com.google.android.material.card.MaterialCardView
 
 import org.json.JSONException
@@ -131,7 +133,36 @@ class QRLoginFragment : Fragment() {
         // 幂等（无激活账号时内部直接返回），不发起网络请求。
         AccountStore.persistActiveWeb()
 
+        showSelfRenewalStatus()
+
         if (isAdded()) refreshQrCode()
+    }
+
+    /**
+     * 在扫码页顶部显示「当前 Web 登录能不能自续」（v5.3.3）。
+     *
+     * # 为什么放在这一页
+     * 用户来这一页的唯一目的就是「重新登录」。他之所以来，通常是因为
+     * 「续期又失败了」。把能力状态直接摆在他说要重扫之前，能直接回答
+     * 「我到底需不需要重扫」——
+     *
+     * 而本轮实测的结论恰恰是：**B 站新登录页可能根本不下发 `refresh_token`**
+     * （`account.bilibili.com` 前端代码里它出现 0 次，notes/web_renew_v533.md §6）。
+     * 如果属于这种情况，用户在这里就会看到「不能自续」+
+     * 「重扫也拿不到，请用跨端修复或网页版导出导入」——
+     * 而不是像 v5.3.2 那样一遍遍重扫、一遍遍失败。
+     *
+     * 只在已登录时覆盖提示文案；未登录时保持原来的「正在获取二维码」流程不变。
+     */
+    private fun showSelfRenewalStatus() {
+        val text = when (WebRenewalState.selfRenewalCapability()) {
+            WebRenewalState.SelfRenewalCapability.NotLoggedIn -> return
+            WebRenewalState.SelfRenewalCapability.Ready ->
+                getString(R.string.web_renew_status_ready, WebRenewalState.refreshTokenLength())
+            WebRenewalState.SelfRenewalCapability.MissingToken ->
+                getString(R.string.web_renew_status_missing)
+        }
+        CoroutineScopes.launchUi { scanStat?.text = text }
     }
 
     @SuppressLint("SetTextI18n")
@@ -177,6 +208,34 @@ class QRLoginFragment : Fragment() {
         super.onDestroy()
     }
 
+    /**
+     * 登录成功后立刻告诉用户「这次到底有没有拿到 refresh_token」。
+     *
+     * # 为什么值得单独弹一条提示
+     * 用户本轮的原话是「我重新登录了 web 账号，但是仍然无法自己续期自己」——
+     * 在 v5.3.2 里，用户重扫完二维码看到的是「登录成功」，然后过几天才发现续期不能用，
+     * 而他**没有任何办法**回忆「上次扫码到底有没有拿到 token」。于是只能一遍遍重扫。
+     *
+     * 把这一刻的事实当场说出来，用户立刻就知道该不该指望自续：
+     * - 有 token → 什么都不用做，之后会自动续；
+     * - 没有 token → 马上知道要开「跨端修复」，不用等下一次续期失败才发现。
+     *
+     * # 实测背景（notes/web_renew_v533.md §6）
+     * B 站已把扫码登录页从 `passport.bilibili.com` 换到 `account.bilibili.com` 的新 H5 页，
+     * 新登录页前端代码里 `refresh_token` 出现 **0 次**。因此「没有 token」很可能是服务端行为，
+     * 而不是本 App 的解析问题 —— 这种情况下再让用户「重新扫码」只会无限循环，必须改口。
+     *
+     * 只判断**长度**，绝不读取/打印内容。
+     */
+    private fun reportRefreshTokenPresence(refreshToken: String) {
+        val message = if (refreshToken.isBlank()) {
+            getString(R.string.web_renew_login_no_token)
+        } else {
+            getString(R.string.web_renew_login_has_token, refreshToken.length)
+        }
+        CoroutineScopes.launchUi { MsgUtil.showMsgLong(message) }
+    }
+
     fun startLoginDetect() {
         timer = Timer()
         timer!!.schedule(object : TimerTask() {
@@ -215,6 +274,7 @@ class QRLoginFragment : Fragment() {
                             val refreshToken = loginJson.getJSONObject("data").optString("refresh_token", "")
 
                             AccountStore.loginWeb(mid, cookies, csrf, refreshToken, null, null)
+                            reportRefreshTokenPresence(refreshToken)
 
                             SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.cookie_refresh, true)
 

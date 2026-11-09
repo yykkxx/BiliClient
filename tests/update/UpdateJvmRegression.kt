@@ -45,7 +45,16 @@ private fun rejects(body: () -> Unit) {
 private val name = "BiliClient-5.3.2-signed.apk"
 private val startUrl = "https://gitee.com/yykkxxykx/BiliClient/releases/download/v5.3.2/$name"
 private val asset = GiteeReleaseAsset(name, startUrl)
-private val release = GiteeRelease("v5.3.2", "test", "notes", "2026-11-08", false, asset)
+private val release = GiteeRelease("v5.3.2", "test", "notes", "2026-11-08T00:00:00+08:00", false, listOf(asset))
+
+// Channel builds are produced by changed/build_flavor.sh under these two names; the hidden variant
+// only differs by `_hidden` and by having no launcher entry.
+private val channelName = "com.tencent.qqmusicwatchs_20260606.apk"
+private val channelHiddenName = "com.tencent.qqmusicwatchs_20260606_hidden.apk"
+private fun channelAsset(assetName: String) =
+    GiteeReleaseAsset(assetName, "https://gitee.com/yykkxxykx/BiliClient/releases/download/v5.3.2/$assetName")
+private val channelVisibleAsset = channelAsset(channelName)
+private val channelHiddenAsset = channelAsset(channelHiddenName)
 
 private class FixtureBody(bytes: ByteArray, private val declaredLength: Long = bytes.size.toLong()) : ResponseBody() {
     private val buffer = Buffer().write(bytes)
@@ -91,6 +100,7 @@ fun main(args: Array<String>) {
     val out = File(args[1])
     versionTests()
     policyTests()
+    installNameTests()
     apiTests()
     downloadTests(out)
     sourceContracts(root)
@@ -171,6 +181,118 @@ private fun policyTests() {
     test("length positive complete and chunked only") {
         check(Policy.isCompleteLength(123, 123)); check(Policy.isCompleteLength(123, -1))
         check(!Policy.isCompleteLength(0, -1)); check(!Policy.isCompleteLength(123, 124)); check(!Policy.isCompleteLength(124, 123))
+    }
+    targetTests()
+    freshnessTests()
+}
+
+private fun targetTests() {
+    test("main package resolves to MAIN regardless of launcher entry") {
+        check(Policy.resolveTarget(Policy.MAIN_PACKAGE, hasLauncherEntry = true) == Policy.UpdateTarget.MAIN)
+        check(Policy.resolveTarget(Policy.MAIN_PACKAGE, hasLauncherEntry = false) == Policy.UpdateTarget.MAIN)
+    }
+    test("channel package with launcher entry is the visible build") {
+        check(Policy.resolveTarget(Policy.CHANNEL_PACKAGE, true) == Policy.UpdateTarget.CHANNEL_VISIBLE)
+    }
+    test("channel package without launcher entry is the hidden build") {
+        check(Policy.resolveTarget(Policy.CHANNEL_PACKAGE, false) == Policy.UpdateTarget.CHANNEL_HIDDEN)
+    }
+    test("unknown package name downloads nothing") {
+        listOf("com.example.fork", "", "com.tencent.qqmusicwatchs.evil").forEach {
+            check(Policy.resolveTarget(it, hasLauncherEntry = true) == Policy.UpdateTarget.UNSUPPORTED)
+            check(Policy.selectApk(Policy.UpdateTarget.UNSUPPORTED, "v5.3.2", listOf(asset)) == null)
+        }
+    }
+    test("three assets resolve to three distinct targets") {
+        val all = listOf(asset, channelVisibleAsset, channelHiddenAsset, GiteeReleaseAsset("SHA256SUMS.txt", startUrl))
+        check(Policy.selectApk(Policy.UpdateTarget.MAIN, "v5.3.2", all) == asset)
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_VISIBLE, "v5.3.2", all) == channelVisibleAsset)
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_HIDDEN, "v5.3.2", all) == channelHiddenAsset)
+    }
+    test("main build never selects a channel APK and vice versa") {
+        check(Policy.selectApk(Policy.UpdateTarget.MAIN, "v5.3.2", listOf(channelVisibleAsset, channelHiddenAsset)) == null)
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_VISIBLE, "v5.3.2", listOf(asset)) == null)
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_HIDDEN, "v5.3.2", listOf(asset)) == null)
+    }
+    test("visible and hidden channel builds never swap assets") {
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_VISIBLE, "v5.3.2", listOf(channelHiddenAsset)) == null)
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_HIDDEN, "v5.3.2", listOf(channelVisibleAsset)) == null)
+    }
+    test("SHA256SUMS and non-APK attachments are never candidates") {
+        val all = listOf(GiteeReleaseAsset("SHA256SUMS.txt", startUrl), GiteeReleaseAsset("Source code.zip", startUrl), asset)
+        check(Policy.candidateApks("v5.3.2", all) == listOf(asset))
+    }
+    test("candidate APKs keep all three flavours so each build can pick its own") {
+        val all = listOf(asset, channelVisibleAsset, channelHiddenAsset)
+        check(Policy.candidateApks("v5.3.2", all) == all)
+    }
+    test("wrong-tag download URL drops the asset even if the name matches") {
+        val stale = channelVisibleAsset.copy(
+            downloadUrl = "https://gitee.com/yykkxxykx/BiliClient/releases/download/v5.3.1/$channelName"
+        )
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_VISIBLE, "v5.3.2", listOf(stale)) == null)
+    }
+    test("duplicate channel aliases rejected instead of silently picking one") {
+        check(Policy.selectApk(Policy.UpdateTarget.CHANNEL_VISIBLE, "v5.3.2", listOf(channelVisibleAsset, channelVisibleAsset)) == null)
+    }
+    test("assetMatchesTarget cross-checks the file name shapes") {
+        check(Policy.assetMatchesTarget(Policy.UpdateTarget.MAIN, name))
+        check(!Policy.assetMatchesTarget(Policy.UpdateTarget.MAIN, channelName))
+        check(Policy.assetMatchesTarget(Policy.UpdateTarget.CHANNEL_VISIBLE, channelName))
+        check(!Policy.assetMatchesTarget(Policy.UpdateTarget.CHANNEL_VISIBLE, channelHiddenName))
+        check(Policy.assetMatchesTarget(Policy.UpdateTarget.CHANNEL_HIDDEN, channelHiddenName))
+        check(!Policy.assetMatchesTarget(Policy.UpdateTarget.CHANNEL_HIDDEN, channelName))
+        check(!Policy.assetMatchesTarget(Policy.UpdateTarget.UNSUPPORTED, name))
+    }
+    test("channel asset names cannot smuggle a path or a second extension") {
+        listOf(
+            "com.tencent.qqmusicwatchs_20260606.apk/../x.apk",
+            "../com.tencent.qqmusicwatchs_20260606.apk",
+            "com.tencent.qqmusicwatchs_20260606.apk.exe",
+            "com.tencent.qqmusicwatchs.apk"
+        ).forEach { hostile -> check(!Policy.assetMatchesTarget(Policy.UpdateTarget.CHANNEL_VISIBLE, hostile)) }
+    }
+}
+
+private fun installNameTests() {
+    test("install file name keeps the asset name") {
+        check(Policy.installFileName(name) == name)
+        check(Policy.installFileName(channelHiddenName) == channelHiddenName)
+    }
+    test("install file name strips path components") {
+        check(Policy.installFileName("../../etc/passwd") == "passwd.apk")
+        check(Policy.installFileName("dir/sub/update.apk") == "update.apk")
+        check(Policy.installFileName("dir\\sub\\update.apk") == "update.apk")
+    }
+    test("install file name removes unsafe characters and dot-only names") {
+        check(Policy.installFileName("..") == "update.apk")
+        check(Policy.installFileName("") == "update.apk")
+        check(Policy.installFileName("a b|c.apk") == "abc.apk")
+    }
+    test("install file name always ends with a single .apk") {
+        check(Policy.installFileName("update") == "update.apk")
+        check(Policy.installFileName("update.apk.exe").endsWith(".apk"))
+        check(!Policy.installFileName("update.apk").endsWith(".apk.apk"))
+    }
+}
+
+private fun freshnessTests() {
+    val hour = 60L * 60L * 1000L
+    val releaseAt = 1_800_000_000_000L
+    test("channel installed long before the release is likely outdated") {
+        check(Policy.channelFreshness(releaseAt - 30 * hour, releaseAt) == Policy.ChannelFreshness.LIKELY_NEWER)
+    }
+    test("channel installed right after the release is likely current") {
+        check(Policy.channelFreshness(releaseAt + 2 * hour, releaseAt) == Policy.ChannelFreshness.LIKELY_CURRENT)
+    }
+    test("clock skew within one hour must not claim an update") {
+        check(Policy.channelFreshness(releaseAt - hour / 2, releaseAt) == Policy.ChannelFreshness.LIKELY_CURRENT)
+        check(Policy.channelFreshness(releaseAt - 2 * hour, releaseAt) == Policy.ChannelFreshness.LIKELY_NEWER)
+    }
+    test("unknown install or release time never claims an update") {
+        check(Policy.channelFreshness(0L, releaseAt) == Policy.ChannelFreshness.UNKNOWN)
+        check(Policy.channelFreshness(releaseAt - 30 * hour, null) == Policy.ChannelFreshness.UNKNOWN)
+        check(Policy.channelFreshness(releaseAt - 30 * hour, 0L) == Policy.ChannelFreshness.UNKNOWN)
     }
 }
 
@@ -312,14 +434,17 @@ private fun apiTests() {
 private fun downloadTests(out: File) {
     fun downloadCase(label: String, bytes: ByteArray = goodZip, mime: String? = Policy.APK_MIME_TYPE,
                      length: Long = bytes.size.toLong(), status: Int = 200, expectSuccess: Boolean = false,
+                     target: Policy.UpdateTarget = Policy.UpdateTarget.MAIN,
+                     packageName: String = Policy.MAIN_PACKAGE,
+                     packagedRelease: GiteeRelease = release,
                      configure: (Context) -> Unit = {}, after: (Context) -> Unit = {}) {
         test(label) {
             val cache = File(out, "fixture-${passed + failures.size}").apply { mkdirs() }
-            val context = Context(cache, ContentResolver(), PackageManager())
+            val context = Context(cache, ContentResolver(), PackageManager(), packageName)
             configure(context)
             val api = fixtureApi { response(it.request(), code = status, bytes = bytes, mime = mime, length = length) }
             try {
-                val run = { runBlocking { GiteeApkDownload(context, api).download(release) { _, _ -> } }; Unit }
+                val run = { runBlocking { GiteeApkDownload(context, api, target).download(packagedRelease) { _, _ -> } }; Unit }
                 if (expectSuccess) run() else rejects(run)
                 check(cache.listFiles().orEmpty().isEmpty()) { "private .part file leaked" }
                 after(context)
@@ -368,13 +493,58 @@ private fun downloadTests(out: File) {
         check(it.contentResolver.deletes == 1); check(it.contentResolver.rowExists)
         check(Log.warnings.any { message -> message.contains("Could not remove pending") })
     })
+    val channelReleaseAll = release.copy(apkAssets = listOf(asset, channelVisibleAsset, channelHiddenAsset))
+    fun channelContext(context: Context) {
+        context.packageManager.archive!!.packageName = Policy.CHANNEL_PACKAGE // quality-allow: fixture pre-sets archive metadata.
+        context.packageManager.archive!!.versionName = "QQ音乐" // quality-allow: fixture pre-sets the real channel versionName.
+        context.packageManager.archive!!.longVersionCode = 20260606L // quality-allow: fixture pre-sets the real channel versionCode.
+        context.packageManager.installed.packageName = Policy.CHANNEL_PACKAGE // quality-allow: fixture pre-sets installed metadata.
+        context.packageManager.installed.versionName = "QQ音乐" // quality-allow: fixture pre-sets the real channel versionName.
+        context.packageManager.installed.longVersionCode = 20260606L // quality-allow: fixture pre-sets the real channel versionCode.
+        context.packageManager.installed.lastUpdateTime = 1_700_000_000_000L // quality-allow: fixture install timestamp.
+    }
+    downloadCase("channel visible build downloads its own APK", goodZip, Policy.APK_MIME_TYPE, goodZip.size.toLong(), 200,
+        true, Policy.UpdateTarget.CHANNEL_VISIBLE, Policy.CHANNEL_PACKAGE, channelReleaseAll,
+        configure = { channelContext(it) },
+        after = {
+            check(it.contentResolver.inserts == 1)
+            check(it.contentResolver.pending == 0 && it.contentResolver.rowExists)
+        })
+    downloadCase("channel hidden build downloads its own APK", goodZip, Policy.APK_MIME_TYPE, goodZip.size.toLong(), 200,
+        true, Policy.UpdateTarget.CHANNEL_HIDDEN, Policy.CHANNEL_PACKAGE, channelReleaseAll,
+        configure = { channelContext(it) }, after = { check(it.contentResolver.inserts == 1) })
+    downloadCase("channel build rejects an archive still declaring the main package", goodZip, Policy.APK_MIME_TYPE,
+        goodZip.size.toLong(), 200, false, Policy.UpdateTarget.CHANNEL_VISIBLE, Policy.CHANNEL_PACKAGE, channelReleaseAll,
+        configure = { channelContext(it); it.packageManager.archive!!.packageName = Policy.MAIN_PACKAGE }, // quality-allow: fixture pre-sets archive metadata.
+        after = notPublished)
+    downloadCase("main build rejects an archive declaring the channel package", goodZip, Policy.APK_MIME_TYPE,
+        goodZip.size.toLong(), 200, false, Policy.UpdateTarget.MAIN, Policy.MAIN_PACKAGE, release,
+        configure = {
+            it.packageManager.archive!!.packageName = Policy.CHANNEL_PACKAGE // quality-allow: fixture pre-sets archive metadata.
+            it.packageManager.archive!!.versionName = "QQ音乐" // quality-allow: fixture pre-sets the real channel versionName.
+        }, after = notPublished)
+    downloadCase("channel build still requires the shared signing key", goodZip, Policy.APK_MIME_TYPE,
+        goodZip.size.toLong(), 200, false, Policy.UpdateTarget.CHANNEL_VISIBLE, Policy.CHANNEL_PACKAGE, channelReleaseAll,
+        configure = { channelContext(it); it.packageManager.archive!!.signingInfo = SigningInfo(arrayOf(Signature("other"))) }, // quality-allow: fixture pre-sets archive metadata.
+        after = notPublished)
+    downloadCase("channel build with no channel asset in this release downloads nothing", goodZip, Policy.APK_MIME_TYPE,
+        goodZip.size.toLong(), 200, false, Policy.UpdateTarget.CHANNEL_VISIBLE, Policy.CHANNEL_PACKAGE, release,
+        configure = { channelContext(it) }, after = notPublished)
+    downloadCase("visible target cannot consume the hidden asset", goodZip, Policy.APK_MIME_TYPE,
+        goodZip.size.toLong(), 200, false, Policy.UpdateTarget.CHANNEL_VISIBLE, Policy.CHANNEL_PACKAGE,
+        release.copy(apkAssets = listOf(asset, channelHiddenAsset)),
+        configure = { channelContext(it) }, after = notPublished)
+    downloadCase("unsupported build downloads nothing even with a valid release", goodZip, Policy.APK_MIME_TYPE,
+        goodZip.size.toLong(), 200, false, Policy.UpdateTarget.UNSUPPORTED, "com.example.fork", channelReleaseAll,
+        configure = { }, after = notPublished)
+
     test("cancelled coroutine before download does not request/insert/create .part") {
         val cache = File(out, "cancel-before").apply { mkdirs() }
         val context = Context(cache, ContentResolver(), PackageManager())
         var calls = 0
         val api = fixtureApi { calls++; response(it.request(), bytes = goodZip) }
         val job = Job().apply { cancel() }
-        try { rejects { runBlocking(job) { GiteeApkDownload(context, api).download(release) { _, _ -> } } }; check(calls == 0); check(context.contentResolver.inserts == 0); check(cache.listFiles().orEmpty().isEmpty()) }
+        try { rejects { runBlocking(job) { GiteeApkDownload(context, api, Policy.UpdateTarget.MAIN).download(release) { _, _ -> } } }; check(calls == 0); check(context.contentResolver.inserts == 0); check(cache.listFiles().orEmpty().isEmpty()) }
         finally { api.cancel() }
     }
     test("coroutine cancellation while copying deletes pending and private file") {
@@ -385,29 +555,71 @@ private fun downloadTests(out: File) {
         context.contentResolver.beforeWrite = { job.cancel() }
         val api = fixtureApi { response(it.request(), bytes = goodZip) }
         try {
-            rejects { runBlocking(job) { GiteeApkDownload(context, api).download(release) { _, _ -> } } }
+            rejects { runBlocking(job) { GiteeApkDownload(context, api, Policy.UpdateTarget.MAIN).download(release) { _, _ -> } } }
             failedPending(context); check(context.contentResolver.pending == 1); check(cache.listFiles().orEmpty().isEmpty())
         } finally { api.cancel() }
     }
 }
 
 private fun sourceContracts(root: File) {
-    val source = File(root, "app/src/main/java/com/RobinNotBad/BiliClient/activity/update/UpdateInfoActivity.kt").readText()
+    val activityDir = File(root, "app/src/main/java/com/RobinNotBad/BiliClient/activity/update")
+    val source = File(activityDir, "UpdateInfoActivity.kt").readText()
+    val installer = File(activityDir, "UpdateApkInstaller.kt").readText()
+    val layout = File(root, "app/src/main/res/layout/activity_update_info.xml").readText()
     test("source contract: no versionCode-only decision or legacy Intent extras") {
         check(source.contains("UpdateVersion.compare(latest.tagName, BuildConfig.VERSION_NAME)"))
         check(!source.contains("VERSION_CODE") && !source.contains("getStringExtra") && !source.contains("AppInfoApi"))
     }
     test("source contract: main-thread loading/downloading guards before launch") {
-        check(source.contains("if (loading || downloading) return"))
-        check(source.contains("val asset = latest.mainApk ?: return"))
-        check(source.contains("if (loading || downloading || savedUri != null) return"))
+        check(source.contains("private fun isBusy(): Boolean = loading || downloading || installing"))
+        check(source.contains("if (isBusy() || savedUri != null) return"))
+        check(source.contains("val asset = latest.apkFor(target) ?: return"))
         check(source.indexOf("loading = true") < source.indexOf("pageScope.launch"))
     }
     test("source contract: lifecycle cancels network and scope") {
         val destroy = source.substringAfter("override fun onDestroy()")
         check(destroy.indexOf("api.cancel()") < destroy.indexOf("super.onDestroy()"))
         check(destroy.indexOf("pageScope.cancel()") < destroy.indexOf("super.onDestroy()"))
-        check(source.split("catch (cancelled: CancellationException)").size == 3)
+        // Three cancellable launches now exist: load, download and install.
+        check(source.split("catch (cancelled: CancellationException)").size == 4)
+    }
+    test("source contract: collapse state is saved and restored") {
+        check(source.contains("STATE_NOTES_EXPANDED"))
+        check(source.contains("outState.putBoolean(STATE_NOTES_EXPANDED, notesExpanded)"))
+        check(source.contains("savedInstanceState?.getBoolean(STATE_NOTES_EXPANDED, false)"))
+        check(source.contains("private fun toggleNotes()") && source.contains("private fun renderNotesState()"))
+        // Default must be collapsed: long release notes should not fill the screen before a tap.
+        check(source.contains("private var notesExpanded = false"))
+        check(layout.contains("android:id=\"@+id/updateNotesHeader\""))
+        // The body starts hidden in XML so the first frame is collapsed even before onCreate finishes.
+        check(Regex("updateNotes\"[\\s\\S]{0,400}?android:visibility=\"gone\"").containsMatchIn(layout))
+    }
+    test("source contract: download and install are two separate buttons") {
+        check(layout.contains("android:id=\"@+id/updateDownload\""))
+        check(layout.contains("android:id=\"@+id/updateInstall\""))
+        check(source.contains("installButton.setOnClickListener { installDownloaded() }"))
+        // Mutually exclusive: the download button disappears as soon as a verified file exists.
+        check(source.contains("downloadButton.visibility = if (hasDownload) View.GONE else View.VISIBLE"))
+        check(source.contains("installButton.visibility = if (hasDownload) View.VISIBLE else View.GONE"))
+    }
+    test("source contract: channel build is resolved at runtime, not by BuildConfig") {
+        check(source.contains("resolveTarget()"))
+        check(source.contains("packageManager.getLaunchIntentForPackage(packageName) != null"))
+        check(!source.contains("CHANNEL_BUILD") && !source.contains("isMainPackageBuild"))
+    }
+    test("source contract: installer copies out of MediaStore and uses FileProvider") {
+        // The old page only accepted a File path; a content:// URI must be copied to cacheDir first.
+        check(installer.contains("openInputStream(source)"))
+        check(installer.contains("FileProvider.getUriForFile"))
+        check(installer.contains("FLAG_GRANT_READ_URI_PERMISSION"))
+        check(!installer.contains("Intent(Intent.ACTION_INSTALL_PACKAGE)"))
+        // file:// URIs are rejected by Android 10+, so the installer must never build one.
+        check(!installer.contains("Uri.fromFile"))
+        check(installer.contains("canRequestPackageInstalls"))
+    }
+    test("source contract: round-screen padding keeps the timeText sibling") {
+        check(layout.contains("android:id=\"@+id/timeText\""))
+        check(layout.contains("android:id=\"@+id/pageName\""))
     }
     println("SOURCE_CONTRACT_LIMITATION activity lexical guards checked, not Android lifecycle/UI/concurrent click execution")
 }

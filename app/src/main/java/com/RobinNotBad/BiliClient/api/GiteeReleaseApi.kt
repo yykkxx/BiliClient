@@ -168,7 +168,9 @@ class GiteeReleaseApi {
             // Gitee's payload has created_at only; published_at is accepted if a future API adds it.
             publishedAt = item.optString("published_at").ifBlank { item.optString("created_at") },
             prerelease = item.optBoolean("prerelease", false),
-            mainApk = GiteeReleasePolicy.selectMainApk(tag, candidateAssets(item))
+            // 三种安装形态（主包 / 渠道显示版 / 渠道隐藏版）要从同一份列表里各取所需，
+            // 所以解析阶段只做「形状 + 归属 URL」筛选，具体挑哪一个由页面按运行包决定。
+            apkAssets = GiteeReleasePolicy.candidateApks(tag, candidateAssets(item))
         )
     }
 
