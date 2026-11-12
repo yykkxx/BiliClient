@@ -12,6 +12,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
+import com.RobinNotBad.BiliClient.ui.motion.Motion
 import com.RobinNotBad.BiliClient.util.MsgUtil
 
 
@@ -51,8 +52,14 @@ open class RefreshListActivity : BaseActivity() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
         recyclerView = findViewById(R.id.recyclerView)
-        recyclerView!!.layoutManager = getLayoutManager()
-        recyclerView!!.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+        // v5.3.6 动效：在基类统一挂上（增删过渡 + 依次浮现 + 按压反馈）。
+        // 为什么不放到每个子页：全 App 有 30 个页面继承本类，
+        // 逐页去挂等于 30 次复制粘贴，一定会漏掉几个「看起来忘了加动画」的页面。
+        // 用局部 val 承载，顺带避免新代码里出现 !!（门禁硬拦）。
+        val list = recyclerView ?: return
+        list.layoutManager = getLayoutManager()
+        Motion.attach(list)
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(@NonNull recyclerView: RecyclerView, newState: Int) {
                 super.onScrollStateChanged(recyclerView, newState)
                 if (listener != null && !recyclerView.canScrollVertically(1) && !swipeRefreshLayout!!.isRefreshing && newState == RecyclerView.SCROLL_STATE_DRAGGING && !bottom) {

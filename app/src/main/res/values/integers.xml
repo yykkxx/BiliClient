@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  动效时长（毫秒）—— XML 版。
+
+  为什么这里和 ui/motion/Motion.kt 里各有一份：
+  `res/anim/*.xml` 的 android:duration 只能引用资源，没法引用 Kotlin 的 const；
+  反过来 Kotlin 里也没法把资源值当编译期常量用。所以两处必须保持一致。
+
+  改这里的值时，务必同步改 Motion.kt 的 DURATION_PAGE_IN / DURATION_PAGE_OUT，
+  否则会出现「代码以为 220ms、实际 XML 跑了 300ms」的错位
+  （只在开关打开时看出差异，很难归因）。两处数值刻意写得一样，方便肉眼比对。
+-->
+<resources>
+    <!-- 页面进入：与 Motion.DURATION_PAGE_IN 一致 -->
+    <integer name="motion_page_in_ms">220</integer>
+
+    <!-- 页面退出：与 Motion.DURATION_PAGE_OUT 一致 -->
+    <integer name="motion_page_out_ms">180</integer>
+</resources>

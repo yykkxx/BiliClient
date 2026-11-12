@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  页面进入动效（v5.3.6）。从右侧滑入 + 轻微淡入。
+
+  为什么横向位移用 22%p 而不是 100%p：
+  手表屏幕宽度很小，整屏滑入在 220ms 内会看到大面积纯黑拖动，
+  观感上像"卡了一下"。22% 的位移配合淡入，既表达了"从右边进来"的方向，
+  又不会露出大片空白，在圆屏上尤其明显。
+
+  interpolator 用 Material 的「标准曲线」（先快后慢再微缓），
+  比纯 Accel/Decel 更贴近系统动效，切换页面时不会显得突兀。
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:interpolator/fast_out_slow_in">
+
+    <translate
+        android:duration="@integer/motion_page_in_ms"
+        android:fromXDelta="22%p"
+        android:toXDelta="0" />
+
+    <alpha
+        android:duration="@integer/motion_page_in_ms"
+        android:fromAlpha="0.35"
+        android:toAlpha="1.0" />
+
+</set>

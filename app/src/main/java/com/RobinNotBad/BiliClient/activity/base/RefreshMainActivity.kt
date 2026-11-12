@@ -10,6 +10,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
+import com.RobinNotBad.BiliClient.ui.motion.Motion
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.view.ImageAutoLoadScrollListener
 
@@ -49,8 +50,11 @@ open class RefreshMainActivity : InstanceActivity() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
         recyclerView = findViewById(R.id.recyclerView)
-        recyclerView!!.layoutManager = getLayoutManager()
-        recyclerView!!.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+        // v5.3.6 动效：与 RefreshListActivity 一致，在基类统一挂（理由见那边的注释）
+        val list = recyclerView ?: return
+        list.layoutManager = getLayoutManager()
+        Motion.attach(list)
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(@NonNull recyclerView: RecyclerView, newState: Int) {
                 super.onScrollStateChanged(recyclerView, newState)
                 if (listener != null && !recyclerView.canScrollVertically(1) && !swipeRefreshLayout!!.isRefreshing && newState == RecyclerView.SCROLL_STATE_DRAGGING && !bottom) {

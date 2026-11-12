@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  页面退出动效（v5.3.6）。向右滑出 + 淡出，与进入方向相反，
+  让用户一眼看出"这是回到了上一层"。
+
+  位移同样只走 22%p：退回时前面的页面正在露出来，
+  位移过大反而会让底层页面闪烁一下。
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:interpolator/fast_out_linear_in">
+
+    <translate
+        android:duration="@integer/motion_page_out_ms"
+        android:fromXDelta="0"
+        android:toXDelta="22%p" />
+
+    <alpha
+        android:duration="@integer/motion_page_out_ms"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.0" />
+
+</set>

@@ -142,6 +142,77 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/motion_setting"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="6dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="动效动画"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/motion_setting_desc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:alpha="0.9"
+                        android:text="@string/desc_motion_enable"
+                        android:textSize="11sp" />
+
+                    <!-- 总开关：一次关掉全部动效，回到旧版观感 -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/motion_enable"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="启用动效动画"
+                        android:textSize="12sp" />
+
+                    <!--
+                      分项开关：总开关关掉时整组置灰不可点（只灰不隐藏），
+                      让用户看得见"关掉总开关会失去哪些东西"，也方便他单独关掉某一类。
+                    -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/motion_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="列表动效（进场、增删过渡）"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/motion_page"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="页面切换动效（滑入滑出）"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/motion_loading"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="加载动效（加载图呼吸）"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/motion_touch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="按压反馈（按下列表项轻微缩放）"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp">

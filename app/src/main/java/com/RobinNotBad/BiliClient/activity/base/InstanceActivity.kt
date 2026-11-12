@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.MenuActivity
+import com.RobinNotBad.BiliClient.ui.motion.MotionPage
 
 open class InstanceActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,6 +23,10 @@ open class InstanceActivity : BaseActivity() {
         if (getIntent().hasExtra("from"))
             intent.putExtra("from", getIntent().getStringExtra("from"))
         startActivity(intent)
+        // 菜单页有专属的下滑出场动画（既有观感，v5.3.6 之前的唯一一处页面动画）。
+        // 必须先告诉动效模块「本页自己管」：overridePendingTransition 是后写生效，
+        // 不跳过的话 BaseActivity.onPause 里的 MotionPage.apply 会把这一行顶掉。
+        MotionPage.skip(this)
         overridePendingTransition(R.anim.anim_activity_in_down, 0)
     }
 

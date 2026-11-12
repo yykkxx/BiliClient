@@ -29,6 +29,8 @@ import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
 import com.RobinNotBad.BiliClient.time.UsageTracker
+import com.RobinNotBad.BiliClient.ui.motion.MotionLoading
+import com.RobinNotBad.BiliClient.ui.motion.MotionPage
 import com.RobinNotBad.BiliClient.util.ToolsUtil
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -182,10 +184,41 @@ open class BaseActivity : AppCompatActivity {
 
     override fun onResume() {
         super.onResume()
+        // 每页呈现时清掉上一次离开留下的方向，避免「上一次的跳转方向」被这次误用
+        MotionPage.reset(this)
         if (eventBusEnabled()) {
             val snackEvent = EventBus.getDefault().getStickyEvent(SnackEvent::class.java)
             if (snackEvent != null) onEvent(snackEvent)
         }
+    }
+
+    // ------------------------------------------------------------------ 页面切换动效（v5.3.6）
+    //
+    // 只重写 startActivity / finish 三个入口来「登记方向」，真正套动画在 onPause 里做。
+    // 为什么不在 startActivity 之后直接 overridePendingTransition：
+    // 那是「跳转发起」的时刻，有些调用方紧接着还会再 startActivity 一次（例如错误恢复路径），
+    // 直接套会把两次跳转的动画叠在一起。onPause 是「真的要离开了」，时机唯一且正确。
+
+    override fun startActivity(intent: Intent?) {
+        MotionPage.mark(this, MotionPage.Direction.PUSH)
+        super.startActivity(intent)
+    }
+
+    override fun startActivity(intent: Intent?, options: Bundle?) {
+        MotionPage.mark(this, MotionPage.Direction.PUSH)
+        super.startActivity(intent, options)
+    }
+
+    override fun finish() {
+        // 只有「主动返回」才播退出动画：
+        // 被系统回收、被父级 finish 掉的情况下不该有方向感（那样会让用户以为是自己按了返回）。
+        if (!isFinishing) MotionPage.mark(this, MotionPage.Direction.POP)
+        super.finish()
+    }
+
+    override fun onPause() {
+        MotionPage.apply(this)
+        super.onPause()
     }
 
     /**
@@ -233,7 +266,19 @@ open class BaseActivity : AppCompatActivity {
 
     protected open fun asyncInflate(id: Int, callBack: InflateCallBack) {
         setContentView(R.layout.activity_loading)
+        // v5.3.6 动效：加载图呼吸。所有走 asyncInflate 的页面（设置页、详情页、消息页…）
+        // 自动获得，不需要各自改。加载图 id 在 activity_loading 里固定是 R.id.loading。
+        //
+        // 为什么要留住这个 View 引用来 stop，而不是每次重新 findViewById：
+        // `setContentView(view)` 之后整棵旧视图树已被移除，再 findViewById(R.id.loading)
+        // 会返回 null —— 那样加载动画就永远停不下来，
+        // 而它持有的 View 又会一路把 Activity 的 Context 拖住（Animator 持有 View）。
+        val loadingView = findViewById<View>(R.id.loading)
+        MotionLoading.start(loadingView)
         AsyncLayoutInflaterX(this).inflate(id, null) { view, layoutId, parent ->
+            // 加载壳即将被真实内容替换：先停呼吸并复位，否则复用同一个 View 时
+            // 会带着 1.06 倍缩放出现在成品页里。
+            MotionLoading.stop(loadingView)
             // setContentView 重写里已统一套用主题色，这里无需重复调用
             setContentView(view)
 

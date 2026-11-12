@@ -15,6 +15,7 @@ import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ThemeUtil
+import com.RobinNotBad.BiliClient.ui.motion.Motion
 import com.google.android.material.switchmaterial.SwitchMaterial
 
 class SettingUIActivity : BaseActivity() {
@@ -69,6 +70,9 @@ class SettingUIActivity : BaseActivity() {
                 startActivity(Intent(this@SettingUIActivity, ThemeChooseActivity::class.java))
             }
 
+            // v5.3.6：动效动画总开关 + 四个分项
+            bindMotionSwitches()
+
             // v5.3.4：主题色生效范围三项开关。默认 true = 与旧版行为完全一致。
             bindThemeScopeSwitch(R.id.theme_apply_card, ThemeUtil.PREF_THEME_APPLY_CARD)
             bindThemeScopeSwitch(R.id.theme_apply_progress, ThemeUtil.PREF_THEME_APPLY_PROGRESS)
@@ -115,6 +119,52 @@ class SettingUIActivity : BaseActivity() {
             SharedPreferencesUtil.putBoolean(prefKey, isChecked)
             // 立即重建本页让新范围生效，用户能马上看到区别
             recreate()
+        }
+    }
+
+    /**
+     * 绑定「动效动画」总开关与四个分项（v5.3.6）。
+     *
+     * # 为什么总开关关闭时把分项置灰但不隐藏
+     * 隐藏会让用户以为「这些选项不存在」；置灰既能说明「它们归总开关管」，
+     * 又保留了用户已设置的分项状态（关掉总开关再打开，之前的细分偏好还在）。
+     *
+     * # 为什么改完立刻不 recreate()
+     * 动效开关全是**运行时读**的（每次动画前都问一次 [Motion]），
+     * 不需要重建页面就能生效。recreate() 反而会让用户觉得「点个开关页面闪一下」。
+     */
+    private fun bindMotionSwitches() {
+        val enable = findViewById<SwitchMaterial>(R.id.motion_enable) ?: return
+        val items = listOf(
+            R.id.motion_list to Motion.PREF_LIST,
+            R.id.motion_page to Motion.PREF_PAGE,
+            R.id.motion_loading to Motion.PREF_LOADING,
+            R.id.motion_touch to Motion.PREF_TOUCH
+        )
+        val switches = items.mapNotNull { (id, key) ->
+            val switch = findViewById<SwitchMaterial>(id) ?: return@mapNotNull null
+            switch.isChecked = SharedPreferencesUtil.getBoolean(key, true)
+            switch.setOnCheckedChangeListener { _, isChecked ->
+                SharedPreferencesUtil.putBoolean(key, isChecked)
+            }
+            switch
+        }
+
+        enable.isChecked = SharedPreferencesUtil.getBoolean(Motion.PREF_ENABLE, true)
+        applyMotionChildrenEnabled(enable.isChecked, switches)
+        enable.setOnCheckedChangeListener { _, isChecked ->
+            SharedPreferencesUtil.putBoolean(Motion.PREF_ENABLE, isChecked)
+            applyMotionChildrenEnabled(isChecked, switches)
+        }
+    }
+
+    /** 总开关状态 → 分项可点性（置灰而非隐藏，理由见 [bindMotionSwitches]） */
+    private fun applyMotionChildrenEnabled(enabled: Boolean, switches: List<SwitchMaterial>) {
+        switches.forEach { switch ->
+            switch.isEnabled = enabled
+            // 置灰时把透明度降下来：Material 的 Switch 在 disabled 态下
+            // 轨道色变化很不明显，不调透明度用户看不出「现在不能点」
+            switch.alpha = if (enabled) 1f else 0.45f
         }
     }
 

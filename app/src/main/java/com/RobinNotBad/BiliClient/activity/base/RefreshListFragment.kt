@@ -13,6 +13,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.listener.OnLoadMoreListener
+import com.RobinNotBad.BiliClient.ui.motion.Motion
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.MsgUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -59,8 +60,11 @@ open class RefreshListFragment : BaseFragment() {
         swipeRefreshLayout!!.isEnabled = false
         swipeRefreshLayout!!.isRefreshing = true
         recyclerView = view.findViewById(R.id.recyclerView)
-        recyclerView!!.layoutManager = getLayoutManager()
-        recyclerView!!.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+        // v5.3.6 动效：Fragment 侧的列表同样在基类统一挂（理由见 RefreshListActivity）
+        val list = recyclerView ?: return
+        list.layoutManager = getLayoutManager()
+        Motion.attach(list)
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(@NonNull recyclerView: RecyclerView, newState: Int) {
                 super.onScrollStateChanged(recyclerView, newState)
                 if (listener != null && !recyclerView.canScrollVertically(1) && isRefreshing && newState == RecyclerView.SCROLL_STATE_DRAGGING && !bottom) {
