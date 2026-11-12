@@ -12,6 +12,7 @@ import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StreamPolicyManager
+import com.RobinNotBad.BiliClient.util.WifiGuard
 import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 
 import java.util.ArrayList
@@ -42,6 +43,7 @@ class SettingLaboratoryActivity : RefreshListActivity() {
         addDownloadSections(sectionList)
         addUiSections(sectionList)
         addPlayerSections(sectionList)
+        addNetworkGuardSections(sectionList)
         addDebugSections(sectionList, debugBuild)
 
         // recyclerView 由 RefreshListActivity.onCreate 赋值，这里只做防御性取用（门禁禁止 !!）
@@ -116,6 +118,28 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 SharedPreferencesUtil.PLAYER_TIME_JUMP_KEYPAD,
                 "关闭后改用系统输入法打字（可以打冒号）；打开则用播放器内自绘的数字键盘，不弹系统键盘",
                 "true"))
+    }
+
+    /**
+     * 网络守卫（v5.3.4，需求 8）：特定 WiFi 下不发出任何网络请求。
+     *
+     * 三段式：总开关 + 说明 + SSID 列表（用 `input_string` 行承载，天然支持多行文本）。
+     *
+     * # 为什么默认关闭
+     * 这个功能一旦开启且填了 SSID，用户在那个网络下**完全无法联网**（直到点「继续」）。
+     * 默认开启等于给所有用户突然断网 —— 必须是用户显式打开。
+     *
+     * # 为什么 SSID 用 `input_string` 而不是新做一个列表编辑页
+     * `input_string` 行已支持多行文本输入（`cell_setting_input`），
+     * 而本功能需要的正是"填几个名字"，用现成行类型零成本；
+     * 新做一页要动布局/Adapter/manifest 三处，收益不匹配。
+     */
+    private fun addNetworkGuardSections(sectionList: ArrayList<SettingSection>) {
+        sectionList.add(SettingSection("title", "网络", "", "", ""))
+        sectionList.add(SettingSection("switch", getString(R.string.lab_wifi_guard_title),
+                WifiGuard.PREF_ENABLED, getString(R.string.lab_wifi_guard_desc), "false"))
+        sectionList.add(SettingSection("input_string", "受保护的 WiFi 名称",
+                WifiGuard.PREF_SSIDS, getString(R.string.lab_wifi_guard_edit_desc), ""))
     }
 
     /** 调试：日志等级与详细报错 */

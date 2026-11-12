@@ -144,7 +144,11 @@ object UsageTracker {
         activeMsSinceForeground = 0L
         // 前台恢复时立刻处理跨天：把「昨天」的累计落进历史，今天的计数从 0 重新开始。
         // 读路径本身也按 USED_DAY 判断（不依赖这里），这一步只是把旧数据落盘，避免丢历史。
-        DailyPlan.rotateIfDayChanged()
+        // v5.3.4：这一句要碰偏好 + 历史解析，是**本函数里唯一可能抛异常**的调用。
+        // 它由 Application 的 ActivityLifecycleCallbacks 调用（BiliTerminal），
+        // 在那里抛出 = 直接打穿主线程、连一个 Activity 都接不住 → 整个 App 闪退。
+        // 而「跨天归档」纯属历史图表的锦上添花：失败最多丢一格历史，绝不能让它带走进程。
+        runSafely("rotateIfDayChanged") { DailyPlan.rotateIfDayChanged() }
         if (pauseDepth > 0) {
             // 回前台时仍在暂停态（例如息屏时正停在倒计时页）：暂停段的计时从此刻续上，
             // 后台那段时间不会被累计（需求：切后台/息屏时不继续倒计时，也不继续计时）。
@@ -163,7 +167,9 @@ object UsageTracker {
     @JvmStatic
     fun onBackground() {
         if (foregroundStartElapsed <= 0L) return
-        flush()
+        // v5.3.4：本函数同样由 Application 的生命周期回调驱动，异常会直接打穿主线程。
+        // 结算失败最多丢一段统计（下次结算按新起点继续），绝不能带走进程。
+        runSafely("flush-on-background") { flush() }
         foregroundStartElapsed = 0L
         sessionStartWallMs = 0L
         pageStartElapsed = 0L
@@ -324,8 +330,30 @@ object UsageTracker {
     private fun saturatingAddSession(used: Long, add: Long): Long =
         (used + add).coerceIn(0L, MAX_SESSION_MS)
 
+    /**
+     * 跑一段可能失败的计算，失败只打日志。
+     *
+     * 为什么这里需要它：本对象的前台/后台边沿由
+     * `BiliTerminal.ForegroundUsageTracker`（Application 的 ActivityLifecycleCallbacks）驱动，
+     * 那是一个**没有任何上层 try/catch 的入口** —— 在里面抛异常会直接
+     * `Thread.uncaughtException` → `ErrorCatch` → killProcess，用户看到的就是「打开就闪退」。
+     * 而计时统计纯属附属功能：它失败最多让今天的数字少几秒，**绝不能**把 App 带走。
+     *
+     * 只在「入口方法」用它（边沿、结算），内部纯内存运算不包 —— 不要为了省事到处套。
+     */
+    private inline fun runSafely(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "usage tracking step failed (ignored): $what", e)
+        }
+    }
+
     /** 会话内累计的上界：100 年，与 [DailyPlan] 的日累计上界同量级 */
     private const val MAX_SESSION_MS = 100L * 365L * 24L * 60L * 60_000L
+
+    /** 日志标签（[runSafely] 兜住的失败靠它过滤） */
+    private const val TAG = "usage-tracker"
 
     /**
      * 把 [activeMs] 按午夜切成两段：午夜前的部分归档到那一天的日总数，午夜后的记给今天。

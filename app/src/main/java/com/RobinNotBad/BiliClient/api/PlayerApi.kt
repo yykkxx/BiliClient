@@ -233,6 +233,93 @@ object PlayerApi {
     }
 
     /**
+     * 只查「这个视频有哪些清晰度档位」，**不解析播放地址、不碰 [PlayerData] 的播放字段**。
+     *
+     * # 为什么需要它（v5.3.4，需求 9 的根因修复）
+     *
+     * 批量多选缓存页（[com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteBatchDownloadActivity]）
+     * 以前是这样扫档位的：`getVideo(playerData, download = true)`。而 `download = true` 会走
+     * **`fnval=1`（durl 单流）**那条链路。实测（真实凭据，同一视频只改 `fnval`）：
+     *
+     * | `fnval` | `accept_quality` |
+     * | --- | --- |
+     * | 1（durl，下载链路） | `[64, 16]` |
+     * | 16（DASH，播放器链路） | `[112, 80, 64, 32, 16]` |
+     *
+     * 也就是说 **`fnval=1` 下发的档位列表是被截断的**（只反映单流能给的那几档），
+     * 不是真实可用档位全集。于是「播放器里明明有 5 档，批量缓存里只剩 2 档甚至 0 档」，
+     * 用户看到的就是「连一个清晰度都选不了」。
+     *
+     * 注意：`qn` 参数**不影响**档位列表（qn 取 16/32/64/80/112/120/127，列表恒为 `[64,16]`），
+     * 所以「把扫描用的 qn 调高」这种修法无效 —— 唯一变量是 `fnval`。
+     *
+     * # 为什么不直接复用 [getVideoDash]
+     * 那个函数有大量副作用：写 `danmakuUrl` / `videoUrl` / `audioUrl` / `dashData`，
+     * 走「设备可解 codecid 过滤」，还可能因为「DASH 没剩一条可播流」而**递归回落**到
+     * `getVideo(download = true)` —— 一旦回落，档位又变回截断的那份，等于没修。
+     * 扫描档位只需要 `accept_quality` / `accept_description` 两个数组，所以这里只发一次请求、
+     * 只读这两个字段，不产生任何其它状态，也不做设备解码能力过滤（档位是「服务端给这台账号的
+     * 全集」，能不能解码由下载/播放阶段再判）。
+     *
+     * @return `qnValueList` / `qnStrList`（长度一致，按服务端顺序）；请求失败或没有档位时返回 null
+     */
+    @JvmStatic
+    fun fetchQualityOptions(aid: Long, cid: Long): PlayerData? {
+        if (aid <= 0L || cid <= 0L) return null
+        return try {
+            // 与 getVideoDash 用同一条 DASH 链路（fnval=16）+ 同一个 WBI 签名器，
+            // 这样拿到的档位列表与「用户在播放器里能切到的档位」天然一致。
+            var url = "https://api.bilibili.com/x/player/wbi/playurl?" +
+                    "avid=" + aid +
+                    "&cid=" + cid +
+                    // qn 只是「希望默认播到哪一档」，不影响返回的档位列表；取最低档让响应最小
+                    "&qn=16" +
+                    "&fnval=16&fnver=0" +
+                    "&platform=pc" +
+                    "&voice_balance=1" +
+                    "&gaia_source=pre-load" +
+                    "&isGaiaAvoided=true"
+            url = ConfInfoApi.signWBI(url)
+
+            val body = NetWorkUtil.getJson(url, NetWorkUtil.webHeaders)
+            if (body.optInt("code", -1) != 0) {
+                Logu.w("quality-options", "playurl code=" + body.optInt("code", -1) + " aid=$aid")
+                return null
+            }
+            val data = body.optJSONObject("data") ?: return null
+            val descriptions = data.optJSONArray("accept_description")
+            val qualities = data.optJSONArray("accept_quality")
+            if (descriptions == null || qualities == null) return null
+
+            // 两个数组按服务端保证等长，但**防御性取较短的那个**：一旦哪天不等长，
+            // 按下标硬读会越界（历史上这里出过问题，宁可少一档也不崩）。
+            val size = minOf(descriptions.length(), qualities.length())
+            if (size <= 0) return null
+
+            val qnStrList = arrayOfNulls<String>(size)
+            val qnValueList = IntArray(size)
+            for (i in 0 until size) {
+                qnStrList[i] = descriptions.optString(i)
+                qnValueList[i] = qualities.optInt(i)
+            }
+            val result = PlayerData()
+            result.aid = aid
+            result.cid = cid
+            result.qnStrList = qnStrList
+            result.qnValueList = qnValueList
+            result
+        } catch (e: IOException) {
+            Logu.w("quality-options", "取清晰度档位网络错误 aid=$aid：" + e.javaClass.simpleName)
+            null
+        } catch (e: Exception) {
+            // JSONException 等解析异常一并吞掉：扫描阶段单个视频失败按「拿不到档位」处理，
+            // 不应该让整批缓存流程中断（调用方已经会统计失败条数）。
+            Logu.w("quality-options", "取清晰度档位失败 aid=$aid：" + e.javaClass.simpleName)
+            null
+        }
+    }
+
+    /**
      * 把响应里的 `last_play_cid` / `last_play_time` 落到 [PlayerData]，**两者必须成对使用**。
      *
      * 背景（完整证据链见 `notes/api_full_migration_alpha10.md` D.6）：

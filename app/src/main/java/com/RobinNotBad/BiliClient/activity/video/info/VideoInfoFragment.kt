@@ -38,6 +38,7 @@ import com.RobinNotBad.BiliClient.activity.base.BaseFragment
 import com.RobinNotBad.BiliClient.activity.dynamic.send.SendDynamicActivity
 import com.RobinNotBad.BiliClient.activity.search.SearchActivity
 import com.RobinNotBad.BiliClient.activity.settings.SettingTerminalPlayerActivity
+import com.RobinNotBad.BiliClient.activity.user.HistoryActivity
 import com.RobinNotBad.BiliClient.activity.user.WatchLaterActivity
 import com.RobinNotBad.BiliClient.activity.user.favorite.FavoriteFolderListActivity
 import com.RobinNotBad.BiliClient.activity.video.MultiPageActivity
@@ -139,7 +140,117 @@ class VideoInfoFragment : BaseFragment() {
     private var tripleActionRunnable: Runnable? = null
     private var isTripleInProgress = false
 
+    // ---------------- 「同时长按 收藏 + 稍后再看」打开历史记录（v5.3.4 需求 4） ----------------
+
+    /**
+     * 两个按钮各自「单独长按」的延迟任务。
+     *
+     * 为什么不在长按回调里**立刻**执行原行为：用户要的「同时长按」本质是两个独立的长按事件，
+     * 人手不可能严格同时。如果第一次长按立刻打开收藏夹列表，页面已经被推走了，
+     * 第二个长按根本落不到这个 Fragment 上 —— 组合手势永远不可能成立。
+     * 所以第一次长按先**挂起** [COMBO_WINDOW_MS] 再执行原行为；窗口内另一按钮也被长按时，
+     * 取消这个挂起任务、改为打开历史记录。
+     *
+     * 代价是单独长按会晚 [COMBO_WINDOW_MS] 才响应。取 450ms 是在
+     * 「组合手势够宽容」与「单独长按不觉得卡」之间的折中（系统长按本身就要 500ms，
+     * 用户已经按了那么久，再多 450ms 体感可接受；再长就会被觉得「点了没反应」）。
+     */
+    private var favLongPressPending: Runnable? = null
+    private var watchLaterLongPressPending: Runnable? = null
+
+    /** 最近一次长按是哪个按钮、发生在什么时候（毫秒时间戳，0 = 没有） */
+    private var lastLongPressSource = 0
+    private var lastLongPressAt = 0L
+
+    /**
+     * 处理一次「收藏 / 稍后再看」的长按。
+     *
+     * 三条路径：
+     * 1. 另一个按钮刚在 [COMBO_WINDOW_MS] 内被长按过 → **组合手势**：撤销所有挂起任务，打开历史记录；
+     * 2. 否则 → 挂起自己的原行为 [single]，并在窗口到期后执行；
+     * 3. 同一按钮连按两次（窗口内）→ 不组成组合，第二次直接执行原行为（避免把单按拖成两次延迟）。
+     *
+     * @param source [SOURCE_FAV] 或 [SOURCE_WATCH_LATER]
+     * @param single 这个按钮「单独长按」原本该做的事
+     */
+    private fun handleComboLongPress(source: Int, single: () -> Unit) {
+        val now = System.currentTimeMillis()
+        val other = if (source == SOURCE_FAV) SOURCE_WATCH_LATER else SOURCE_FAV
+        val combo = lastLongPressSource == other && now - lastLongPressAt <= COMBO_WINDOW_MS
+
+        // 无论走哪条路径，先把这个按钮自己的挂起任务清掉，避免重复执行
+        clearPendingLongPress(source)
+
+        if (combo) {
+            // 组合成立：把另一个按钮的挂起任务也撤销，两个原行为都不执行
+            clearPendingLongPress(other)
+            lastLongPressSource = 0
+            lastLongPressAt = 0L
+            openHistory()
+            return
+        }
+
+        lastLongPressSource = source
+        lastLongPressAt = now
+
+        // 用 rootView 承载 postDelayed：Fragment 销毁时统一 removeCallbacks（见 onDestroy）
+        val host = view ?: run {
+            // 没有视图时无法延迟，直接执行原行为（退化路径，不会丢功能）
+            single()
+            return
+        }
+        val pending = Runnable {
+            clearPendingLongPress(source)
+            // 原行为执行后清掉手势状态：否则「先单按收藏，再单按稍后再看」会被误判成组合
+            if (lastLongPressSource == source) {
+                lastLongPressSource = 0
+                lastLongPressAt = 0L
+            }
+            if (isAdded && !isDetached) single()
+        }
+        when (source) {
+            SOURCE_FAV -> favLongPressPending = pending
+            else -> watchLaterLongPressPending = pending
+        }
+        host.postDelayed(pending, COMBO_WINDOW_MS)
+    }
+
+    /** 撤销某个按钮的挂起长按任务 */
+    private fun clearPendingLongPress(source: Int) {
+        val pending = if (source == SOURCE_FAV) favLongPressPending else watchLaterLongPressPending
+        if (pending != null) {
+            view?.removeCallbacks(pending)
+            if (source == SOURCE_FAV) favLongPressPending = null else watchLaterLongPressPending = null
+        }
+    }
+
+    /** 撤销全部挂起的长按任务（页面销毁时必须调用，否则回调会打到已销毁的 Fragment） */
+    private fun clearAllPendingLongPress() {
+        clearPendingLongPress(SOURCE_FAV)
+        clearPendingLongPress(SOURCE_WATCH_LATER)
+        lastLongPressSource = 0
+        lastLongPressAt = 0L
+    }
+
+    private fun openHistory() {
+        try {
+            startActivity(Intent(requireContext(), HistoryActivity::class.java))
+            MsgUtil.showMsg("已打开历史记录")
+        } catch (e: Exception) {
+            MsgUtil.err(e)
+        }
+    }
+
     companion object {
+        /** 「同时长按」的判定窗口：两个按钮的长按间隔不超过这个时长就算组合手势 */
+        private const val COMBO_WINDOW_MS = 450L
+
+        /** 长按来源：收藏（`layout_fav`） */
+        private const val SOURCE_FAV = 1
+
+        /** 长按来源：稍后再看（`addWatchlater`） */
+        private const val SOURCE_WATCH_LATER = 2
+
         @JvmStatic
         fun newInstance(aid: Long, bvid: String?): VideoInfoFragment {
             val args = Bundle()
@@ -460,10 +571,12 @@ class VideoInfoFragment : BaseFragment() {
             favLauncher.launch(intent)
         }
         //长按收藏打开收藏页面（#13，与长按稍后再看打开稍后再看页一致）
+        // v5.3.4：改为走 handleComboLongPress —— 「同时长按收藏 + 稍后再看」打开历史记录。
+        // 单独长按仍然打开收藏夹列表，只是延后 COMBO_WINDOW_MS 执行（理由见 handleComboLongPress）。
         rootview.findViewById<View>(R.id.layout_fav).setOnLongClickListener { view1 ->
-            val intent = Intent()
-            intent.setClass(requireContext(), FavoriteFolderListActivity::class.java)
-            startActivity(intent)
+            handleComboLongPress(SOURCE_FAV) {
+                startActivity(Intent(requireContext(), FavoriteFolderListActivity::class.java))
+            }
             true
         }
 
@@ -480,9 +593,9 @@ class VideoInfoFragment : BaseFragment() {
             })
         }
         addWatchlater.setOnLongClickListener { view1 ->
-            val intent = Intent()
-            intent.setClass(requireContext(), WatchLaterActivity::class.java)
-            startActivity(intent)
+            handleComboLongPress(SOURCE_WATCH_LATER) {
+                startActivity(Intent(requireContext(), WatchLaterActivity::class.java))
+            }
             true
         }
 
@@ -715,6 +828,9 @@ class VideoInfoFragment : BaseFragment() {
 
     override fun onDestroy() {
         Logu.d("onDestroy")
+        // 撤销挂起的长按任务：否则 postDelayed 的回调会在 Fragment 已销毁后触发
+        // （组合手势的两个挂起任务都挂在 rootView 上，页面走了必须清掉）
+        clearAllPendingLongPress()
         cancelTripleAction()
         super.onDestroy()
     }

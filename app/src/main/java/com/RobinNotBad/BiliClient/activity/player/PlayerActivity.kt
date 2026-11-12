@@ -944,6 +944,19 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
      * 本方法只换「怎么把字符敲进去」这一层，不重新定义时间格式 ——
      * 否则用户已有的习惯、笔记里的示例就全对不上了。
      *
+     * # v5.3.4：跳转完要把「调节进度」卡片一起收掉
+     * 用户报障：「数字小键盘跳转时间之后，直接关闭数字小键盘以及数字小键盘上一级的弹窗，
+     * 回到视频界面，不需要用户再点一遍关掉弹窗」。
+     *
+     * 输入界面自己会关（数字键盘 `dismiss()` / AlertDialog 的按钮），真正留在屏幕上的
+     * 是**本页的 `time_jump_card` 与它背后那层 `#70000000` 的 `card_bg` 遮罩** ——
+     * 用户跳转完还得再点一次遮罩才能看见视频。
+     *
+     * 收卡片放在这里（播放器侧），不塞进 [TimeJumpInput]：
+     * 「收起哪张卡片」是播放器布局的知识，输入层不该为了这个知道 `time_jump_card` 的存在。
+     * 挂钩用 `onDismissed` 而不是只挂 `onConfirm`：确认 / 取消 / 返回键 / 点外部**四条路径**
+     * 都要收卡片，只挂 `onConfirm` 时用户按「取消」仍会留下卡片和遮罩（同一个报障换个入口复现）。
+     *
      * @param duration 视频总时长（毫秒）；0 = 未知（此时不把输入夹到时长内）
      */
     private fun showTimeJumpInputDialog(duration: Long) {
@@ -954,10 +967,40 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         // 遗留字段不再需要（旧实现把 EditText 挂在它上面给"跳过片头"之类的逻辑读），
         // 保持置空让旧的读取路径安全退化（读到空串 → TimeInputParser 返回 -1 → 不动作）
         time_jump_input = null
-        TimeJumpInput.show(this, duration) { targetMs ->
-            seekToPosition(targetMs)
-            MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
-        }
+        TimeJumpInput.show(
+            this,
+            duration,
+            { targetMs ->
+                // 确认路径在这里再收一次卡片：Dialog 的 onDismissListener 是**投递到
+                // 消息队列**的（不是同步回调），只靠 onDismissed 会让卡片比 seek 晚一帧
+                // 才消失。hideTimeJumpCard 幂等（重复置 GONE 无副作用），所以两条都挂。
+                hideTimeJumpCard()
+                seekToPosition(targetMs)
+                MsgUtil.showMsg("已跳转到 " + StringUtil.toTime((targetMs / 1000).toInt()))
+            },
+            // 取消 / 返回键 / 点外部：这些路径没有 onConfirm，只能靠这里收卡片
+            { hideTimeJumpCard() }
+        )
+    }
+
+    /**
+     * 收起「调节进度」卡片以及它背后那层遮罩（v5.3.4）。
+     *
+     * 卡片与遮罩是一对：`card_bg` 是 `#70000000` 的全屏半透明层，
+     * 只把卡片 `GONE` 掉会留下一整屏灰，用户还是看不见视频。
+     * 所以两者必须一起收，且**卡片先收**（避免遮罩先消失时卡片"闪"一下）。
+     *
+     * 用 `?` 而不是 `!!`：本方法可能在任何一次输入界面回调里被调，
+     * 而 `findview()` 在极端时序下（例如 Activity 正在结束）可能还没跑完。
+     */
+    private fun hideTimeJumpCard() {
+        card_time_jump?.visibility = View.GONE
+        layout_card_bg?.visibility = View.GONE
+        // 控制层若还亮着，把「4 秒后自动隐藏」重新起算。
+        // 不重算的话：用户 3 秒就打完时间点跳转，遮罩刚撤、控制层只剩 1 秒就自己没了，
+        // 观感像"跳转后闪一下"。进度条拖动那条路径也是这么做的（见 seekbar 的 autohideReset）。
+        // 只在控制层**本来就可见**时重算，绝不主动把控制层亮出来（那是 showcon 的事）。
+        if (layout_top?.visibility == View.VISIBLE) autohideReset()
     }
 
     /**
@@ -1495,6 +1538,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         ijkPlayer?.setOnBufferingUpdateListener { mp, percent ->
             if (destroyed || mp !== ijkPlayer) return@setOnBufferingUpdateListener
             // #1：percent 变化顺带校准总时长——部分流 prepare 完时 getDuration 仍是 0
+            // （这条保留：percent 虽然不是可播窗口，但"有缓冲了"作为"时长可能已知了"的信号仍然有效）
             if (video_all <= 0 && percent > 0 && ijkPlayer != null) {
                 val dur = try {
                     ijkPlayer!!.getDuration().toInt()

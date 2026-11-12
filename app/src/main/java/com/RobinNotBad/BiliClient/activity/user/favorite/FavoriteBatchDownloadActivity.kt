@@ -17,7 +17,6 @@ import com.RobinNotBad.BiliClient.api.FavoriteApi
 import com.RobinNotBad.BiliClient.api.PlayerApi
 import com.RobinNotBad.BiliClient.api.VideoInfoApi
 import com.RobinNotBad.BiliClient.model.FavoriteFolder
-import com.RobinNotBad.BiliClient.model.PlayerData
 import com.RobinNotBad.BiliClient.model.VideoCard
 import com.RobinNotBad.BiliClient.service.DownloadService
 import com.RobinNotBad.BiliClient.ui.widget.recycler.CustomLinearManager
@@ -499,8 +498,17 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
      * 逐个扫「可用清晰度」。
      *
      * 每个视频要两趟请求：详情报（拿 cid）→ playurl（拿 accept_quality）。
-     * playurl 以**最低档 qn=16** 请求：这里只要档位列表，不需要真的把高码率流拉下来，
-     * 最低档返回最快、也最不容易被风控。
+     *
+     * # v5.3.4 修根因（需求 9：「连一个清晰度都选不了」）
+     *
+     * 以前这一趟调用的是 `PlayerApi.getVideo(playerData, download = true)`，
+     * 而 `download = true` 会走 **`fnval=1`（durl 单流）** 链路。实测（真实凭据、
+     * 同一视频只改 `fnval`）：`fnval=1` 只回 `[64,16]`，`fnval=16`（DASH，播放器那条链）
+     * 回完整的 `[112,80,64,32,16]`。**`fnval=1` 的档位列表是被服务端截断的**，
+     * 于是交集算出来只剩一两档甚至为空 —— 用户看到的就是「一个都选不了」。
+     *
+     * 现在改走 [PlayerApi.fetchQualityOptions]（同一条 DASH + WBI 链路，只读档位数组，
+     * 不产生播放状态、不做设备解码过滤）。细节与完整实验数据见 `notes/fav_quality_v534.md`。
      *
      * 失败（稿件已删/私密/网络）的视频不进交集，入队阶段计为失败并汇总提示。
      */
@@ -522,12 +530,11 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
             if (info == null || cid == null || cid <= 0L) {
                 null
             } else {
-                val playerData = PlayerData()
-                playerData.aid = aid
-                playerData.cid = cid
-                playerData.qn = LOW_QUALITY_QN
-                PlayerApi.getVideo(playerData, true)
-                ScannedVideo(aid, info.title, info.cover, cid, playerData.qnValueList, playerData.qnStrList)
+                // v5.3.4：档位改走 DASH 链路（fnval=16）—— fnval=1 的列表是被截断的，
+                // 那正是「批量缓存选不了清晰度」的根因。见 fetchQualityOptions 的注释。
+                val options = PlayerApi.fetchQualityOptions(aid, cid)
+                ScannedVideo(aid, info.title, info.cover, cid,
+                        options?.qnValueList, options?.qnStrList)
             }
         } catch (ignored: IOException) {
             Logu.w("fav_batch", "取视频信息网络错误 aid=$aid")
@@ -557,6 +564,23 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
         return (common ?: emptyList()).filter { it > 0 }.sortedDescending()
     }
 
+    /**
+     * 弹「选择缓存清晰度」。
+     *
+     * # v5.3.4：为什么从 `setSingleChoiceItems` 改成自绘按钮列表
+     *
+     * 老实现是 `AlertDialog.Builder.setSingleChoiceItems(...)`。在**圆屏/小屏手表**上
+     * （本机 466px/320dpi ≈ 233dp 高）单选行的高度被压得很薄，而行与行之间几乎贴着，
+     * 手指点下去经常落到相邻行或直接落空；再叠加回调里立刻 `dialog.dismiss()`，
+     * 用户体感就是「点了没反应 / 一碰就整个关掉」→ 报障原话「连一个清晰度都选不了」。
+     *
+     * 换成按钮列表后：每个档位是一个独立 `MaterialButton`（`minHeight` 44dp，远大于单选行），
+     * 点哪一行就选哪一行，没有任何歧义；而且能在按钮上直接写「这一档在 X 个视频里可用」，
+     * 比单选行的纯文本信息量更大。
+     *
+     * 结论：**档位数据的根因在 [PlayerApi.fetchQualityOptions]（fnval=1 截断）**，
+     * 这里只是把交互做到能点准。两处都修才真正解决用户报障。
+     */
     private fun showQualityChoice(result: ScanResult) {
         if (isDestroyed || isFinishing) return
         val followQn = SharedPreferencesUtil.getInt("play_qn", 16)
@@ -569,21 +593,59 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
             labels.add(qualityLabel(qn, result.scanned))
             values.add(qn)
         }
-        val builder = AlertDialog.Builder(this)
+
+        val dialog = AlertDialog.Builder(this)
                 .setTitle(getString(R.string.fav_batch_quality_title))
-                .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
-                    dialog.dismiss()
-                    val chosen = values.getOrElse(which) { QN_FOLLOW }
-                    startEnqueue(result, if (chosen == QN_FOLLOW) followQn else chosen)
-                }
+                .setMessage(if (common.isEmpty()) {
+                    getString(R.string.fav_batch_quality_empty, qnName(followQn))
+                } else {
+                    getString(R.string.fav_batch_quality_scope, result.scanned.size)
+                })
                 .setNegativeButton(getString(R.string.fav_batch_dialog_cancel), null)
-        // 交集为空 → 明确告诉用户只能用「跟随播放器设置」，而不是悄悄挑一个档
-        if (common.isEmpty()) {
-            builder.setMessage(getString(R.string.fav_batch_quality_empty, qnName(followQn)))
-        } else {
-            builder.setMessage(getString(R.string.fav_batch_quality_scope, result.scanned.size))
+                .create()
+
+        // 用代码构建内容视图：不新增 layout 资源，避免和别的改动抢 res 目录。
+        // 外层套项目的 RotaryScrollView —— 圆屏/小屏上档位多时（最多 6 档 + 跟随设置 = 7 个按钮）
+        // 可以滚，不会被裁掉（裁切 = 看不见也点不到，是本项目反复踩过的坑）。
+        // 注意这里**必须**用 RotaryScrollView 而不是普通 SwipeRefreshLayout：
+        // 本机是圆屏手表，表冠滚动走的是 Rotary 那套，普通 ScrollView 在圆屏上滚不动。
+        val ctx = this
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+
+        val container = android.widget.LinearLayout(ctx)
+        container.orientation = android.widget.LinearLayout.VERTICAL
+        container.setPadding(dp(14), dp(4), dp(14), dp(8))
+
+        for (i in labels.indices) {
+            val button = MaterialButton(ctx)
+            button.text = labels[i]
+            button.textSize = 14f
+            button.gravity = android.view.Gravity.CENTER
+            button.isAllCaps = false
+            val params = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.topMargin = dp(6)
+            button.layoutParams = params
+            button.minHeight = dp(44)
+            // 用局部变量固定下标：lambda 捕获的是变量而非值，直接用 i 会全部指向最后一个
+            val index = i
+            button.setOnClickListener {
+                dialog.dismiss()
+                val chosen = values.getOrElse(index) { QN_FOLLOW }
+                startEnqueue(result, if (chosen == QN_FOLLOW) followQn else chosen)
+            }
+            container.addView(button)
         }
-        builder.show()
+
+        val scroller = com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView(ctx)
+        scroller.layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        scroller.addView(container)
+        dialog.setView(scroller)
+        dialog.show()
         val missing = result.requested - result.scanned.size
         if (missing > 0) MsgUtil.showMsgLong(getString(R.string.fav_batch_scan_partial, missing))
     }
@@ -725,9 +787,6 @@ class FavoriteBatchDownloadActivity : BaseActivity() {
 
         /** -1 = 跟随播放器设置（不写死成具体档位） */
         private const val QN_FOLLOW = -1
-
-        /** 扫描档位时用的请求清晰度：最低档，只要 accept_quality 列表，不需要高码率流 */
-        private const val LOW_QUALITY_QN = 16
 
         /** DownloadService 的下载类型字段：完整视频 */
         private const val DOWNLOAD_TYPE_VIDEO = "video"

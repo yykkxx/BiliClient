@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「受保护的 WiFi」提示页文案（v5.3.4 实验室功能，需求 8）。
+  单独一个文件而不是塞进 strings.xml：本功能的文案会随用户反馈调整，
+  独立文件便于整块替换，也不会与其它需求的改动互相冲突。
+-->
+<resources>
+    <string name="wifi_guard_title">已连接到受保护的 WiFi</string>
+    <string name="wifi_guard_unknown_ssid">当前 WiFi：（系统未提供名称）</string>
+    <string name="wifi_guard_current_ssid">当前 WiFi：%1$s</string>
+    <string name="wifi_guard_desc">这个 WiFi 在你的「受保护」列表里。为了避免在这里产生任何访问记录，应用已停止全部网络请求 —— 现在所有页面都不会联网。</string>
+    <string name="wifi_guard_continue">继续（10 分钟内联网）</string>
+    <string name="wifi_guard_exit">退出应用</string>
+    <string name="wifi_guard_hint">点「继续」后会联网 10 分钟，之后自动恢复拦截。断开或切换 WiFi 也会恢复拦截。想改列表请到「设置 → 实验室」。</string>
+
+    <!-- 实验室设置项 -->
+    <string name="lab_wifi_guard_title">特定 WiFi 下不使用网络</string>
+    <string name="lab_wifi_guard_desc">打开后，连上下面填写的 WiFi 时应用不会发出任何网络请求，而是先弹出提示页；点「继续」才会联网 10 分钟。\n用途：在学校/公司等不希望留下访问记录的 WiFi 上使用。\n注意：需要授予定位权限才能读到 WiFi 名称；读不到名称时不会拦截。</string>
+    <string name="lab_wifi_guard_edit">填写受保护的 WiFi 名称</string>
+    <string name="lab_wifi_guard_edit_desc">每行一个名称（也可以直接用逗号分隔）。名称要与系统显示的一致，区分大小写以外的差异会被忽略。</string>
+    <string name="lab_wifi_guard_empty">还没有填写任何 WiFi 名称</string>
+</resources>

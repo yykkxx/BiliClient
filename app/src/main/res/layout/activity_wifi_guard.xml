@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「受保护的 WiFi」提示页（v5.3.4 实验室功能，需求 8）。
+
+  结构与 activity_day_type.xml 保持同一套语言：整页居中、两个大按钮、
+  一句说明 + 一行灰色小字。这两页都是「被拦在门外」的模态告知，
+  用同一套布局语言能让用户立刻认出"这是同一个应用在做同一类事"。
+
+  为什么不用 Dialog：
+  Dialog 在圆屏上会被裁切（本项目反复踩过的坑），而且本页需要
+  「不能返回、只能二选一」的强模态语义，全屏 Activity 更合适。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingHorizontal="14dp"
+    tools:context=".activity.WifiGuardActivity">
+
+    <TextView
+        android:id="@+id/wifi_guard_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="2"
+        android:text="@string/wifi_guard_title"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <!-- 当前命中的 SSID：明确告诉用户"是这个网络"，否则会觉得应用无故断网 -->
+    <TextView
+        android:id="@+id/wifi_guard_ssid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:maxLines="2"
+        android:textColor="@color/tm2_level_yellow"
+        android:textSize="14sp"
+        tools:text="当前 WiFi：School-WiFi" />
+
+    <TextView
+        android:id="@+id/wifi_guard_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:alpha="0.85"
+        android:gravity="center"
+        android:maxLines="4"
+        android:text="@string/wifi_guard_desc"
+        android:textSize="12sp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/wifi_guard_continue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:minHeight="52dp"
+        android:text="@string/wifi_guard_continue"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:cornerRadius="10dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/wifi_guard_exit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:minHeight="48dp"
+        android:text="@string/wifi_guard_exit"
+        android:textSize="14sp"
+        app:cornerRadius="10dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:alpha="0.55"
+        android:gravity="center"
+        android:maxLines="3"
+        android:text="@string/wifi_guard_hint"
+        android:textSize="10sp" />
+
+</LinearLayout>

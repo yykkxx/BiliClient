@@ -232,33 +232,61 @@ object TimePrefs {
         editor.apply()
     }
 
-    /** 读布尔；偏好未就绪时返回 [def] */
+    /**
+     * 读布尔；偏好未就绪时返回 [def]。
+     *
+     * ## v5.3.4：为什么要 try/catch
+     * `SharedPreferences.getBoolean` 在**键存的是别的类型**时会抛
+     * `ClassCastException`（`SharedPreferencesImpl` 内部直接强转），不是返回默认值。
+     * 触发条件真实存在：旧版本/手工改过的偏好里同一个键可能是 String 或 Int，
+     * 而 `tm2_*` 这套键在 v5.2.1 删旧实现时**刻意不迁移**（见类注释「与旧键的关系」），
+     * 于是「同名前缀、不同历史类型」这种脏数据完全可能在真机偏好里躺着。
+     *
+     * 后果的量级：这些读取都在**启动路径**上（`Gate.decide` → `DailyPlan.*` → `TimePrefs.*`），
+     * 抛出去就是打开 App 立刻闪退，而且用户自己完全无法自救（清数据才能恢复）。
+     * 对比之下「读不到就用默认值」最坏只是配额按默认 120 分钟算 —— 代价完全不对等。
+     *
+     * 所以四个类型化读取统一兜住 CCE，命中时打一条日志并返回默认值。
+     */
     @JvmStatic
-    fun getBool(key: String, def: Boolean): Boolean = prefs()?.getBoolean(key, def) ?: def
+    fun getBool(key: String, def: Boolean): Boolean = guardedRead(key, def) {
+        prefs()?.getBoolean(key, def) ?: def
+    }
 
     /** 写布尔 */
     @JvmStatic
     fun putBool(key: String, value: Boolean) = edit { it.putBoolean(key, value) }
 
-    /** 读整数；偏好未就绪时返回 [def] */
+    /** 读整数；偏好未就绪/类型不符时返回 [def]（理由见 [getBool]） */
     @JvmStatic
-    fun getInt(key: String, def: Int): Int = prefs()?.getInt(key, def) ?: def
+    fun getInt(key: String, def: Int): Int = guardedRead(key, def) {
+        prefs()?.getInt(key, def) ?: def
+    }
 
     /** 写整数 */
     @JvmStatic
     fun putInt(key: String, value: Int) = edit { it.putInt(key, value) }
 
-    /** 读长整数；偏好未就绪时返回 [def] */
+    /** 读长整数；偏好未就绪/类型不符时返回 [def]（理由见 [getBool]） */
     @JvmStatic
-    fun getLong(key: String, def: Long): Long = prefs()?.getLong(key, def) ?: def
+    fun getLong(key: String, def: Long): Long = guardedRead(key, def) {
+        prefs()?.getLong(key, def) ?: def
+    }
 
     /** 写长整数 */
     @JvmStatic
     fun putLong(key: String, value: Long) = edit { it.putLong(key, value) }
 
-    /** 读字符串；null 一律折成 [def]（偏好里存过 null 的历史脏数据不会扩散成 NPE） */
+    /**
+     * 读字符串；null 一律折成 [def]（偏好里存过 null 的历史脏数据不会扩散成 NPE）。
+     *
+     * 同样兜住 CCE：键若是被别的版本写成了非字符串类型，强转会在 `getString` 里抛
+     * （理由与后果见 [getBool]）。
+     */
     @JvmStatic
-    fun getText(key: String, def: String): String = prefs()?.getString(key, def) ?: def
+    fun getText(key: String, def: String): String = guardedRead(key, def) {
+        prefs()?.getString(key, def) ?: def
+    }
 
     /** 写字符串 */
     @JvmStatic
@@ -267,6 +295,21 @@ object TimePrefs {
     /** 删键（清空使用记录用） */
     @JvmStatic
     fun remove(key: String) = edit { it.remove(key) }
+
+    /**
+     * 类型化读取的统一兜底（[getBool] 的注释里写了为什么必须有它）。
+     *
+     * 只吞 `ClassCastException`：那正是「键的历史类型与本次读取不一致」这一种可预期情况。
+     * 其它异常（例如偏好被系统判为损坏）也一并降级 —— 时间管理的读路径不值得为任何一种
+     * 异常把用户挡在 App 外面，能读到多少算多少。
+     */
+    private inline fun <T> guardedRead(key: String, def: T, block: () -> T): T =
+        try {
+            block()
+        } catch (e: RuntimeException) {
+            android.util.Log.w(TAG, "pref read failed, fall back to default: $key", e)
+            def
+        }
 
     // ==========================================================================================
     // 原子多键写（跨键语义必须一起生效，否则会留下「键写了值没写」的半截状态）
@@ -428,4 +471,7 @@ object TimePrefs {
 
     /** 内部别名，让上面的调用点读起来短一点 */
     private fun dateKeyOf(wallMs: Long): String = dateKeyOfWall(wallMs)
+
+    /** 日志标签（[guardedRead] 兜住的读取失败靠它过滤） */
+    private const val TAG = "time-prefs"
 }

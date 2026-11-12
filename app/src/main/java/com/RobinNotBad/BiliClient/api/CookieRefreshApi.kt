@@ -150,6 +150,85 @@ object CookieRefreshApi {
             (result is RenewResult.ServerError && result.code == -101)
 
     /**
+     * 「本机没有 web `refresh_token`」时的**自举**尝试（v5.3.4 新增，登录成功后自动调用）。
+     *
+     * # 为什么不能并进 [renewWeb]
+     * [renewWeb] 在 token 为空时返回 [RenewResult.NoRefreshToken] 且**一个请求都不发**，
+     * 这是 tests/auth 的回归契约（`default_false_missing_web_token_no_cross_no_network`
+     * 断言 `Suite.requests.isEmpty()`）。自举必须在拿到 Cookie 之后**显式**发起，
+     * 所以它是独立入口，不改变 [renewWeb] 的既有语义。
+     *
+     * # 自举到底能拿到什么（不吹牛）
+     * B 站没有任何端点能「凭空签发」web refresh_token（v5.3.3 穷举 10 类 + 本轮再否定 6 个，
+     * 见 notes/auth_refresh_v534.md §1.6）。唯一还可能存在 token 的通道是
+     * `correspond/1/<path>` 页的 `#1-value` —— 官方登录页经 iframe 把 web refresh_token
+     * 注入这个 DOM 节点，主站再把它存进 `localStorage["ac_time_value"]`。
+     * 我们既无 iframe 也无 localStorage，但只要**服务端**在该页里塞了值，就能捡到。
+     *
+     * 所以本函数做两件事，且**如实**报告结果：
+     * 1. `cookie/info` 确认登录态还活着（顺便拿 correspond 需要的 timestamp）；
+     * 2. 取 `correspond` 页 → 若 `#1-value` 有值，补进凭据槽 → **立刻**跑完整续期链路。
+     *
+     * 捡不到就返回 [RenewResult.NoRefreshToken]，**不谎称成功、也不把锅甩给用户**
+     * （文案指向「已尝试自举」+ 跨端修复/导入，见 strings_web_renew.xml）。
+     */
+    @JvmStatic
+    fun bootstrapMissingToken(): RenewResult {
+        if (!inFlight.compareAndSet(false, true)) return RenewResult.Busy
+        return try {
+            lastCheckElapsed.set(SystemClock.elapsedRealtime())
+            val snapshot = WebRenewalState.capture()
+            if (!WebRenewalState.isCurrent(snapshot)) return RenewResult.AccountChanged
+            when {
+                snapshot.mid <= 0L || snapshot.cookies.isBlank() -> RenewResult.NotNeeded
+                // 已经有 token：这次登录本来就不需要自举，直接走正常续期。
+                snapshot.refreshToken.isNotBlank() -> doRenewWeb(snapshot)
+                else -> probeCorrespondForToken(snapshot)
+            }
+        } catch (e: JSONException) {
+            Logu.w(TAG, "Web 自举响应格式异常：" + e.javaClass.simpleName)
+            RenewResult.NetworkError("响应格式异常")
+        } catch (e: IOException) {
+            Logu.w(TAG, "Web 自举网络异常：" + e.javaClass.simpleName)
+            RenewResult.NetworkError(e.javaClass.simpleName)
+        } catch (e: RuntimeException) {
+            Logu.w(TAG, "Web 自举异常：" + e.javaClass.simpleName)
+            RenewResult.NetworkError(e.javaClass.simpleName)
+        } finally {
+            inFlight.set(false)
+        }
+    }
+
+    /**
+     * 走 `cookie/info` → `correspond` 两步，尝试把 `#1-value` 里的 token 捡回来。
+     *
+     * 注意**不能用 [WebRenewalState.isCurrent] 判活**：捡到 token 时它会主动改写凭据槽，
+     * 快照里的 `refreshToken` 立刻就不等了（这是预期行为，不是切号）。这里只比较
+     * 「账号 + Cookie 有没有变」，见 [WebRenewalState.isSameLogin]。
+     */
+    private fun probeCorrespondForToken(snapshot: WebRenewalState.Snapshot): RenewResult {
+        val root = requestJson(PASSPORT + "cookie/info", snapshot.cookies)
+        val code = root.optInt("code", -1)
+        if (code != 0) return rejection(root)
+        val timestamp = root.optJSONObject("data")?.optLong("timestamp", 0L) ?: 0L
+        if (timestamp <= 0L) return RenewResult.ServerError(0, "缺少服务器时间戳")
+        val path = getCorrespondPath(timestamp)
+        if (path.isEmpty()) return RenewResult.NetworkError("RSA 加密失败")
+        // refreshCsrf 内部会读 #1-value 并调 adoptRefreshTokenIfMissing（槽为空才写）。
+        val csrf = refreshCsrf(path, snapshot.cookies)
+        val probed = WebRenewalState.capture()
+        if (!WebRenewalState.isSameLogin(snapshot, probed)) return RenewResult.AccountChanged
+        if (probed.refreshToken.isNotBlank()) {
+            Logu.d(TAG, "Web 自举成功取到 refresh_token，转入完整续期")
+            return doRenewWeb(probed)
+        }
+        // 取不到 refresh_csrf 是独立故障（换网络通常就好），不能和「没有 token」说成同一件事。
+        if (csrf.isBlank()) return RenewResult.ServerError(CODE_CORRESPOND_UNREACHABLE, "无法取得 Web refresh_csrf")
+        Logu.d(TAG, "Web 自举未取到 refresh_token（服务端该页未下发）")
+        return RenewResult.NoRefreshToken
+    }
+
+    /**
      * 借用同账号 HD/TV 的 refresh_token 修复 Web。
      *
      * F5：发 oauth2 **之前**再验一次快照。已实测：oauth2/refresh_token 成功会轮换借用端的

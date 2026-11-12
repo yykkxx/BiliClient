@@ -78,6 +78,16 @@ class TimeKeypadDialog(
     /** 已输入的内容（数字 / 冒号 / 空格），点"跳转"时交给 TimeInputParser 解析 */
     private val buffer = StringBuilder()
 
+    /**
+     * 「跳转」是否已经确认过（v5.3.4 的幂等闸门）。
+     *
+     * 为什么需要：[confirm] 里先 `dismiss()` 再 `onConfirm`，但 `dismiss()` 只是把
+     * 窗口收起，**已经在消息队列里的下一次点击不会消失**。手指连点两下「跳转」
+     * 就会 seek 两次、弹两个 toast；本版还给播放器挂了 `OnDismissListener` 收卡片，
+     * 重复触发会让这套收尾跑两遍。加一个布尔闸门比给调用方加去重简单得多。
+     */
+    private var confirmed = false
+
     /** 实时预览文本（"会跳转到 01:30"或"格式不对"），跟着 buffer 变 */
     private lateinit var preview: TextView
 
@@ -297,15 +307,22 @@ class TimeKeypadDialog(
     }
 
     private fun confirm() {
+        // 幂等：确认只算一次。手指在「跳转」上连点两下时，第一次 dismiss() 之后
+        // 第二次点击仍可能已经在队列里，重复回调会让播放器 seek + toast 两次。
+        // （v5.3.4 起 onConfirm 之外还挂了播放器的 onDismissed，重复触发的代价更明显）
+        if (confirmed) return
         val seconds = TimeInputParser.parse(buffer.toString())
         if (seconds < 0) {
             // 留在对话框里让用户改，而不是关掉再重开（手表上重开成本高）
             preview.text = "格式不对，按 : 分隔分秒"
             return
         }
+        confirmed = true
         var targetMs = seconds * 1000L
         if (targetMs < 0) targetMs = 0
         if (durationMs > 0 && targetMs > durationMs) targetMs = durationMs
+        // 先关自己再回调：调用方拿到回调时输入界面已经不在了（否则会出现
+        // 「seek 完对话框还盖着、要再点一次才消失」的一帧）
         dismiss()
         onConfirm(targetMs)
     }

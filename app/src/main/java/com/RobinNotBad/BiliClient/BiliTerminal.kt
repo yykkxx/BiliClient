@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.multidex.MultiDex
+import com.RobinNotBad.BiliClient.activity.WifiGuardActivity
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
 import com.RobinNotBad.BiliClient.activity.user.info.UserInfoActivity
 import com.RobinNotBad.BiliClient.api.CookieRefreshApi
@@ -19,6 +20,7 @@ import com.RobinNotBad.BiliClient.util.CenterThreadPool
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.TerminalContext
+import com.RobinNotBad.BiliClient.util.WifiGuard
 import com.RobinNotBad.BiliClient.time.UsageReminder
 import com.RobinNotBad.BiliClient.time.UsageTracker
 import java.lang.ref.WeakReference
@@ -81,8 +83,47 @@ class BiliTerminal : Application() {
             // 必须在 onCreate 里注册（而不是更晚）：要覆盖整个进程生命周期的第一个 Activity。
             registerActivityLifecycleCallbacks(ForegroundUsageTracker())
 
+            // v5.3.4 实验室功能（需求 8）：受保护 WiFi 守卫的 UI 挂载点。
+            // WifiGuard 只在网络线程做判定（不许碰 UI），真正弹页面必须回主线程；
+            // 这里把「被拦截」的回调接到一个主线程投递上。
+            installWifiGuardUi()
+
             // Web 续期由下面前台生命周期边沿立即触发，不再仅在进程创建时检查。
         }
+    }
+
+    /**
+     * 把 [WifiGuard.onBlocked] 接到主线程并拉起 [WifiGuardActivity]。
+     *
+     * # 为什么必须切主线程
+     * `shouldBlock()` 是在 **OkHttp 的网络线程**里被 `executeGet/executePost` 调用的，
+     * 而 `startActivity` 只能从主线程发起（否则 `CalledFromWrongThreadException`，
+     * 这正是 v5.3.3 播放器崩溃的同型错误）。所以这里用 `Handler(Looper.getMainLooper())` 投递。
+     *
+     * # 为什么不用 CoroutineScopes.launchUi
+     * 这个回调可能在任何时刻被触发（包括 App 刚启动、协程调度器还没热起来），
+     * 而 `Handler` 是这里最轻、最不依赖初始化顺序的选择。守卫本身也不该依赖
+     * 业务层的协程作用域（那会形成 util → util 的隐式循环依赖）。
+     */
+    private fun installWifiGuardUi() {
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        // onBlocked 会在网络线程被调用；这里投递到主线程再 startActivity。
+        // 「已经在主线程就直接执行」的分支省掉了 —— 网络线程必然不是主线程，
+        // 而多一条分支就多一处可能写错的地方。
+        WifiGuard.onBlocked = {
+            mainHandler.post {
+                try {
+                    // 用 Application 上下文启动（此时可能一个 Activity 都没有）
+                    WifiGuardActivity.launch(this)
+                } catch (e: Throwable) {
+                    // 守卫页面拉不起来时**不能抛**：那会把网络线程一起带走。
+                    // 此时请求仍被拦截（shouldBlock 已返回 true），只是用户看不到提示页 ——
+                    // 退化为"静默断网"，比崩溃好。
+                    android.util.Log.w("wifi-guard", "拉起 WiFi 守卫页面失败：" + e.javaClass.simpleName)
+                }
+            }
+        }
+        // onUserContinued 不需要挂 UI 回调：放行后页面自己就 finish 了。
     }
 
     /**

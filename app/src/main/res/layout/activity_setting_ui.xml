@@ -100,6 +100,44 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
                         android:text="选择主题色" />
+
+                    <!-- v5.3.4：主题色生效范围（三项，默认全开 = 与旧版行为一致） -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="8dp"
+                        android:alpha="0.15"
+                        android:background="@color/textwhite" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:alpha="0.8"
+                        android:text="下面三项决定主题色染到哪些地方。默认全部打开，与旧版本观感一致；关掉只是收窄范围，不影响主题色本身。"
+                        android:textSize="10sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/theme_apply_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="卡片选中态描边跟随主题色"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/theme_apply_progress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="进度条颜色跟随主题色"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/theme_apply_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="链接与选中文字跟随主题色"
+                        android:textSize="12sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

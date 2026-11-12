@@ -242,6 +242,12 @@ object NetWorkUtil {
     /** 真正发起 GET 的原始实现（迁移层只在外面包一层，行为保持与历史版本一致） */
     @Throws(IOException::class)
     private fun executeGet(url: String?, headers: List<String>?, redirectHandler: RedirectHandler?): Response {
+        // v5.3.4 实验室功能（需求 8）：「特定 WiFi 下不发任何请求」的**唯一拦截点**。
+        // 放在这里而不是各个 Api 对象里：全 App 的 HTTP 最终都汇聚到 executeGet/executePost，
+        // 在这里拦一次就覆盖 100% 出站请求，不需要改几十个 API 文件。
+        // 抛专用异常而不是返回空响应：空响应会被上层误判成"服务端返回空"，
+        // 弹出「解析失败」这类误导提示，甚至触发重试风暴。
+        if (WifiGuard.shouldBlock(url)) throw WifiGuard.BlockedByWifiGuardException()
         Logu.d("get-url", maskSensitive(url ?: ""))
         val safeUrl = url ?: throw IOException("请求 URL 为空")
         val headerList = headers ?: emptyList()
@@ -318,6 +324,10 @@ object NetWorkUtil {
     /** 真正发起 POST 的原始实现（迁移层只在外面包一层，行为保持与历史版本一致） */
     @Throws(IOException::class)
     private fun executePost(url: String?, data: String?, headers: List<String>?, contentType: String?): Response {
+        // v5.3.4 实验室功能（需求 8）：POST 同样拦截。
+        // POST 都是写操作（投币/评论/收藏），在受保护 WiFi 上更要拦 ——
+        // 一次意外请求就可能在账号上留下记录。
+        if (WifiGuard.shouldBlock(url)) throw WifiGuard.BlockedByWifiGuardException()
         Logu.d("post-url", maskSensitive(url ?: ""))
         Logu.d("post-data", maskSensitive(data ?: ""))
         val safeUrl = url ?: throw IOException("请求 URL 为空")

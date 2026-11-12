@@ -20,6 +20,7 @@ import com.RobinNotBad.BiliClient.BiliTerminal
 import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.video.RecommendActivity
 import com.RobinNotBad.BiliClient.activity.base.InstanceActivity
+import com.RobinNotBad.BiliClient.api.CookieRefreshApi
 import com.RobinNotBad.BiliClient.api.CookiesApi
 import com.RobinNotBad.BiliClient.api.LoginApi
 import com.RobinNotBad.BiliClient.util.AccountStore
@@ -209,31 +210,55 @@ class QRLoginFragment : Fragment() {
     }
 
     /**
-     * 登录成功后立刻告诉用户「这次到底有没有拿到 refresh_token」。
+     * 登录成功后处理「这次到底有没有拿到 refresh_token」（v5.3.4 改写）。
      *
-     * # 为什么值得单独弹一条提示
-     * 用户本轮的原话是「我重新登录了 web 账号，但是仍然无法自己续期自己」——
-     * 在 v5.3.2 里，用户重扫完二维码看到的是「登录成功」，然后过几天才发现续期不能用，
-     * 而他**没有任何办法**回忆「上次扫码到底有没有拿到 token」。于是只能一遍遍重扫。
+     * # 为什么不能只报「没有」就完事
+     * 用户原话是「我重新登录了 web 账号，但是仍然无法自己续期自己」。
+     * v5.3.3 的做法是当场弹一句「B 站这次没有下发 refresh_token —— Web 无法自续」，
+     * 然后让用户自己去开跨端修复或导入网页版凭据。问题是：
      *
-     * 把这一刻的事实当场说出来，用户立刻就知道该不该指望自续：
-     * - 有 token → 什么都不用做，之后会自动续；
-     * - 没有 token → 马上知道要开「跨端修复」，不用等下一次续期失败才发现。
+     * 1. 那句话把**服务端的未知**说成了**确定的结论**（我们并没有真扫过码验证过回包）；
+     * 2. 它**没有尝试任何补救**就宣布失败 —— 而 `correspond` 页的 `#1-value` 是官方
+     *    把 web refresh_token 交给主站的 DOM 通道（notes/web_renew_v533.md §6.2），
+     *    这条通道不需要用户做任何事，值得自动试一次；
+     * 3. 「请重新登录」这个建议对「新登录页根本不下发」的场景是死循环。
      *
-     * # 实测背景（notes/web_renew_v533.md §6）
-     * B 站已把扫码登录页从 `passport.bilibili.com` 换到 `account.bilibili.com` 的新 H5 页，
-     * 新登录页前端代码里 `refresh_token` 出现 **0 次**。因此「没有 token」很可能是服务端行为，
-     * 而不是本 App 的解析问题 —— 这种情况下再让用户「重新扫码」只会无限循环，必须改口。
+     * # 现在的行为
+     * - 取到 token（任意来源）→ 直接说拿到多少位；
+     * - 没取到 → 自动跑一次 [CookieRefreshApi.bootstrapMissingToken]（后台线程），
+     *   按**实际结果**说话：捡到了就说已恢复自续，没捡到就说清楚「已尝试，仍没有」，
+     *   并把下一步收窄成两条可执行的（跨端修复 / 导入网页版凭据）。
      *
-     * 只判断**长度**，绝不读取/打印内容。
+     * 只读**长度**，绝不读取/打印 token 内容。
      */
-    private fun reportRefreshTokenPresence(refreshToken: String) {
-        val message = if (refreshToken.isBlank()) {
-            getString(R.string.web_renew_login_no_token)
-        } else {
-            getString(R.string.web_renew_login_has_token, refreshToken.length)
+    private fun reportRefreshTokenPresence(payload: LoginApi.WebLoginPayload) {
+        if (payload.refreshToken.isNotBlank()) {
+            CoroutineScopes.launchUi {
+                MsgUtil.showMsgLong(getString(R.string.web_renew_login_has_token, payload.refreshToken.length))
+            }
+            return
         }
-        CoroutineScopes.launchUi { MsgUtil.showMsgLong(message) }
+        // 没有 token：先在后台试一次自举，再按结果提示（失败不抛、不影响已完成的登录）。
+        CoroutineScopes.launchIo {
+            val result = try {
+                CookieRefreshApi.bootstrapMissingToken()
+            } catch (e: RuntimeException) {
+                Logu.w("web-renewal", "登录后自举异常：" + e.javaClass.simpleName)
+                CookieRefreshApi.RenewResult.NetworkError(e.javaClass.simpleName)
+            }
+            val text = when (result) {
+                is CookieRefreshApi.RenewResult.Success, is CookieRefreshApi.RenewResult.CrossPortSuccess ->
+                    getString(R.string.web_renew_login_bootstrap_ok, WebRenewalState.refreshTokenLength())
+                is CookieRefreshApi.RenewResult.NoRefreshToken ->
+                    getString(R.string.web_renew_login_bootstrap_none)
+                is CookieRefreshApi.RenewResult.TokenExpired ->
+                    getString(R.string.web_renew_login_bootstrap_expired)
+                is CookieRefreshApi.RenewResult.ServerError ->
+                    getString(R.string.web_renew_login_bootstrap_error, result.code)
+                else -> getString(R.string.web_renew_login_bootstrap_failed)
+            }
+            CoroutineScopes.launchUi { MsgUtil.showMsgLong(text) }
+        }
     }
 
     fun startLoginDetect() {
@@ -266,19 +291,31 @@ class QRLoginFragment : Fragment() {
                         0 -> {
                             this.cancel()
                             CenterThreadPool.runOnUiThread { scanStat!!.text = "正在处理登录……" } // quality-allow
-                            val cookies = SharedPreferencesUtil.getString(SharedPreferencesUtil.cookies, "") ?: ""
+                            val data = loginJson.getJSONObject("data")
+                            // v5.3.4：**先把 data.url 走完，再读 Cookie**。
+                            // 新式 crossDomain 形态下 Cookie 只在 follow 它的 Set-Cookie 里，
+                            // 旧顺序（先读 Cookie 再 follow）会把本次登录的 Cookie 整个漏掉，
+                            // 账号槽写进去的还是上一份。见 LoginApi.followLoginUrl 注释。
+                            val cookies = LoginApi.followLoginUrl(data.optString("url", ""))
+                            val payload = LoginApi.extractWebLoginPayload(data, cookies)
+                            val effectiveCookies = payload.cookies
                             // web 扫码回包只带 Cookie，mid/csrf 从 Cookie 里解析（v5.1.5 起交给 AccountStore
                             // 统一写激活槽位 + 该账号自己的 account_mgmt_web_<mid>_* 槽位，支持同端口多账号）。
-                            val mid = NetWorkUtil.getInfoFromCookie("DedeUserID", cookies).trim().toLongOrNull() ?: 0L
-                            val csrf = NetWorkUtil.getInfoFromCookie("bili_jct", cookies)
-                            val refreshToken = loginJson.getJSONObject("data").optString("refresh_token", "")
+                            val mid = NetWorkUtil.getInfoFromCookie("DedeUserID", effectiveCookies).trim().toLongOrNull() ?: 0L
+                            val csrf = NetWorkUtil.getInfoFromCookie("bili_jct", effectiveCookies)
 
-                            AccountStore.loginWeb(mid, cookies, csrf, refreshToken, null, null)
-                            reportRefreshTokenPresence(refreshToken)
+                            if (mid > 0L) {
+                                AccountStore.loginWeb(mid, effectiveCookies, csrf, payload.refreshToken, null, null)
+                            } else {
+                                // 拿不到 DedeUserID 说明这次回包既没 Set-Cookie 也没 URL 凭据，
+                                // 不写半个账号（宁可不登录，也不制造 mid<=0 的半死状态）。
+                                Logu.w("debug-login", "登录回包未取到 DedeUserID，未写入账号槽")
+                            }
+                            reportRefreshTokenPresence(payload)
 
                             SharedPreferencesUtil.putBoolean(SharedPreferencesUtil.cookie_refresh, true)
 
-                            Logu.d("debug-login", "Web 登录凭据已保存（不输出内容）")
+                            Logu.d("debug-login", "Web 登录凭据已保存（不输出内容），token 来源=" + payload.tokenSource)
 
                             val instance = BiliTerminal.getInstanceActivityOnTop()
                             if (instance != null && !instance.isDestroyed()) instance.finish()
@@ -286,12 +323,6 @@ class QRLoginFragment : Fragment() {
                             NetWorkUtil.refreshHeaders()
 
                             LoginApi.requestSSOs()
-                            if (loginJson.getJSONObject("data").has("url")) {
-                                try {
-                                    NetWorkUtil.get(loginJson.getJSONObject("data").optString("url"))
-                                } catch (ignored: Throwable) {
-                                }
-                            }
 
                             startActivity(Intent(requireContext(), RecommendActivity::class.java))
 

@@ -46,7 +46,19 @@ object WebRenewalState {
         /** 已登录、有 `refresh_token`：能自续（token 是否已过期要真发一次才知道） */
         Ready,
 
-        /** 已登录但本地没有 `refresh_token`：自续协议**不可能**成功，只能重新登录或跨端修复 */
+        /**
+         * 已登录但本地没有 `refresh_token`（v5.3.4：**不再等于「没救了」**）。
+         *
+         * v5.3.3 把这个状态直接展示成「不能自续 → 请重新登录 / 请开跨端修复」，
+         * 等于在没有尝试任何补救的情况下把问题甩给用户。v5.3.4 改成：
+         * 登录成功后自动用现有 Cookie 自举一次（[com.RobinNotBad.BiliClient.api.CookieRefreshApi.bootstrapMissingToken]），
+         * 本状态只表示「本地没有 token，自续协议不可能成功」，**下一步由调用方按自举结果给出**。
+         *
+         * 为什么**不**在枚举里再分一档「Cookie 还在、可自举」：
+         * 这个区分在 UI 上没有可执行差异（两种情况都要先自举、失败后都指向跨端修复/导入），
+         * 却会让所有对 [SelfRenewalCapability] 做穷尽 `when` 的调用方（含 tests/auth 的回归契约）
+         * 全部要改 —— 收益不抵成本。可自举性由「mid 与 Cookie 是否齐全」在服务端侧自然决定。
+         */
         MissingToken
     }
 
@@ -67,6 +79,22 @@ object WebRenewalState {
 
     fun isCurrent(expected: Snapshot): Boolean = synchronized(AccountStore) {
         matches(capture(), expected)
+    }
+
+    /**
+     * 只比较「账号 + Cookie 身份」是否还是同一次登录，**忽略 `refreshToken`**（v5.3.4 新增）。
+     *
+     * # 为什么需要它
+     * [isCurrent] 逐字段比较四个值，含 `refreshToken`。这对「提交写入前确认没切号」是对的，
+     * 但自举流程恰恰会**主动改写** `refreshToken` 槽（`adoptRefreshTokenIfMissing`），
+     * 于是用 [isCurrent] 判活会把「刚捡到 token」误判成「账号被切走了」而丢弃结果。
+     *
+     * 这里只比较 `mid` 与 `credentialId`、`cookies` —— 它们变了才说明调用方要写的目标已经不同。
+     */
+    fun isSameLogin(expected: Snapshot, current: Snapshot): Boolean = synchronized(AccountStore) {
+        if (current.mid != expected.mid) return@synchronized false
+        if (current.credentialId != expected.credentialId) return@synchronized false
+        !current.cookies.isEmpty() && current.cookies == expected.cookies
     }
 
     /**

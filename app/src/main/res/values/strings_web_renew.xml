@@ -13,11 +13,16 @@
     <string name="web_renew_cross_enable">允许并开启</string>
     <string name="web_renew_status_login">Web 登录：已登录</string>
     <string name="web_renew_status_ready">自续能力：可以自续（已有 %1$d 位 refresh_token）</string>
-    <string name="web_renew_status_missing">自续能力：不能自续（本地没有 refresh_token）</string>
-    <string name="web_renew_status_missing_detail">B 站只在扫码登录成功那一刻下发 refresh_token，且没有任何接口能补发（实测 10 类候选全部否定）。若重新登录后这里仍是「不能自续」，说明 B 站新登录页已不再下发它 —— 请改用下面的跨端修复，或登录 bilibili.com 网页版后「导出登录凭据」再导入。</string>
+    <string name="web_renew_status_missing">自续能力：本地没有 refresh_token；登录成功后会先自动尝试一次自举</string>
+    <string name="web_renew_status_missing_detail">B 站只在扫码登录成功那一刻下发 refresh_token，且没有任何接口能补发（实测 16 类候选全部否定）。若重新登录后这里仍是「不能自续」，请改用下面的跨端修复，或登录 bilibili.com 网页版后「导出登录凭据」再导入。</string>
     <string name="web_renew_login_has_token">登录成功，已拿到 Web 续期凭据（%1$d 位），之后会自动续期</string>
-    <string name="web_renew_login_no_token">登录成功，但 B 站这次没有下发 refresh_token —— Web 无法自续。可在「设置 → 账号管理」打开同账号跨端修复，或改用网页版导出凭据导入</string>
-    <string name="web_renew_no_token_hint">本机这份 Web 登录没有 refresh_token。B 站只在扫码登录成功的那一刻下发它，丢了无法补发（实测 sso/list、Set-Cookie、GenWebTicket 全部不补）。可试：① 重新扫码登录；② 打开下面的「允许同账号跨端修复」，借同账号 HD/TV 端换一套新 Web Cookie。</string>
+    <string name="web_renew_login_bootstrap_ok">登录成功。本次回包没有直接给 refresh_token，但已用现有 Cookie 自举成功（%1$d 位），之后可以自动续期</string>
+    <string name="web_renew_login_bootstrap_none">登录成功。B 站这次既没在回包里下发 refresh_token，也没在续期页给出，且无法用现有 Cookie 自举（已实测多种补发途径均无效）。下一步二选一：① 设置 → 账号管理 → 打开「允许同账号跨端修复」；② 登录 bilibili.com 网页版后导出凭据再导入</string>
+    <string name="web_renew_login_bootstrap_expired">登录成功，但自举续期被 B 站拒绝（refresh_token 不可用）。请打开「允许同账号跨端修复」，或登录网页版后导出凭据导入</string>
+    <string name="web_renew_login_bootstrap_error">登录成功，但自举续期失败（服务端码 %1$d）。可稍后在账号管理里重试，或改用跨端修复</string>
+    <string name="web_renew_login_bootstrap_failed">登录成功，但自举续期因网络问题未完成。请稍后在账号管理里点「续期」重试</string>
+    <string name="web_renew_no_token_hint">本机这份 Web 登录没有 refresh_token，已尝试用现有 Cookie 自动自举但未取得（B 站没有任何接口能补发它，实测 16 类候选全部否定）。可执行：① 打开下面的「允许同账号跨端修复」，借同账号 HD/TV 端换一套新 Web Cookie；② 登录 bilibili.com 网页版后导出凭据再导入。重新扫码只有在 B 站再次下发 token 时才有用。</string>
+
     <string name="web_renew_token_rejected_hint">Web 续期被 B 站拒绝：这份 refresh_token 服务端已不认（实测 code -400/-500/-86032 都是同一个含义）。自续这条路已走不通，请重新扫码登录，或打开「允许同账号跨端修复」借同账号 HD/TV 端修复。</string>
     <string name="web_renew_correspond_hint">取不到 B 站下发的 refresh_csrf（续期页面没返回预期内容）。这通常是网络问题，与登录态无关，换网络或稍后重试即可，不用重新登录。</string>
 </resources>

@@ -389,6 +389,16 @@
             android:label="提示框"
             android:screenOrientation="locked"
             android:theme="@style/Theme.NoSwipe.AppCompat" />
+        <!-- v5.3.4（需求 8）：受保护 WiFi 的提示页。
+             用 Theme.NoSwipe.AppCompat：本页是强模态告知，侧滑退出会让用户
+             回到"所有请求静默失败"的界面，比明确告知糟糕得多。 -->
+        <activity
+            android:name=".activity.WifiGuardActivity"
+            android:exported="false"
+            android:label="受保护的 WiFi"
+            android:launchMode="singleTop"
+            android:screenOrientation="locked"
+            android:theme="@style/Theme.NoSwipe.AppCompat" />
         <activity
             android:name=".activity.InteractionDebugActivity"
             android:exported="false"

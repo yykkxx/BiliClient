@@ -62,10 +62,17 @@ class SettingUIActivity : BaseActivity() {
             // 主题色调入口（#10）
             val themeValue = findViewById<TextView>(R.id.theme_setting_value)
             themeValue.text = getString(R.string.desc_theme_color) + "\n当前：" + ThemeUtil.getColorName()
-            themeValue.setTextColor(ThemeUtil.getColor())
+            // 用 readableTextColor 而不是直接 getColor()：自定义色可能是深色，
+            // 直接当文字色会在黑底上几乎看不见（这是 v5.3.4 新增自定义色之后才出现的风险）
+            themeValue.setTextColor(ThemeUtil.readableTextColor(ThemeUtil.getColor()))
             findViewById<View>(R.id.theme_setting_btn).setOnClickListener { view ->
                 startActivity(Intent(this@SettingUIActivity, ThemeChooseActivity::class.java))
             }
+
+            // v5.3.4：主题色生效范围三项开关。默认 true = 与旧版行为完全一致。
+            bindThemeScopeSwitch(R.id.theme_apply_card, ThemeUtil.PREF_THEME_APPLY_CARD)
+            bindThemeScopeSwitch(R.id.theme_apply_progress, ThemeUtil.PREF_THEME_APPLY_PROGRESS)
+            bindThemeScopeSwitch(R.id.theme_apply_text, ThemeUtil.PREF_THEME_APPLY_TEXT)
 
             findViewById<View>(R.id.preview).setOnClickListener { view ->
                 save()
@@ -92,6 +99,22 @@ class SettingUIActivity : BaseActivity() {
             scrollView.isFocusable = true
             scrollView.isFocusableInTouchMode = true
             scrollView.requestFocus()
+        }
+    }
+
+    /**
+     * 绑定一个「主题色生效范围」开关。
+     *
+     * 默认值 `true`（与旧版行为一致），所以老用户升级后不会看到任何观感变化 ——
+     * 这是「不要破坏原有的功能」这条要求在主题功能上的具体做法。
+     */
+    private fun bindThemeScopeSwitch(id: Int, prefKey: String) {
+        val switch = findViewById<SwitchMaterial>(id) ?: return
+        switch.isChecked = SharedPreferencesUtil.getBoolean(prefKey, true)
+        switch.setOnCheckedChangeListener { _, isChecked ->
+            SharedPreferencesUtil.putBoolean(prefKey, isChecked)
+            // 立即重建本页让新范围生效，用户能马上看到区别
+            recreate()
         }
     }
 
