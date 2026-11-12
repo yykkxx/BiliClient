@@ -37,17 +37,14 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdk 30
         // versionCode 按「构建当天日期」规则，且必须**严格大于**上一版，否则老用户装不上
-        // （Android 拒绝同码/降级覆盖）。上一版 5.3.3 是 20261110，本轮取 20261112。
-        //   v5.3.4（本批 = 需求 1/2/3/4/5/8/9，需求 6/7 留到 v5.3.5）：
-        //   ① Web 登录 refresh_token：登录回包解析顺序修正 + 三路兜底 + 自举
-        //   ② 时间跳转：确认后连卡片带遮罩一起收起
-        //   ③ 上学日/休息日页崩溃：AsyncLayoutInflaterX 交付前判宿主存活 + cancel 真正生效
-        //   ④ 同时长按收藏+稍后再看 → 历史记录
-        //   ⑤ 主题色个性化：13 预设 + 自定义色 + Material 控件染色 + 生效范围三开关
-        //   ⑥ 实验室：特定 WiFi 下不发请求的守卫（唯一拦截点在 NetWorkUtil）
-        //   ⑦ 批量缓存清晰度：档位改走 DASH 链路（fnval=1 的列表是被截断的）+ 按钮列表
-        versionCode 20261112
-        versionName "5.3.4"
+        // （Android 拒绝同码/降级覆盖）。上一版 5.3.4 是 20261112，本轮取 20261113。
+        //   v5.3.5（本批 = 需求 6/7）：
+        //   ⑥ 短视频五项：双指放大、圆屏按钮按弦高动态列数、切换滑动动画、
+        //      信息流端点可选（自动/短视频/APP推荐/网页推荐）、WiFi 预加载
+        //   ⑦ 缓冲体系：白条改为「真实可播窗口」（ijk 用 videoCachedDuration，
+        //      media3 用 bufferedPosition）+ 修掉 max-buffer-size 被无条件覆盖的真实 bug
+        versionCode 20261113
+        versionName "5.3.5"
 
         if (betaVer) {
             versionName += "-BETA" + betaVer

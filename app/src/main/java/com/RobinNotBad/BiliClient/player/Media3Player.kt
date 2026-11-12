@@ -835,6 +835,45 @@ class Media3Player(context: Context) : IMediaPlayer {
         return if (Looper.myLooper() == mainLooper) clampDuration(p.duration) else mirrorDurationMs
     }
 
+    /**
+     * 「真实可播到哪里」—— 毫秒位置，0 表示拿不到（进度条据此决定是否画副进度）。
+     *
+     * # 为什么不能直接用 OnBufferingUpdate 的 percent（v5.3.4 需求7 的核心修法）
+     * 本项目「灰色进度条上的白条」原来完全由 `IMediaPlayer.OnBufferingUpdateListener`
+     * 的 `percent` 驱动（`PlayerActivity` 里 `setSecondaryProgress(percent * video_all / 100)`）。
+     * 但两条内核的 `percent` **语义完全不同**：
+     *
+     * | 内核 | percent 从哪来 | 实际含义 |
+     * | --- | --- | --- |
+     * | ijk | ffmpeg `OnBufferingUpdate` | **已下载字节 / 总字节**（整片口径，与播放位置无关） |
+     * | media3 | 适配器里用 `bufferedPercentage` 模拟 | `bufferedPosition / duration`（可播窗口尾部） |
+     *
+     * ijk 那一列正是用户报障的根源：**seek 之后**（尤其 M3U8/分片流、或服务端支持 range 时）
+     * ffmpeg 重新从新位置拉流，"已下载字节"并不会回退，于是白条可能显示"后面很长一段都有"，
+     * 而实际上**从当前位置往后**只有很短一段可播 —— 用户看到的就是
+     * 「明明有白条，但播一会卡一会」。
+     *
+     * # media3 的实现
+     * `bufferedPosition` 就是"已缓冲到的绝对位置"，与播放位置配合正好表达可播窗口，
+     * 这就是它原本就正确的语义（`DefaultLoadControl` 会持续把这个值推到 minBuffer 之后）。
+     * 这里直接返回它，让两条内核对外**统一**成同一个语义。
+     *
+     * 注意：`bufferedPosition` 只在主线程稳定（media3 的 Player 是单线程对象），
+     * 后台线程读到的是最后一次镜像值（由 ticker 每 500ms 刷新），精度够进度条用。
+     */
+    fun getBufferedEndMs(): Long {
+        val p = player ?: return mirrorBufferedPositionMs
+        return if (Looper.myLooper() == mainLooper) {
+            p.bufferedPosition.coerceAtLeast(0L)
+        } else {
+            mirrorBufferedPositionMs
+        }
+    }
+
+    /** 后台线程可读的 bufferedPosition 镜像（由 [ticker] 每 500ms 刷新） */
+    @Volatile
+    private var mirrorBufferedPositionMs = 0L
+
     override fun isPlaying(): Boolean {
         val p = player ?: return mirrorPlaying
         return if (Looper.myLooper() == mainLooper) p.isPlaying else mirrorPlaying
@@ -1389,6 +1428,7 @@ class Media3Player(context: Context) : IMediaPlayer {
             if (p != null) {
                 refreshPositionMirror(p)
                 mirrorDurationMs = clampDuration(p.duration)
+                mirrorBufferedPositionMs = p.bufferedPosition.coerceAtLeast(0L)
                 mirrorPlaying = p.isPlaying
                 val state = p.playbackState
                 if (state == Player.STATE_READY || state == Player.STATE_BUFFERING) {

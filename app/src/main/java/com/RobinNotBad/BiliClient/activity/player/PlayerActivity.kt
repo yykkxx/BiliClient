@@ -1024,6 +1024,70 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         }
     }
 
+    /**
+     * 刷新「副进度」（灰条上的白条）= **真实可播窗口**（v5.3.4，需求7）。
+     *
+     * # 用户报障与根因
+     * 「明明有白条（缓存部分），但是视频却一卡一卡，播放一会卡一会，但显示上是有缓存」。
+     *
+     * 原来白条完全由 `OnBufferingUpdate` 的 `percent` 驱动，而两条内核的 percent 语义不同：
+     * - **ijk**：ffmpeg 的「已下载字节 / 总字节」—— 是**整片口径**，与"从当前位置往后能播多久"无关。
+     *   seek 之后 ffmpeg 从新位置重新拉流，但"已下载字节"不会回退，
+     *   于是白条可能很长，而当前位置往后其实只有很短一段可播 → 播一会就卡。
+     * - **media3**：适配器里用 `bufferedPercentage` 模拟，那是 `bufferedPosition / duration`，
+     *   本来就是可播窗口 —— 两条内核对外语义**不一致**。
+     *
+     * # 现在的做法
+     * 统一用「可播到哪个位置」：`bufferedEnd`，再换算成进度条刻度。
+     * - media3：`bufferedPosition`（直接就是可播窗口尾部）；
+     * - ijk：`getVideoCachedDuration()`（"从当前位置往后已缓存多少毫秒"），
+     *   与当前位置相加得到可播窗口尾部。拿不到（不是 IjkMediaPlayer / 属性未就绪）时，
+     *   **不画白条**，而不是画一条会误导人的。
+     *
+     * 由进度刷新循环每拍调用（不再依赖"某个回调恰好来了"），
+     * 这样白条与播放进度是同一个时间基准，不会一个在动一个不动。
+     */
+    private fun refreshBufferedProgress(positionMs: Int) {
+        val bar = seekbar_progress ?: return
+        if (isLiveMode) return
+        val total = video_all
+        if (total <= 0) return
+
+        val bufferedEnd = bufferedEndMs(positionMs)
+        if (bufferedEnd <= 0L) {
+            // 拿不到可靠的可播窗口：清掉白条。
+            // 宁可"不显示"也不能"显示错的" —— 一条涨得很快却卡顿的白条会直接误导用户。
+            if (bar.secondaryProgress != 0) bar.setSecondaryProgress(0)
+            return
+        }
+        val clamped = bufferedEnd.coerceIn(0L, total.toLong()).toInt()
+        if (bar.secondaryProgress != clamped) bar.setSecondaryProgress(clamped)
+    }
+
+    /**
+     * 「从当前位置向后还能连续播到哪里」（毫秒绝对位置）。
+     *
+     * @return 0 = 拿不到（调用方据此决定不画白条）
+     */
+    private fun bufferedEndMs(positionMs: Int): Long {
+        val player = ijkPlayer ?: return 0L
+        // Media3 内核：适配器已把语义统一好，直接问它
+        val media3 = player as? com.RobinNotBad.BiliClient.player.Media3Player
+        if (media3 != null) {
+            return media3.getBufferedEndMs()
+        }
+        // ijk：getVideoCachedDuration() 是「当前播放位置往后已缓存的时长」，
+        // 加上当前位置才是可播窗口尾部。只有真正的 IjkMediaPlayer 才有这个 API。
+        val ijk = player as? tv.danmaku.ijk.media.player.IjkMediaPlayer ?: return 0L
+        return try {
+            val cachedMs = ijk.videoCachedDuration
+            if (cachedMs <= 0L) return 0L
+            positionMs + cachedMs
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
     private fun autohideReset() {
         layout_control!!.removeCallbacks(hidecon)
         layout_control!!.postDelayed(hidecon, 4000)
@@ -1130,10 +1194,32 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
         if (isOnlineVideo) {
             // 拉流策略（#11）：脉冲式=快速拉满缓冲→停→消耗到下限再拉；
             // 慢速持续=原行为（边播边平滑缓冲）
+            // v5.3.4（需求7）：**先算好最后一档 max-buffer-size，再统一设置一次**。
+            //
+            // ## 这里修掉了一个真实的覆盖 bug
+            // 旧代码的顺序是：脉冲式分支里设 `max-buffer-size = 40MB`，
+            // 紧接着下面那段无条件的 `setOption("max-buffer-size", 20MB / 5MB)` **把它覆盖掉**。
+            // ijk 的 setOption 是「后写生效」，所以脉冲式"一次拉满大缓冲"的设计**从来没生效过** ——
+            // 实际永远是 20MB（或低延迟档的 5MB）。
+            //
+            // 这正是用户报的「显示有缓存却播一会卡一会」的一条直接成因：
+            // 脉冲式本意是拉满 40MB 后停读、靠大缓冲扛过网络抖动；实际只有 20MB，
+            // 消耗到下限就得回读，弱网下每轮回读都可能卡一下。
+            //
+            // ## 现在的大小选择（顺序即优先级）
+            // 1. 低延迟优先（`player_low_latency`）→ 5MB：明确要低延迟，缓冲小是代价不是 bug；
+            // 2. 脉冲式 → 40MB：一次拉满再停读（配合下面的 min-frames）；
+            // 3. 其它 → 20MB：默认，足以跨越数秒网络抖动。
+            var maxBufferSize = if (SharedPreferencesUtil.getBoolean("player_low_latency", false)) {
+                5L * 1024 * 1024
+            } else {
+                20L * 1024 * 1024
+            }
+
             if (StreamPolicyManager.isPulse()) {
                 player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
                 // 大缓冲：一次多拉一些，随后解析线程停住，期间没有网络请求
-                player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 40L * 1024 * 1024) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
+                maxBufferSize = 40L * 1024 * 1024
                 // 缓冲的帧数下限：消耗到这个量之前不再读网络
                 player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 600L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
                 // 触底后立刻高速回填
@@ -1141,13 +1227,8 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
             } else {
                 player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L) // quality-allow 回退保留的旧播放器代码，调用点前已有判空
             }
-            // 缓冲区依据设备内存自适应：缓冲越足，网络抖动时越不容易卡住。
-            // 但缓冲过大反而增加内存压力与耗电，所以按档位区分。
-            player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size",
-                    (if (SharedPreferencesUtil.getBoolean("player_low_latency", false))
-                        5L * 1024 * 1024 // 低延迟优先，弱网更易卡
-                    else
-                        20L * 1024 * 1024)) // 默认：足以跨越数秒的网络抖动
+            // 只在最后设一次（避免被后面的赋值覆盖 —— 那就是上面修掉的 bug）
+            player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", maxBufferSize)
             player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT_WEB)
             Logu.v("设置ua")
         }
@@ -1551,7 +1632,11 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                     progress_str = StringUtil.toTime(video_all / 1000)
                 }
             }
-            seekbar_progress!!.setSecondaryProgress(percent * video_all / 100)
+            // v5.3.4（需求7）：**不再**用 percent 画白条，改为在进度刷新循环里
+            // 用「真实可播窗口」统一刷新（见 refreshBufferedProgress）。
+            // 原因：两条内核的 percent 语义不同，且 ijk 的 percent 是"整片已下载字节比"，
+            // 与"从当前位置往后还能播多久"无关 —— 那正是「明明有白条却一卡一卡」的根源。
+            // 这里保留监听只是为了上面的时长校准，白条一律走 refreshBufferedProgress。
         }
 
         if (isOnlineVideo || isLiveMode)
@@ -2048,6 +2133,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                             if (!isLiveMode)
                                 updateProgressText(position)
                             seekbar_progress!!.setProgress(position)
+                            refreshBufferedProgress(position)
                         }
                     }
                     return
@@ -2077,6 +2163,7 @@ class PlayerActivity : Activity(), IMediaPlayer.OnPreparedListener {
                         // 一直停在布局初始值 00:00/00:00，这就是"时间不动"的根因。
                         updateProgressText(position)
                         seekbar_progress!!.setProgress(position)
+                        refreshBufferedProgress(position)
                     }
                     // 避免每 250ms 都调用 setVisibility（会触发无谓的 requestLayout）
                     if (subtitleVisible) {

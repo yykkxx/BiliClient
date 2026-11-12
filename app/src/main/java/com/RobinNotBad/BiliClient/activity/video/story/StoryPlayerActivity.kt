@@ -9,9 +9,11 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -28,6 +30,7 @@ import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.ToolsUtil
+import com.RobinNotBad.BiliClient.util.WifiPreloadManager
 
 import master.flame.danmaku.controller.IDanmakuView
 
@@ -49,7 +52,7 @@ class StoryPlayerActivity : BaseActivity() {
     private var videoLayout: FrameLayout? = null
     private var surfaceView: SurfaceView? = null
     private var topBar: LinearLayout? = null
-    private var buttonsBar: LinearLayout? = null
+    private var buttonsBar: GridLayout? = null
     private var titleView: TextView? = null
     private var upnameView: TextView? = null
     private var loadingView: View? = null
@@ -133,6 +136,28 @@ class StoryPlayerActivity : BaseActivity() {
     private var downY = 0f
     private val longPressRunnable = Runnable { startLongPressSpeed() }
 
+    // ---------------- 缩放 / 平移（需求1：支持放大） ----------------
+
+    /** 双指缩放检测器（只在视频区域内生效） */
+    private var scaleDetector: ScaleGestureDetector? = null
+
+    /** 用户缩放倍数，1.0 = 原始大小，上限 [MAX_SCALE] */
+    private var videoScale = 1f
+
+    /** 缩放后允许的平移量（像素）：0 = 不能移动（此时 1x 画面正好铺满） */
+    private var maxPanX = 0f
+    private var maxPanY = 0f
+
+    /** 当前平移偏移（像素），已被 [maxPanX]/[maxPanY] 钳位 */
+    private var panX = 0f
+    private var panY = 0f
+
+    /** 是否正在双指缩放/平移：为 true 时上下滑切视频要让位给平移 */
+    private var scalingGesture = false
+
+    /** 一次手势里是否发生过缩放或平移（用于压制随后的单击/双击） */
+    private var gestureMoved = false
+
     // ==================== 生命周期 ====================
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -177,6 +202,14 @@ class StoryPlayerActivity : BaseActivity() {
         // 长按清晰度按钮 = 画面比例 / 旋转（不额外占按钮位置）
         qualityBtn!!.setOnLongClickListener {
             showDisplayDialog()
+            true
+        }
+        // v5.3.4（需求6 第四项）：长按标题 = 短视频设置弹层。
+        // 为什么不新加一个按钮：圆屏右侧按钮列已经挤到必须改两列（见 layoutRoundButtons），
+        // 再塞一个按钮只会让"点不准"更严重。长按标题是零占位的入口，
+        // 且与「长按播放=自动连播」「长按清晰度=画面比例」的手势语言一致。
+        titleView?.setOnLongClickListener {
+            showStorySettingsDialog()
             true
         }
 
@@ -419,6 +452,109 @@ class StoryPlayerActivity : BaseActivity() {
             p.rightMargin = (w * 0.12f).toInt()
             seekBar?.layoutParams = p
         }
+
+        // v5.3.4（需求6 第二项）：右侧按钮列按圆弦高度决定列数 —— 修 notes_story_proposal.md 的 O1
+        layoutRoundButtons(w, h)
+    }
+
+    /**
+     * 圆屏下按「弦高」决定右侧按钮列数（v5.3.4，需求6 第二项）。
+     *
+     * # 要解决的问题（notes_story_proposal.md 的 O1）
+     * 单列时 6 个按钮（4 个 34dp 图标 + 2 个 24dp 文字小按钮 + 5×8dp 间距）总高约 **224dp**。
+     * 而屏幕只有 466px/320dpi ≈ **233dp**。按钮列贴右（`layout_gravity=end|center_vertical`），
+     * 在那个 x 位置上，圆的**可用弦高只有约 130~140dp** ——
+     * 首尾按钮直接落到圆外，**看不见也点不到**。这是"圆屏适配"里最实际的 bug。
+     *
+     * # 为什么用「弦高」而不是拍一个 padding
+     * 圆的几何是确定的：在圆心为 (w/2, h/2)、半径 r = min(w,h)/2 的圆里，
+     * 距中心横向 |dx| 处的竖向可用高度 = 2 * √(r² − dx²)。
+     * 按钮列右边缘在 x ≈ w − insetEnd，取列中心的 dx 算弦高，
+     * 就能得到"这一列实际能占多高"。比手工试出来的魔法数字可靠，
+     * 换设备（不同屏尺寸/密度）也自动成立。
+     *
+     * # 列数的选择
+     * - 弦高装得下单列（≤ 弦高）→ 保持 1 列（非圆屏时的观感完全不变）；
+     * - 装不下 → 改 2 列（宽度够、高度减半），并按实际行数重算行间距。
+     *
+     * 2 列已经能把 224dp 压到约 120dp，落进 130~140dp 的弦高内。
+     * 3 列会挤到手指点不准（34dp 宽的按钮在 233dp 屏上已经不小，但 3 列会逼到 28dp 以下）。
+     */
+    private fun layoutRoundButtons(w: Int, h: Int) {
+        val grid = buttonsBar as? android.widget.GridLayout ?: return
+        if (w <= 0 || h <= 0) return
+        val buttonCount = grid.childCount
+        if (buttonCount <= 0) return
+
+        val singleColumnHeight = estimateSingleColumnHeight(grid, buttonCount)
+        val availableHeight = chordHeightAtColumn(w, h)
+        // 装不下单列就改两列（弦高按"列中心"算，见 chordHeightAtColumn 的注释）
+        val needColumns = if (availableHeight >= singleColumnHeight + dp(4f)) 1 else 2
+        grid.columnCount = needColumns
+        applyButtonMargins(grid, buttonCount, needColumns)
+
+        val rows = (buttonCount + needColumns - 1) / needColumns
+        Logu.d(
+            "story-round",
+            "弦高=" + availableHeight.toInt() + "px 单列需=" + singleColumnHeight +
+                "px 列数=" + needColumns + " 行数=" + rows
+        )
+    }
+
+    /** 屏幕密度换算（本类多处用到，抽出来避免每个函数内联一个局部 lambda） */
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
+
+    /**
+     * 估算「按钮列排成一列时」的总高度。
+     *
+     * 优先用子视图**已测量**的高度（最准）；尚未 layout 时按设计值兜底
+     * （前 4 个是 34dp 图标、后 2 个是 24dp 文字小按钮，与 activity_story_player.xml 一致）。
+     * 间距按 8dp × (n-1) 计入。
+     */
+    private fun estimateSingleColumnHeight(grid: android.widget.GridLayout, buttonCount: Int): Int {
+        var total = 0
+        for (i in 0 until buttonCount) {
+            val child = grid.getChildAt(i)
+            total += if (child.height > 0) child.height else dp(if (i < 4) 34f else 24f)
+        }
+        return total + dp(8f) * (buttonCount - 1)
+    }
+
+    /**
+     * 圆屏上「按钮列所在 x 位置」的可用竖向高度（弦高）。
+     *
+     * 几何：圆心 (w/2, h/2)，半径 r = min(w,h)/2。距圆心横向 dx 处的竖向可用高度 = 2·√(r² − dx²)。
+     * 按钮列贴右，列中心 x = w − 右边距 − 半个按钮宽（17dp ≈ 34dp/2）。
+     * dx 超出半径（整列都在圆外）时返回 0 —— 夹到 0 而不是让 `sqrt` 拿到负数。
+     *
+     * 为什么用几何而不是试出来的魔法数字：换设备/换密度都自动成立，
+     * 而魔法数字只能对某一台机器正确。
+     */
+    private fun chordHeightAtColumn(w: Int, h: Int): Float {
+        val radius = minOf(w, h) / 2f
+        val insetEnd = w * 0.10f   // 与 applyRoundInsets 里 buttonsBar 的右侧内边距一致
+        val columnCenterX = w - insetEnd - dp(17f)
+        val dx = columnCenterX - w / 2f
+        val chordSquared = radius * radius - dx * dx
+        return if (chordSquared > 0f) 2f * kotlin.math.sqrt(chordSquared) else 0f
+    }
+
+    /**
+     * 按列数重设按钮间距。
+     *
+     * GridLayout 的 `marginTop` **在第一行也生效**，所以不能靠 xml 里给每个按钮写 marginTop
+     * （那样第一行会凭空多出一段空隙，把整列往下推）。这里统一重设：
+     * 第一行不留上边距、其余行留 gap；两列时左列加右边距避免贴在一起。
+     */
+    private fun applyButtonMargins(grid: android.widget.GridLayout, buttonCount: Int, columns: Int) {
+        val gapDp = if (columns > 1) 4f else 8f
+        for (i in 0 until buttonCount) {
+            val child = grid.getChildAt(i)
+            val params = child.layoutParams as? android.widget.GridLayout.LayoutParams ?: continue
+            params.topMargin = if (i < columns) 0 else dp(gapDp)
+            params.rightMargin = if (columns > 1 && i % columns == 0) dp(4f) else 0
+            child.layoutParams = params
+        }
     }
 
     // ==================== 画面比例 ====================
@@ -462,6 +598,117 @@ class StoryPlayerActivity : BaseActivity() {
         lp.gravity = Gravity.CENTER
         surfaceView?.layoutParams = lp
         surfaceView?.rotation = userRotation.toFloat()
+    }
+
+    /**
+     * 短视频设置弹层（v5.3.4，需求6 第四项）。
+     *
+     * # 为什么要有这一层（而不是只靠设置页）
+     * 「API 端点可选择」是**用户在这个页面里调、也在这个页面里看到效果**的设置。
+     * 如果只能去「设置 → 实验室」改，用户切一次端点要退出播放页、翻三层设置、再回来 ——
+     * 而他其实只是想试试"换成 APP 推荐流内容是不是更好看"。
+     * 页内弹层让这件事变成两次点击。
+     *
+     * # 为什么用 AlertDialog + 按钮列表而不是 setSingleChoiceItems
+     * 圆屏上单选行太薄容易点错（这是需求9 的同一教训，见
+     * FavoriteBatchDownloadActivity.showQualityChoice 的注释）。
+     * 而且这里要同时放「端点」和「预加载开关」两类控件，单选行承载不了。
+     *
+     * # 内容
+     * 1. **端点选择**：自动 / 短视频接口 / APP 推荐流 / 网页推荐流（对应 [StoryApi.endpointIds]）；
+     * 2. **WiFi 预加载开关**：复用 WifiPreloadManager.PREF_WIFI_PRELOAD（与主播放器同一开关）。
+     */
+    private fun showStorySettingsDialog() {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+
+        val container = android.widget.LinearLayout(this)
+        container.orientation = android.widget.LinearLayout.VERTICAL
+        container.setPadding(dp(14), dp(4), dp(14), dp(8))
+
+        // ---- 端点 ----
+        val endpointTitle = TextView(this)
+        endpointTitle.text = "信息流端点"
+        endpointTitle.textSize = 13f
+        endpointTitle.alpha = 0.85f
+        container.addView(endpointTitle)
+
+        val currentEndpoint = StoryApi.endpoint()
+        for (id in StoryApi.endpointIds) {
+            val button = com.google.android.material.button.MaterialButton(this)
+            val isCurrent = id == currentEndpoint
+            button.text = (if (isCurrent) "✓ " else "") + StoryApi.endpointName(id)
+            button.textSize = 13f
+            button.isAllCaps = false
+            button.minHeight = dp(44)
+            val params = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.topMargin = dp(5)
+            button.layoutParams = params
+            button.setOnClickListener {
+                if (id == currentEndpoint) {
+                    dialogRef?.dismiss()
+                    return@setOnClickListener
+                }
+                SharedPreferencesUtil.putInt(StoryApi.PREF_STORY_ENDPOINT, id)
+                // 换端点 = 换内容源，必须清掉已加载的列表与直链缓存，
+                // 否则用户会在旧内容上继续划，看起来像"换了没用"。
+                storyList.clear()
+                synchronized(playCache) { playCache.clear() }
+                currentIndex = -1
+                currentCard = null
+                dialogRef?.dismiss()
+                showHint("已切换到「" + StoryApi.endpointName(id) + "」")
+                setLoading(true, "重新加载…")
+                loadMore { if (!destroyed && storyList.isNotEmpty()) switchTo(0) }
+            }
+            container.addView(button)
+        }
+
+        // ---- WiFi 预加载 ----
+        val preloadSwitch = com.google.android.material.switchmaterial.SwitchMaterial(this)
+        preloadSwitch.text = "WiFi 下预加载下一条"
+        preloadSwitch.textSize = 13f
+        preloadSwitch.isChecked = WifiPreloadManager.isEnabled()
+        val switchParams = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+        switchParams.topMargin = dp(10)
+        preloadSwitch.layoutParams = switchParams
+        preloadSwitch.setOnCheckedChangeListener { _, isChecked ->
+            SharedPreferencesUtil.putBoolean(WifiPreloadManager.PREF_WIFI_PRELOAD, isChecked)
+            // 打开时立刻预取当前的下一条，用户马上就能感受到效果（不用等下一轮播放）
+            if (isChecked) {
+                if (currentIndex + 1 < storyList.size) preloadNext(currentIndex + 1)
+                showHint("已开启 WiFi 预加载")
+            } else {
+                showHint("已关闭 WiFi 预加载")
+            }
+        }
+        container.addView(preloadSwitch)
+
+        // 说明：告诉用户预加载只在 WiFi 生效，避免他以为"开了但没效果"
+        val preloadDesc = TextView(this)
+        preloadDesc.text = "只在这个 WiFi 下预取；移动数据下不预取。与「设置 → 实验室」里的同名开关是同一个。"
+        preloadDesc.textSize = 10f
+        preloadDesc.alpha = 0.6f
+        preloadDesc.setPadding(0, dp(2), 0, 0)
+        container.addView(preloadDesc)
+
+        // 圆屏/小屏可滚动（档位多 + 开关 + 说明，固定高度必然裁切）
+        val scroller = com.RobinNotBad.BiliClient.ui.widget.RotaryScrollView(this)
+        scroller.layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        scroller.addView(container)
+
+        dialogRef = AlertDialog.Builder(this)
+            .setTitle("短视频设置")
+            .setView(scroller)
+            .setNegativeButton("关闭", null)
+            .create()
+        dialogRef?.show()
     }
 
     private fun showDisplayDialog() {
@@ -691,12 +938,61 @@ class StoryPlayerActivity : BaseActivity() {
 
     // ==================== 手势 ====================
 
+    /**
+     * 手势总表（需求1 之后，优先级从上到下）：
+     *
+     * 1. **双指缩放 / 缩放后平移**：缩放态下接管一切，此时**不做**上下滑切视频；
+     * 2. **双击**：先看是否处于缩放态 —— 缩放态 → 还原到 1x（平移归零）；
+     *    非缩放态 → 暂停/继续（= 旧行为）。
+     *    ⚠️ 与主播放器 `PlayerActivity.clickUI()` 的取舍**相反**：那边是「缩放还原
+     *    交给手势本身，双击无条件暂停」，因为主播放器有独立的缩放开关和更大的屏幕。
+     *    短视频在手表上双击的第一诉求是「把放大的画面收回来」，且缩放态下暂停
+     *    与还原叠在一起时用户无法区分自己触发了哪个，所以这里还原优先。
+     *    缩放态下想暂停：先双击还原（一次），再双击暂停（第二次）。
+     * 3. **单击**：显隐控制层（缩放态同样生效；缩放/平移过的手势不触发）；
+     * 4. **长按**：2x 倍速（缩放态下禁用，避免与平移冲突）；
+     * 5. **上下滑**：切上一个/下一个（缩放态下禁用，改为平移）。
+     */
     private fun initGesture() {
+        scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                if (destroyed) return false
+                scalingGesture = true
+                //缩放开始就把长按倍速与单击候选都取消掉
+                findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
+                return true
+            }
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                if (destroyed) return false
+                val target = (videoScale * detector.scaleFactor).coerceIn(MIN_SCALE, MAX_SCALE)
+                if (Math.abs(target - videoScale) < 0.001f) return true
+                videoScale = target
+                gestureMoved = true
+                applyScaleTransform()
+                return true
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                scalingGesture = false
+                //松手后如果缩回到 1x 附近就吸附回正，避免停在 1.02x 这种「看起来没放大但滑不动」的状态
+                if (videoScale < 1.05f) {
+                    videoScale = MIN_SCALE
+                    panX = 0f
+                    panY = 0f
+                    applyScaleTransform()
+                }
+                if (videoScale > 1f) showHint("已放大 " + String.format(java.util.Locale.US, "%.1f", videoScale) + "x，双击还原")
+            }
+        })
+
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             // compileSdk 34：onFling 的 e1（起始按下事件）在 API 34 里标成了 @Nullable，
             // Kotlin 覆写签名必须跟着改成可空，否则报 "overrides nothing"
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
                 val down = e1 ?: return false
+                //缩放态：上下滑改为平移画面，不切视频（见 initGesture 的优先级说明）
+                if (isZoomed()) return false
                 val dy = e2.y - down.y
                 val dx = e2.x - down.x
                 if (Math.abs(dy) > 90f && Math.abs(dy) > Math.abs(dx) * 2f) {
@@ -707,38 +1003,122 @@ class StoryPlayerActivity : BaseActivity() {
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                //缩放/平移过的手势不当作单击
+                if (gestureMoved) return false
                 setControlsVisible(!controlsVisible)
                 return true
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                //缩放态：双击 = 还原（优先于暂停，理由见 initGesture 注释）
+                if (isZoomed()) {
+                    resetZoom(animated = true)
+                    showHint("已还原")
+                    return true
+                }
                 togglePlay()
                 return true
             }
         })
 
-        findViewById<View>(R.id.story_root).setOnTouchListener { _, event ->
+        val root = findViewById<View>(R.id.story_root)
+        root.setOnTouchListener { _, event ->
+            scaleDetector?.onTouchEvent(event)
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.x
                     downY = event.y
-                    findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
-                    findViewById<View>(R.id.story_root).postDelayed(longPressRunnable, 500)
+                    gestureMoved = false
+                    //缩放态下不启动长按倍速：单指拖动此时是平移
+                    if (!isZoomed()) {
+                        root.removeCallbacks(longPressRunnable)
+                        root.postDelayed(longPressRunnable, 500)
+                    }
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    //第二根手指落下 = 进入缩放，取消长按
+                    root.removeCallbacks(longPressRunnable)
+                    endLongPressSpeed()
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (Math.abs(event.x - downX) > ToolsUtil.dp2px(12f) ||
                             Math.abs(event.y - downY) > ToolsUtil.dp2px(12f)) {
-                        findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
+                        root.removeCallbacks(longPressRunnable)
+                    }
+                    //缩放态下的单指拖动 = 平移
+                    if (isZoomed() && !scalingGesture && event.pointerCount == 1) {
+                        panBy(event.x - downX, event.y - downY)
+                        downX = event.x
+                        downY = event.y
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    findViewById<View>(R.id.story_root).removeCallbacks(longPressRunnable)
+                    root.removeCallbacks(longPressRunnable)
                     endLongPressSpeed()
+                    //平移过就把这次手势标记成「非点击」，避免收/开控制层
+                    if (isZoomed() && (Math.abs(panX) > 1f || Math.abs(panY) > 1f)) {
+                        gestureMoved = true
+                    }
                 }
             }
             gestureDetector?.onTouchEvent(event)
             true
         }
+    }
+
+    /** 当前是否处于放大状态 */
+    private fun isZoomed(): Boolean = videoScale > 1.001f
+
+    /**
+     * 应用缩放与平移。
+     *
+     * 用视图变换（scaleX/scaleY/translationX/translationY）而不是改 LayoutParams：
+     * 改尺寸会触发 Surface 的 surfaceChanged，ijkplayer 要重新配置解码器，
+     * 连续缩放会卡顿甚至黑屏。SurfaceView 自 API 21 起跟随父容器变换。
+     * minSdk 29，安全。
+     */
+    private fun applyScaleTransform() {
+        val container = videoLayout ?: return
+        //可平移范围 = 放大后超出容器的部分的一半（因为缩放以中心为基准）
+        maxPanX = container.width * (videoScale - 1f) / 2f
+        maxPanY = container.height * (videoScale - 1f) / 2f
+        panX = panX.coerceIn(-maxPanX, maxPanX)
+        panY = panY.coerceIn(-maxPanY, maxPanY)
+        container.scaleX = videoScale
+        container.scaleY = videoScale
+        container.translationX = panX
+        container.translationY = panY
+    }
+
+    /** 相对平移（dx/dy 是手指位移，画面要跟手所以取反） */
+    private fun panBy(dx: Float, dy: Float) {
+        if (maxPanX <= 0f && maxPanY <= 0f) return
+        panX = (panX - dx).coerceIn(-maxPanX, maxPanX)
+        panY = (panY - dy).coerceIn(-maxPanY, maxPanY)
+        videoLayout?.translationX = panX
+        videoLayout?.translationY = panY
+    }
+
+    /** 还原到 1x（[animated] 时用轻量视图动画过渡） */
+    private fun resetZoom(animated: Boolean) {
+        val container = videoLayout ?: return
+        videoScale = MIN_SCALE
+        panX = 0f
+        panY = 0f
+        maxPanX = 0f
+        maxPanY = 0f
+        if (!animated) {
+            container.scaleX = 1f
+            container.scaleY = 1f
+            container.translationX = 0f
+            container.translationY = 0f
+            return
+        }
+        container.animate()
+            .scaleX(1f).scaleY(1f)
+            .translationX(0f).translationY(0f)
+            .setDuration(ZOOM_ANIM_MS)
+            .start()
     }
 
     private fun setControlsVisible(visible: Boolean) {
@@ -821,7 +1201,24 @@ class StoryPlayerActivity : BaseActivity() {
     /** 上一次切视频的时间：手势连发时防抖，避免一次快速连滑触发多次取流 */
     private var lastSwitchAt = 0L
 
+    /**
+     * 切换动画进行中（需求6 第三项）。
+     *
+     * 动画期间必须拒掉新的切换请求：一次快速连滑会在 300ms 内连发多个 delta，
+     * 若每个都启动动画，画面会叠着滑、`currentIndex` 也会跳着前进，用户看到的是"穿了好几条"。
+     * 这个标志就是那道闸门（`switchRelative` 开头判它）。
+     */
+    private var switchAnimating = false
+
+    /** 当前打开的短视频设置弹层（切换端点后需要主动关闭它，见 [showStorySettingsDialog]） */
+    private var dialogRef: AlertDialog? = null
+
     private fun switchRelative(delta: Int) {
+        //动画/切换进行中：忽略新的切换请求（防止一次快速连滑穿好几条视频）
+        if (switchAnimating) {
+            Logu.d("story", "切换动画中，忽略切换请求 delta=" + delta)
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastSwitchAt < 300) return
         lastSwitchAt = now
@@ -840,13 +1237,58 @@ class StoryPlayerActivity : BaseActivity() {
             showHint("正在加载更多…")
             loadMore {
                 if (!destroyed) {
-                    if (currentIndex + 1 < storyList.size) switchTo(currentIndex + 1)
+                    if (currentIndex + 1 < storyList.size) animateSwitch(currentIndex + 1, 1)
                     else showHint("没有更多了")
                 }
             }
             return
         }
-        switchTo(next)
+        animateSwitch(next, if (delta > 0) 1 else -1)
+    }
+
+    /**
+     * 切换动画（需求3）：整层画面按方向滑出 → 换内容 → 从反方向滑回。
+     *
+     * 为什么用 FrameLayout 的 translationY + alpha，而不是 ViewPager/新依赖：
+     * - 视频层是 SurfaceView，不能像普通 View 那样做截屏过渡（Surface 内容是硬件合成的），
+     *   但整层 translationY 是视图变换，SurfaceView 会跟随（API 21+）；
+     * - 只做「滑出 + 滑入」两段，不加弹跳/回弹，轻量且不会拖慢起播；
+     * - 新视频的取流/首帧在滑出的同时已经开始（见 switchTo），
+     *   所以动画结束通常正好首帧就绪，观感是连续的。
+     *
+     * @param direction +1 = 下一个（画面向上滑出），-1 = 上一个（向下滑出）
+     */
+    private fun animateSwitch(index: Int, direction: Int) {
+        val container = videoLayout
+        if (container == null || destroyed) {
+            switchTo(index)
+            return
+        }
+        //缩放状态下切视频：先还原，否则新画面会带着上一支的缩放/平移
+        if (isZoomed()) resetZoom(animated = false)
+        switchAnimating = true
+        val distance = container.height.toFloat() * 0.28f
+        container.animate()
+            .translationY(-distance * direction)
+            .alpha(0.35f)
+            .setDuration(SWITCH_ANIM_OUT_MS)
+            .withEndAction {
+                if (destroyed) {
+                    switchAnimating = false
+                } else {
+                    //换内容
+                    switchTo(index)
+                    //从反方向就位后滑入
+                    container.translationY = distance * direction
+                    container.animate()
+                        .translationY(0f)
+                        .alpha(1f)
+                        .setDuration(SWITCH_ANIM_IN_MS)
+                        .withEndAction { switchAnimating = false }
+                        .start()
+                }
+            }
+            .start()
     }
 
     private fun switchTo(index: Int) {
@@ -956,6 +1398,18 @@ class StoryPlayerActivity : BaseActivity() {
 
     private fun preloadNext(nextIndex: Int) {
         if (nextIndex < 0 || nextIndex >= storyList.size) return
+        // v5.3.4（需求6 第五项：WiFi 预加载）
+        // 只在 **WiFi + 实验室开关打开** 时预取。移动数据下不预取的理由：
+        // 短视频是"划到哪看到哪"的场景，预取一条 4~8MB 在流量下是用户没同意的消费。
+        // 开关复用主播放器详情页的同一个键（WifiPreloadManager.PREF_WIFI_PRELOAD）——
+        // 用户心智是"我要预加载"，而不是"我要在详情页预加载"。两处共用同一个开关
+        // 让"开了就到处都会预取"这件事可预期。
+        //
+        // 注意：这里只拦 playCache 的**预取**，不拦正常播放。用户主动划到的视频
+        // 无论什么网络都必须能播 —— 那是他明确要求的动作，不属于"预加载"。
+        if (!WifiPreloadManager.isEnabled() || !WifiPreloadManager.isOnWifi()) {
+            return
+        }
         synchronized(playCache) {
             val cached = playCache[nextIndex]
             if (cached != null) {
@@ -1245,5 +1699,36 @@ class StoryPlayerActivity : BaseActivity() {
 
         /** 直链缓存有效期：超过就重新解析（B 站直链约 2 小时失效，留足余量） */
         private const val PLAY_URL_TTL_MS = 20 * 60 * 1000L
+
+        // ---------------- 缩放手势（需求6 第一项） ----------------
+
+        /** 原始大小。1.0x 是「适应屏幕/填满/拉伸」三档比例各自的基准，缩放是在其上的叠乘 */
+        private const val MIN_SCALE = 1.0f
+
+        /**
+         * 缩放上限。
+         *
+         * 4.0x 的选择依据：短视频多为竖屏 1080x1920，在 466px 宽的圆屏上
+         * 4 倍约等于"放大到一个局部细节"，再大就只剩马赛克（源本身没有更多信息）；
+         * 同时 4x 时平移范围仍在手指舒适区内（`maxPanX/Y` 按缩放后尺寸算）。
+         */
+        private const val MAX_SCALE = 4.0f
+
+        /** 双击还原/放大的过渡时长：短到"立刻响应"，长到不显得生硬 */
+        private const val ZOOM_ANIM_MS = 180L
+
+        // ---------------- 切换动画（需求6 第三项） ----------------
+
+        /**
+         * 滑出时长。
+         *
+         * 比常见 ViewPager 的 250~300ms 短：短视频是"连续刷"的场景，
+         * 单次切换太慢会明显拖累手感。130ms 足够让眼睛看到"方向"，
+         * 又不会挡住下一条的起播（取流在滑出同时已经开始）。
+         */
+        private const val SWITCH_ANIM_OUT_MS = 130L
+
+        /** 滑入时长：比滑出略长，收尾更柔和（人眼对"进入"比"离开"更敏感） */
+        private const val SWITCH_ANIM_IN_MS = 160L
     }
 }

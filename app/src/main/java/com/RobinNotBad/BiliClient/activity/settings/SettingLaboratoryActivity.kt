@@ -8,6 +8,7 @@ import com.RobinNotBad.BiliClient.R
 import com.RobinNotBad.BiliClient.activity.base.RefreshListActivity
 import com.RobinNotBad.BiliClient.adapter.SettingsAdapter
 import com.RobinNotBad.BiliClient.model.SettingSection
+import com.RobinNotBad.BiliClient.api.StoryApi
 import com.RobinNotBad.BiliClient.util.FileUtil
 import com.RobinNotBad.BiliClient.ui.widget.recycler.ListLayoutUtil
 import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
@@ -109,6 +110,16 @@ class SettingLaboratoryActivity : RefreshListActivity() {
                 getString(R.string.setting_lab_media_session), "false"))
         sectionList.add(SettingSection("switch", "互动视频调试", "player_interaction_debug",
                 getString(R.string.setting_lab_interaction_debug), "false"))
+        // 短视频信息流端点（v5.3.4，需求6 第四项）
+        // 页内也有入口（长按短视频页标题），这里再放一行是为了「想找的时候找得到」——
+        // 页内弹层是可发现性问题，设置页是完整性；两处读写同一个偏好键。
+        // labels 顺序必须与 StoryApi.endpointIds 一一对应，改那边记得同步改这里。
+        sectionList.add(SettingSection("multi_choose", "短视频信息流端点",
+                StoryApi.PREF_STORY_ENDPOINT,
+                "短视频页用哪个接口拉内容。\n「自动」= 老版本行为（短视频接口失败时自动降级推荐流）。\n选具体端点时只走那一条，失败会把原因显示在页面上（不静默换源，否则『我明明选了 X』无法排查）。\n切换后短视频页会重新加载内容。",
+                StoryApi.ENDPOINT_AUTO.toString(),
+                Pair(arrayOf("自动（失败降级）", "短视频接口", "APP 推荐流", "网页推荐流"),
+                        StoryApi.endpointIds)))
         // 时间跳转的输入方式（v5.3.0，#3/#4）：
         // 开着 = 播放器内自绘的屏幕数字键盘（v5.2.1 的默认行为，圆屏不弹系统键盘）；
         // 关掉 = 回退旧实现（EditText + 系统输入法，能打冒号，但输入法会把内容顶出圆屏）。

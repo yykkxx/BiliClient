@@ -7,7 +7,12 @@
     android:keepScreenOn="true"
     android:background="#000000">
 
-    <!-- 视频画面（SurfaceView：与主播放器同样的渲染路径，手表上比 TextureView 可靠） -->
+    <!-- 视频画面（SurfaceView：与主播放器同样的渲染路径，手表上比 TextureView 可靠）
+         v5.3.4：双指放大（需求1）走 story_video_layout 的 scaleX/scaleY + translationX/Y，
+         **不改 SurfaceView 的 LayoutParams** —— 改尺寸会触发 surfaceChanged，
+         ijkplayer 每次都要重新配置解码器，连续缩放时会严重卡顿甚至黑屏。
+         SurfaceView 自 API 21 起会跟随父容器的视图变换（SurfaceControl 带变换矩阵），
+         所以整层缩放是安全的；story_video_layout 因此保持 match_parent 不要动。 -->
     <FrameLayout
         android:id="@+id/story_video_layout"
         android:layout_width="match_parent"
@@ -83,14 +88,21 @@
             android:shadowDy="1" />
     </LinearLayout>
 
-    <!-- 右侧按钮列：播放 / 点赞 / 详情 / 倍速 / 清晰度 -->
-    <LinearLayout
+    <!-- 右侧按钮列：播放 / 点赞 / 详情 / 弹幕 / 倍速 / 清晰度
+         v5.3.4：由 LinearLayout（单列）改为 GridLayout，圆屏下由代码按「弦高」动态
+         把 columnCount 改成 2 —— 单列时总高 224dp，圆屏（466px/320dpi≈233dp）该 x
+         位置的可用弦高只有约 130~140dp，首尾按钮会落在圆外点不到（见
+         notes/notes_story_proposal.md 的 O1）。非圆屏保持单列，观感与旧版一致。
+         注意：GridLayout 的 layout_marginTop 在第一行也会生效，所以行间距由代码
+         统一重设（layoutRoundButtons），不要在下面依赖 marginTop。 -->
+    <GridLayout
         android:id="@+id/story_buttons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
+        android:columnCount="1"
         android:orientation="vertical"
-        android:gravity="center_horizontal"
+        android:useDefaultMargins="false"
         android:paddingEnd="3dp">
 
         <ImageView
@@ -105,7 +117,6 @@
             android:id="@+id/story_btn_like"
             android:layout_width="34dp"
             android:layout_height="34dp"
-            android:layout_marginTop="8dp"
             android:padding="7dp"
             android:src="@drawable/icon_like_0"
             android:background="#4D000000" />
@@ -114,7 +125,6 @@
             android:id="@+id/story_btn_detail"
             android:layout_width="34dp"
             android:layout_height="34dp"
-            android:layout_marginTop="8dp"
             android:padding="7dp"
             android:src="@drawable/icon_info"
             android:background="#4D000000" />
@@ -123,7 +133,6 @@
             android:id="@+id/story_btn_danmaku"
             android:layout_width="34dp"
             android:layout_height="34dp"
-            android:layout_marginTop="8dp"
             android:padding="7dp"
             android:src="@drawable/icon_danmaku"
             android:background="#4D000000" />
@@ -132,7 +141,6 @@
             android:id="@+id/story_btn_speed"
             android:layout_width="34dp"
             android:layout_height="24dp"
-            android:layout_marginTop="8dp"
             android:background="#4D000000"
             android:gravity="center"
             android:text="1.0x"
@@ -143,13 +151,12 @@
             android:id="@+id/story_btn_quality"
             android:layout_width="34dp"
             android:layout_height="24dp"
-            android:layout_marginTop="8dp"
             android:background="#4D000000"
             android:gravity="center"
             android:text="360P"
             android:textColor="#FFFFFF"
             android:textSize="9sp" />
-    </LinearLayout>
+    </GridLayout>
 
     <!-- 加载中 -->
     <LinearLayout

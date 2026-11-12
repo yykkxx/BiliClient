@@ -2,6 +2,7 @@ package com.RobinNotBad.BiliClient.api
 
 import com.RobinNotBad.BiliClient.util.Logu
 import com.RobinNotBad.BiliClient.util.NetWorkUtil
+import com.RobinNotBad.BiliClient.util.SharedPreferencesUtil
 import com.RobinNotBad.BiliClient.util.StringUtil
 
 import org.json.JSONArray
@@ -31,8 +32,53 @@ import java.util.TreeMap
 object StoryApi {
 
     private const val STORY_FEED_URL = "https://app.bilibili.com/x/v2/feed/index/story"
+    /** APP 端推荐流（与 PiliPlus `recommendListApp` 同一端点）：短视频接口不可用时的备选 */
+    private const val APP_RCMD_URL = "https://app.bilibili.com/x/v2/feed/index"
     private const val WEB_RCMD_URL = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd"
     private const val PLAYURL_URL = "https://api.bilibili.com/x/player/wbi/playurl"
+
+    // ------------------------ 端点策略（需求4：API 端点可选择） ------------------------
+
+    /** 偏好键：短视频信息流端点。默认 [ENDPOINT_AUTO] = 老版本行为，不破坏老用户 */
+    const val PREF_STORY_ENDPOINT = "story_endpoint"
+
+    /** 自动：短视频专用接口 → 失败降级推荐流（v5.3.3 及以前一直是这个行为） */
+    const val ENDPOINT_AUTO = 0
+
+    /** 只用短视频专用接口 /x/v2/feed/index/story */
+    const val ENDPOINT_STORY = 1
+
+    /** 只用 APP 端推荐流 app.bilibili.com/x/v2/feed/index */
+    const val ENDPOINT_APP_RCMD = 2
+
+    /** 只用网页端推荐流（wbi 签名，走 Cookie） */
+    const val ENDPOINT_WEB_RCMD = 3
+
+    /** 当前选择的端点 */
+    @JvmStatic
+    fun endpoint(): Int = SharedPreferencesUtil.getInt(PREF_STORY_ENDPOINT, ENDPOINT_AUTO)
+
+    /**
+     * 端点名称（设置项/页内弹层显示用）。
+     * 顺序与 [endpointIds] 一一对应，改这里记得同步改 `story_endpoint_*` 字符串资源。
+     */
+    @JvmStatic
+    fun endpointName(id: Int): String = when (id) {
+        ENDPOINT_STORY -> "短视频接口（个性化竖屏流）"
+        ENDPOINT_APP_RCMD -> "APP 推荐流（通用推荐）"
+        ENDPOINT_WEB_RCMD -> "网页推荐流（最稳，非个性化）"
+        else -> "自动（失败降级）"
+    }
+
+    /**
+     * 显式端点列表：只使用这一个端点，失败就报错（不做静默降级）。
+     *
+     * 为什么显式端点失败时不自动降级：用户明确选了「我要用 APP 推荐流」，
+     * 偷偷换成另一个端点会让「我明明选了 X，为什么内容不像 X」变成无法排查的问题。
+     * 失败时把原因显示到页面上，用户可以自己切回「自动」。
+     */
+    @JvmStatic
+    val endpointIds: IntArray = intArrayOf(ENDPOINT_AUTO, ENDPOINT_STORY, ENDPOINT_APP_RCMD, ENDPOINT_WEB_RCMD)
 
     // android 客户端密钥（与官方手机客户端一致，与 AppRcmdApi 手机身份相同）
     private const val APP_KEY = "1d8b6e7d45225436"
@@ -72,6 +118,8 @@ object StoryApi {
     class StoryFeedResult {
         @JvmField var fromFallback: Boolean = false
         @JvmField var warning: String = ""
+        /** 本批实际使用的端点（[ENDPOINT_AUTO] 时代表「自动链」） */
+        @JvmField var endpoint: Int = ENDPOINT_AUTO
     }
 
     /** 取流结果：url + 来源（pc/html5/dash）+ 清晰度 + 提示 */
@@ -89,15 +137,55 @@ object StoryApi {
 
     /**
      * 拉一刷短视频（每次返回新的一批，自带降级）。
-     * 先走短视频专用接口；失败时退回 web 推荐流；两者都失败才抛异常。
+     *
+     * 端点由设置项 [PREF_STORY_ENDPOINT] 决定（需求4）：
+     * - [ENDPOINT_AUTO]（默认，= v5.3.3 及以前的行为）：短视频专用接口 → 失败降级推荐流；
+     * - [ENDPOINT_STORY] / [ENDPOINT_APP_RCMD] / [ENDPOINT_WEB_RCMD]：只用指定端点，
+     *   失败直接报错（不静默换端点，理由见 [endpointIds] 注释）。
      */
     @JvmStatic
     @Throws(IOException::class)
     fun loadFeed(out: MutableList<StoryCard>): StoryFeedResult {
         val result = StoryFeedResult()
-        var storyError = ""
-        //短视频接口（/x/v2/feed/index/story）本身就是官方短视频流；
-        //它混有竖屏与少量横屏视频，都保留（横屏在大屏设备上同样能看）。
+        val chosen = endpoint()
+        result.endpoint = chosen
+
+        // 显式端点：只走一条路（失败就把原因抛给页面）
+        if (chosen != ENDPOINT_AUTO) {
+            fetchSingleEndpoint(chosen, out)
+            if (out.isNotEmpty()) return result
+            throw IOException(endpointName(chosen) + " 没有返回可播放内容")
+        }
+
+        // ---- 自动：短视频接口 ----
+        val storyError = StringBuilder()
+        if (tryStoryEndpoint(out, storyError)) return result
+
+        // ---- 自动降级：先试 APP 推荐流，再试网页推荐流 ----
+        if (tryFallbackEndpoint(out, storyError, isApp = true)) {
+            result.fromFallback = true
+            result.warning = "短视频接口不可用（" + storyError + "），已降级 APP 推荐流"
+            Logu.e("story", result.warning)
+            return result
+        }
+        if (tryFallbackEndpoint(out, storyError, isApp = false)) {
+            result.fromFallback = true
+            result.warning = "短视频接口不可用（" + storyError + "），已降级网页推荐流"
+            Logu.e("story", result.warning)
+            return result
+        }
+        throw IOException(storyError.toString())
+    }
+
+    /**
+     * 自动链第一步：反复拉短视频专用接口，直到凑够 [MIN_ITEMS] 条或没有新内容。
+     *
+     * @param errorSink 失败原因累积到这里（自动链最终报错时要把**整条链**的原因都告诉用户，
+     *                  只说"都失败了"没法排查）
+     * @return true = 已经拿到内容，调用方可以收工
+     */
+    @Throws(IOException::class)
+    private fun tryStoryEndpoint(out: MutableList<StoryCard>, errorSink: StringBuilder): Boolean {
         try {
             var guard = 0
             while (out.size < MIN_ITEMS && guard < MAX_STORY_ROUNDS) {
@@ -107,30 +195,67 @@ object StoryApi {
                 if (n <= 0) break
                 out.addAll(batch)
             }
-            if (out.isNotEmpty()) return result
-            storyError = "短视频接口没有返回可播放内容"
+            if (out.isNotEmpty()) return true
+            errorSink.append("短视频接口没有返回可播放内容")
         } catch (e: Exception) {
-            storyError = e.message ?: e.javaClass.simpleName
-            Logu.e("story", "短视频接口失败：" + storyError)
+            errorSink.append(e.message ?: e.javaClass.simpleName)
+            Logu.e("story", "短视频接口失败：" + errorSink)
             out.clear()
         }
+        return false
+    }
 
-        // 降级：推荐流（与推荐页同源，稳定性最高）
-        try {
-            val n = getFallbackFeed(out)
+    /**
+     * 自动链的降级步骤：APP 推荐流（[isApp] = true）或网页推荐流。
+     *
+     * 抽成一个函数而不是在 [loadFeed] 里复制两段 try/catch：
+     * 两个降级端点的处理**完全同构**（拉 → 判空 → 记错误），
+     * 写成两段不仅重复，还会让 loadFeed 的分支数超过 detekt 阈值。
+     *
+     * @return true = 拿到内容
+     */
+    @Throws(IOException::class)
+    private fun tryFallbackEndpoint(
+        out: MutableList<StoryCard>,
+        errorSink: StringBuilder,
+        isApp: Boolean
+    ): Boolean {
+        val label = if (isApp) "APP 推荐流" else "推荐流"
+        return try {
+            val n = if (isApp) getAppRcmdFeed(out) else getFallbackFeed(out)
             if (n > 0 && out.isNotEmpty()) {
-                result.fromFallback = true
-                result.warning = "短视频接口不可用（" + storyError + "），已临时使用推荐流"
-                Logu.e("story", result.warning)
-                return result
+                true
+            } else {
+                errorSink.append("；").append(label).append("也没有返回内容")
+                false
             }
-            storyError += "；推荐流也没有返回内容"
         } catch (e: Exception) {
-            storyError += "；推荐流回退失败：" + (e.message ?: e.javaClass.simpleName)
-            Logu.e("story", "推荐流回退失败：" + e.message)
+            errorSink.append("；").append(label).append("回退失败：")
+                .append(e.message ?: e.javaClass.simpleName)
+            Logu.e("story", label + "回退失败：" + e.message)
             out.clear()
+            false
         }
-        throw IOException(storyError)
+    }
+
+    /** 用户显式选择端点时：只调这一个（[ENDPOINT_AUTO] 不进来） */
+    @Throws(IOException::class)
+    private fun fetchSingleEndpoint(chosen: Int, out: MutableList<StoryCard>) {
+        when (chosen) {
+            ENDPOINT_STORY -> {
+                var guard = 0
+                while (out.size < MIN_ITEMS && guard < MAX_STORY_ROUNDS) {
+                    guard++
+                    val batch = ArrayList<StoryCard>()
+                    val n = getStoryFeed(batch)
+                    if (n <= 0) break
+                    out.addAll(batch)
+                }
+            }
+            ENDPOINT_APP_RCMD -> getAppRcmdFeed(out)
+            ENDPOINT_WEB_RCMD -> getFallbackFeed(out)
+            else -> throw IOException("未知端点：" + chosen)
+        }
     }
 
     /**
@@ -165,6 +290,12 @@ object StoryApi {
     }
 
     private fun requestStoryFeed(accessToken: String): JSONObject {
+        val form = appBaseForm(accessToken)
+        return NetWorkUtil.getJson(STORY_FEED_URL + form, appHeaders())
+    }
+
+    /** APP 端公共参数（短视频接口与 APP 推荐流共用同一套签名参数） */
+    private fun appBaseForm(accessToken: String): NetWorkUtil.FormData {
         val form = NetWorkUtil.FormData().setUrlParam(true)
             .put("appkey", APP_KEY)
             .put("build", BUILD)
@@ -194,19 +325,20 @@ object StoryApi {
             .put("statistics", APP_STATISTICS)
         if (accessToken.isNotEmpty()) form.put("access_key", accessToken)
         form.put("sign", sign(form))
-
-        val headers = arrayListOf(
-            "buvid", AppRcmdApi.getBuvid(),
-            "env", "prod",
-            "app-key", "android",
-            "User-Agent", APP_UA,
-            "fp_local", FP,
-            "fp_remote", FP,
-            "session_id", "11111111",
-            "bili-http-engine", "cronet"
-        )
-        return NetWorkUtil.getJson(STORY_FEED_URL + form, headers)
+        return form
     }
+
+    /** APP 端请求头（与官方手机客户端对齐，减少风控静默返回空列表） */
+    private fun appHeaders(): ArrayList<String> = arrayListOf(
+        "buvid", AppRcmdApi.getBuvid(),
+        "env", "prod",
+        "app-key", "android",
+        "User-Agent", APP_UA,
+        "fp_local", FP,
+        "fp_remote", FP,
+        "session_id", "11111111",
+        "bili-http-engine", "cronet"
+    )
 
     private fun parseStoryItems(items: JSONArray, out: MutableList<StoryCard>): Int {
         var added = 0
@@ -255,6 +387,111 @@ object StoryApi {
             added++
         }
         return added
+    }
+
+    /**
+     * APP 端推荐流：app.bilibili.com/x/v2/feed/index（需求4新增端点）。
+     *
+     * 与短视频接口的字段差异（都用真实凭据实测过，见 notes/story_v534.md）：
+     * - **卡片结构不同**：`goto` 是 `av`（不是 `vertical_av`），
+     *   标题/UP 名在 `args`（UP 名 `args.up_name`）而不是 `owner.name`；
+     * - **没有 `dimension`**（宽高未知，只能等播放器首帧回调），
+     * - **`player_args.duration` 单位不统一**：实测同一批里既有 68/320（秒），
+     *   也有 212033/32824（毫秒），见 [normalizeDurationSec]；
+     * - **含广告**：广告条目的标识是 **存在 `ad_info` 对象**（非 null），
+     *   实测字段 `resource/source/request_id/index/is_ad_loc/card_index/client_ip`，
+     *   其中 `is_ad_loc=true`。这里直接跳过，不做「凑数量」的兜底。
+     *
+     * @return 实际加入 out 的条数（跳过广告/无效项后；可能为 0）
+     */
+    @JvmStatic
+    @Throws(IOException::class, JSONException::class)
+    fun getAppRcmdFeed(out: MutableList<StoryCard>): Int {
+        val token = try {
+            AppRcmdApi.getAccessToken(AppRcmdApi.IDENTITY_PHONE)
+        } catch (e: Exception) {
+            ""
+        }
+        var json = NetWorkUtil.getJson(APP_RCMD_URL + appBaseForm(token), appHeaders())
+        var code = json.optInt("code", -1)
+        if (code != 0 && token.isNotEmpty()) {
+            Logu.e("story", "APP 推荐流返回 " + code + "，尝试匿名重试")
+            json = NetWorkUtil.getJson(APP_RCMD_URL + appBaseForm(""), appHeaders())
+            code = json.optInt("code", -1)
+        }
+        if (code != 0) {
+            throw IOException("APP 推荐流错误 " + code + "：" + json.optString("message", "未知错误"))
+        }
+        val data = json.optJSONObject("data") ?: throw IOException("APP 推荐流返回数据为空")
+        val items = data.optJSONArray("items") ?: JSONArray()
+        return parseAppRcmdItems(items, out)
+    }
+
+    /**
+     * 解析 APP 推荐流的一批 items。
+     *
+     * 单项解析抽到 [parseAppRcmdItem]：循环体里只剩一个 `continue`，
+     * 满足 detekt 的 LoopWithTooManyJumpStatements（默认阈值 1）。
+     */
+    private fun parseAppRcmdItems(items: JSONArray, out: MutableList<StoryCard>): Int {
+        var added = 0
+        for (i in 0 until items.length()) {
+            val card = parseAppRcmdItem(items.optJSONObject(i)) ?: continue
+            out.add(card)
+            added++
+        }
+        return added
+    }
+
+    /**
+     * 解析 APP 推荐流的单条 item；返回 null 表示要跳过（广告 / 非视频 / 缺 aid）。
+     *
+     * **广告过滤（实测依据，见 notes/story_v534.md）**：
+     * 5 轮采样共 44 条，其中 5 条带 `ad_info`，广告的唯一可靠标识就是
+     * **`ad_info` 键存在且非 null**（内部字段 `resource/source/request_id/index/
+     * is_ad_loc/card_index/client_ip`，`is_ad_loc=true`）。
+     * 不能靠 `goto`/`card_type` 判断 —— 实测广告与普通视频的 `goto` 都是 `av`、
+     * `card_type` 都是 `small_cover_v2`，两者完全一样。
+     * 这里宁可少几条也不放进广告：不做「数量不够就用广告凑」之类的兜底。
+     */
+    private fun parseAppRcmdItem(it: JSONObject?): StoryCard? {
+        if (it == null) return null
+        if (it.has("ad_info") && !it.isNull("ad_info")) return null
+        val args = it.optJSONObject("args")
+        val playerArgs = it.optJSONObject("player_args")
+        var aid = playerArgs?.optLong("aid", 0L) ?: 0L
+        if (aid <= 0) aid = args?.optLong("aid", 0L) ?: 0L
+        if (aid <= 0) aid = it.optLong("param", 0L)
+        if (aid <= 0) return null
+
+        val card = StoryCard()
+        card.aid = aid
+        card.bvid = it.optString("bvid")
+        card.title = it.optString("title")
+        var cover = it.optString("cover")
+        if (cover.isEmpty()) cover = it.optString("pic")
+        if (cover.startsWith("http://")) cover = "https://" + cover.substring(7)
+        card.cover = cover
+        //UP 名在 args.up_name（APP 推荐流没有 owner 对象）
+        card.upName = args?.optString("up_name") ?: ""
+        //推荐流没有 stat.view，播放量留空（页面上不显示，好过显示假的 0）
+        card.view = ""
+        card.cid = playerArgs?.optLong("cid", 0L) ?: it.optLong("cid", 0L)
+        card.durationSec = normalizeDurationSec(playerArgs?.optInt("duration", 0) ?: 0)
+        return card
+    }
+
+    /**
+     * `duration` 单位归一化为「秒」。
+     *
+     * 实测 APP 推荐流同一批数据里混着两种单位：`68`/`320`（秒）与 `212033`/`32824`（毫秒）。
+     * 判据：短视频最长也就几分钟，**> 3600 一定不是「秒」**，按毫秒处理。
+     * 这个阈值足够安全（3600 秒 = 1 小时，短视频流里不会出现），
+     * 且归一化只影响「3分20秒」这类展示文案（见页面 buildMeta），不参与播放逻辑。
+     */
+    private fun normalizeDurationSec(raw: Int): Int {
+        if (raw <= 0) return 0
+        return if (raw > 3600) raw / 1000 else raw
     }
 
     /**
